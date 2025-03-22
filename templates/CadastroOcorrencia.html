@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro de Problema</title>
     <style>
-        
         /* Reset de margens e paddings */
         * {
             margin: 0;
@@ -69,11 +68,15 @@
             margin-bottom: 5px;
         }
 
-        input, select {
+        input, select, textarea {
             width: 100%;
             padding: 8px;
             border: 1px solid #ccc;
             border-radius: 5px;
+        }
+
+        textarea {
+            resize: vertical;
         }
 
         /* Botões */
@@ -120,79 +123,85 @@
 </head>
 <body>
    
-    
-
-<!-- Barra superior com logo -->
-<div class="top-bar">
-    <img src="https://files.oaiusercontent.com/file-3tjXNsZKUUxNZzLAoWJPkf?se=2025-03-17T19%3A17%3A24Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D604800%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3D5ba27b75-674f-478b-ba7a-e6916c13f572.webp&sig=E/X5w2qCal/y3WI3gF0oVjeXSLK/y0Engc35Mp4Lp5I%3D" alt="Logo do pássaro" class="logo">
-
-</div>
-
-<!-- Formulário -->
-<div class="container">
-    <div class="form-container">
-        <!-- Identificação do Problema -->
-        <div class="form-section">
-            <h2>Identificação do Problema</h2>
-            <div class="form-group">
-                <label>Data e Hora da Ocorrência</label>
-                <input type="datetime-local">
-            </div>
-            <div class="form-group">
-                <label>Nome do Operador</label>
-                <input type="text">
-            </div>
-            <div class="form-group">
-                <label>Setor/Área Afetada</label>
-                <input type="text">
-            </div>
-            <div class="form-group">
-                <label>Descrição do Problema</label>
-                <input type="text">
-            </div>
-        </div>
-
-        <!-- Classificação do Problema -->
-        <div class="form-section">
-            <h2>Classificação do Problema</h2>
-            <div class="form-group">
-                <label>Tipo de Ocorrência</label>
-                <select>
-                    <option>Qualidade</option>
-                    <option>Segurança</option>
-                    <option>Produção</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Nível de Impacto</label>
-                <select>
-                    <option>Baixo</option>
-                    <option>Médio</option>
-                    <option>Alto</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Problema Recorrente?</label>
-                <select>
-                    <option>Sim</option>
-                    <option>Não</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Detalhamento Técnico</label>
-                <select>
-                    <option>Sim</option>
-                    <option>Não</option>
-                </select>
-            </div>
-        </div>
+    <!-- Barra superior com logo -->
+    <div class="top-bar">
+        <img src="https://files.oaiusercontent.com/file-3tjXNsZKUUxNZzLAoWJPkf?se=2025-03-17T19%3A17%3A24Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D604800%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3D5ba27b75-674f-478b-ba7a-e6916c13f572.webp&sig=E/X5w2qCal/y3WI3gF0oVjeXSLK/y0Engc35Mp4Lp5I%3D" alt="Logo do pássaro" class="logo">
     </div>
-    <div class="buttons">
-        <button class="btn btn-cancel">❮ Cancelar</button>
-        <button class="btn btn-clear">Limpar</button>
-        <button class="btn btn-continue">Continuar ❯</button>
+
+    <!-- Formulário -->
+    <div class="container">
+        <!-- Exibindo mensagem de sucesso ou erro -->
+        {% if success %}
+            <p style="color: green;">Ocorrência registrada com sucesso!</p>
+        {% elif error %}
+            <p style="color: red;">Erro ao registrar ocorrência. Tente novamente.</p>
+        {% endif %}
+        
+        <form action="{{ url_for('registrar_ocorrencia') }}" method="POST">
+            <div class="form-container">
+                <!-- Identificação do Problema -->
+                <div class="form-section">
+                    <h2>Identificação do Problema</h2>
+                    <div class="form-group">
+                        <label>Data e Hora da Ocorrência</label>
+                        <input type="datetime-local" name="data_ocorrencia" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Nome do Operador</label>
+                        <input type="text" name="nome_operador" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Setor/Área Afetada</label>
+                        <input type="text" name="setor_area" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Descrição do Problema</label>
+                        <textarea name="descricao" required></textarea>
+                    </div>
+                </div>
+
+                <!-- Classificação do Problema -->
+                <div class="form-section">
+                    <h2>Classificação do Problema</h2>
+                    <div class="form-group">
+                        <label>Tipo de Ocorrência</label>
+                        <select name="tipo_ocorrencia" required>
+                            <option value="Qualidade">Qualidade</option>
+                            <option value="Segurança">Segurança</option>
+                            <option value="Produção">Produção</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Nível de Impacto</label>
+                        <select name="nivel_impacto" required>
+                            <option value="Baixo">Baixo</option>
+                            <option value="Médio">Médio</option>
+                            <option value="Alto">Alto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Problema Recorrente?</label>
+                        <select name="problema_recorrente" required>
+                            <option value="Sim">Sim</option>
+                            <option value="Não">Não</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Detalhamento Técnico</label>
+                        <select name="detalhamento_tecnico" required>
+                            <option value="Sim">Sim</option>
+                            <option value="Não">Não</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="buttons">
+                <button type="reset" class="btn btn-clear">Limpar</button>
+                <button type="button" class="btn btn-cancel">❮ Cancelar</button>
+                <button type="submit" class="btn btn-continue">Continuar ❯</button>
+            </div>
+        </form>
     </div>
-</div>
 
 </body>
 </html>
