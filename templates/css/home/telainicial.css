@@ -10,7 +10,8 @@ body {
 .sidebar {
   width: var(--sidebar-width);
   height: 100vh;
-  background: linear-gradient(135deg, #005a92 0%, #0c5887 100%);
+  background-image: url(../../assets/img/bg_nexar.png);
+  background-size: cover;
   transition: width 0.3s ease-in-out;
 }
 
