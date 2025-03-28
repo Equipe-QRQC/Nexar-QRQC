@@ -34,6 +34,8 @@ body {
   transition: transform 0.3s ease;
 }
 
+
+
 .collapsed .toggle-btn {
   transform: rotate(180deg);
 }
@@ -62,7 +64,7 @@ body {
   color: #a0a3bd;
   transition: all 0.2s ease;
   border-radius: 8px;
-  margin: 4px 16px;
+  margin: 4px 5px;
   white-space: nowrap;
   overflow: hidden;
   display: flex;
@@ -89,15 +91,13 @@ body {
 }
 
 .sidebar-link:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
+  color: #045385;
+  background: #ffffff;
   transform: translateX(5px);
+  box-shadow: 000000 25%;
+  border: 1px solid #727171;
 }
 
-.sidebar-link.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
-}
 
 .profile-section {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
