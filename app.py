@@ -23,6 +23,9 @@ def index():
 def historico():
     return render_template('historico.html')  
 
+@app.route('/Solicitação_Suporte')
+def solicitacao():
+    return render_template('Solicitação_Suporte.html')  
 
 
 @app.route('/CadastroOcorrencia')
