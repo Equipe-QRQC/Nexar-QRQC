@@ -17,6 +17,8 @@ mysql = MySQL(app)
 def index():
     return render_template('telainicial.html')  
 
+
+
 @app.route('/historico')
 def historico():
     return render_template('historico.html')  
