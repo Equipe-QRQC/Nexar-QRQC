@@ -15,8 +15,19 @@ mysql = MySQL(app)
 
 @app.route('/')
 def index():
-    return render_template('CadastroOcorrencia.html')  
+    return render_template('telainicial.html')  
 
+
+
+@app.route('/historico')
+def historico():
+    return render_template('historico.html')  
+
+
+
+@app.route('/CadastroOcorrencia')
+def CadastroOcorrencia():
+    return render_template('CadastroOcorrencia.html')  
 
 @app.route('/registrar_ocorrencia', methods=['POST'])
 def registrar_ocorrencia():
