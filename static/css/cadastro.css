@@ -22,10 +22,15 @@
 
 
 
+.titulo {
 
+  margin-left: 300px;
+  transition: margin-left 0.3s ease;
+}
 
-
-
+.sidebar.collapsed ~ .content .titulo {
+  margin-left: 90px; /* Ajuste da margem quando a sidebar é colapsada */
+}
   .form-container {
     display: flex;
     justify-content: space-between;
