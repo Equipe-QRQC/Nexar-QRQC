@@ -1,0 +1,23 @@
+body{
+    background-image: url('/static/assets/img/engrenagens\ totem.png');
+    background-size: cover;
+}
+
+.titulo{
+    color: #fff; 
+    font-size: 103px;
+    text-align: left; 
+    font-family: 'Poltawski Nowy', serif;
+    margin-left: 50px; 
+    margin-top: 10%;
+
+}
+
+.subtitulo{
+    color: #fff; 
+    font-size: 49px;
+    text-align: left; 
+    font-family: 'Inter', sans-serif;
+    margin-left: 50px; 
+}
+

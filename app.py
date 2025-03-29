@@ -17,6 +17,10 @@ mysql = MySQL(app)
 def index():
     return render_template('telainicial.html')  
 
+@app.route('/inicialtotem')
+def totem():
+    return render_template('inicialtotem.html')  
+
 
 
 @app.route('/historico')
