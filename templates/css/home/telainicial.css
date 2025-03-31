@@ -34,20 +34,17 @@ body {
   transition: transform 0.3s ease;
 }
 
-
-
 .collapsed .toggle-btn {
   transform: rotate(180deg);
 }
 
 .logo {
-  width: 40px; /* Ajuste conforme necessário */
+  width: 50px; /* Ajuste conforme necessário */
   height: auto;
 }
 
 .logo-container {
   display: flex;
-  align-items: center;
   gap: 10px; /* Espaço entre a logo e o texto */
 }
 
@@ -98,7 +95,6 @@ body {
   border: 1px solid #727171;
 }
 
-
 .profile-section {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding: 16px;
@@ -135,47 +131,31 @@ body {
 }
 
 /* Estilo para o header */
-/* HEADER */
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: linear-gradient(90deg, #003f66, #0c5887); /* Gradiente azul */
-    color: #ffffff;
-    padding: 15px 20px;
-    font-size: 1.5rem;
-    font-weight: bold;
-    text-transform: uppercase;
-  }
-  
-  /* Ícone de voltar */
-  .header .back-btn {
-    background: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    transition: transform 0.2s ease-in-out;
-  }
-  
-  .header .back-btn:hover {
-    transform: scale(1.1);
-  }
-  
-  /* Logo Nexar */
-  .header .logo {
-    height: 40px;
-    margin-right: 10px;
-  }
-  
-  .header .company-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; /* Define um tamanho fixo para o botão */
+  height: 32px;
+  padding: 0; /* Remove padding extra */
+}
+
+.logout-btn i {
+  font-size: 14px; /* Ajusta o tamanho do ícone */
+  position: relative;
+  top: 1px; /* Ajusta ligeiramente a posição vertical */
+}
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px; /* Define um tamanho fixo para o botão */
+  height: 32px;
+  padding: 0; /* Remove padding extra */
+}
+
+.logout-btn i {
+  font-size: 14px; /* Ajusta o tamanho do ícone */
+  position: relative;
+  top: 1px; /* Ajusta ligeiramente a posição vertical */
+}
