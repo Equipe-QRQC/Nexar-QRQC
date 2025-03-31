@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}historico{% endblock %}
+    </title>
+    <link rel="stylesheet" href="/static/css/telainicial.css" />
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+
+    <!-- Ícones do Bootstrap e FontAwesome -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+      rel="stylesheet"
+    />
+</head>
+<body>
+
+  <div class="d-flex">
+    <main class="main-content" style="margin-left: 400px; padding: 2rem; max-width: 90%; font-size: 20px;">
+
+      <header class="header">
+        <h1>Histórico de ocorrências</h1>
+      </header>
+
+      <div class="d-flex justify-content-between align-items-center my-3 gap-2 flex-nowrap" style="overflow-x: auto;">
+        <input id="searchInput" class="form-control" type="text" placeholder="Pesquise..." style="min-width: 200px; flex: 1;" />
+        <input id="dateInput" class="form-control" type="date" style="min-width: 200px; flex: 1;" />
+        <select id="tipoSelect" class="form-select" style="min-width: 200px; flex: 1;">
+          <option value="">Todos os tipos</option>
+          <option value="Falha Mecânica">Falha Mecânica</option>
+          <option value="Erro Operacional">Erro Operacional</option>
+          <option value="Pane Elétrica">Pane Elétrica</option>
+          <!-- Adicione mais se quiser -->
+        </select>
+      </div>      
+      
+        <table class="table table-responsive table-bordered">
+          <thead>
+            <tr>
+              <th>Ocorrência</th>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Resposta</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr>
+              <td>Falha Mecânica</td>
+              <td>2025-03-20</td>
+              <td>A máquina está fazendo um barulho estranho...</td>
+              <td>Desligue a máquina e verifique se há...</td>
+              <td>
+                <i class="fa fa-eye text-primary btn-abrir-modal" style="cursor: pointer;"></i>
+              </td>
+              
+            </tr>
+      
+            <!-- Adicione mais linhas aqui -->
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Atualizado -->
+<div class="modal fade" id="detalhesModal" tabindex="-1" aria-labelledby="detalhesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title w-100 text-center" id="detalhesModalLabel">Visualização da Ocorrência</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label class="form-label"><strong>Ocorrência</strong></label>
+            <input type="text" class="form-control" id="modalOcorrencia" readonly>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label"><strong>Data</strong></label>
+            <input type="text" class="form-control" id="modalData" readonly>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label"><strong>Descrição</strong></label>
+          <textarea class="form-control" id="modalDescricao" rows="3" readonly></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label"><strong>Resposta</strong></label>
+          <textarea class="form-control" id="modalResposta" rows="4" readonly></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Bootstrap e FontAwesome (se ainda não estiverem no seu projeto) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <!-- Scripts -->
+  <script>
+    const searchInput = document.getElementById("searchInput");
+    const dateInput = document.getElementById("dateInput");
+    const tipoSelect = document.getElementById("tipoSelect"); // novo seletor
+    const tableBody = document.getElementById("tableBody");
+  
+    function filtrarTabela() {
+      const filtroNome = searchInput.value.toLowerCase();
+      const filtroData = dateInput.value;
+      const filtroTipo = tipoSelect.value;
+  
+      const linhas = tableBody.getElementsByTagName("tr");
+  
+      Array.from(linhas).forEach((linha) => {
+        const celulas = linha.getElementsByTagName("td");
+        const textoNome = celulas[0]?.textContent.toLowerCase();
+        const textoData = celulas[1]?.textContent;
+        const tipoOcorrencia = celulas[0]?.textContent;
+  
+        const combinaNome = textoNome.includes(filtroNome);
+        const combinaData = !filtroData || textoData === filtroData;
+        const combinaTipo = !filtroTipo || tipoOcorrencia === filtroTipo;
+  
+        linha.style.display = combinaNome && combinaData && combinaTipo ? "" : "none";
+      });
+    }
+  
+    searchInput.addEventListener("input", filtrarTabela);
+    dateInput.addEventListener("input", filtrarTabela);
+    tipoSelect.addEventListener("change", filtrarTabela); // novo evento
+  
+    // Modal dinâmico
+    document.addEventListener("DOMContentLoaded", function () {
+  const modal = new bootstrap.Modal(document.getElementById("detalhesModal"));
+
+  // Escuta todos os ícones com a classe 'btn-abrir-modal'
+  document.querySelectorAll(".btn-abrir-modal").forEach((icone) => {
+    icone.addEventListener("click", function () {
+      const linha = this.closest("tr");
+      const celulas = linha.querySelectorAll("td");
+
+      // Garantindo que os dados existam e preenchendo os campos
+      if (celulas.length >= 4) {
+        document.getElementById("modalOcorrencia").value = celulas[0].textContent.trim();
+        document.getElementById("modalData").value = celulas[1].textContent.trim();
+        document.getElementById("modalDescricao").value = celulas[2].textContent.trim();
+        document.getElementById("modalResposta").value = celulas[3].textContent.trim();
+        modal.show();
+      } else {
+        console.error("Linha da tabela não possui dados suficientes.");
+      }
+    });
+  });
+});
+
+  </script>
+  
+
+</body>
+
+</html>
+{% endblock %}

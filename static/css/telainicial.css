@@ -10,8 +10,7 @@ body {
 .sidebar {
   width: var(--sidebar-width);
   height: 100vh;
-  background-image: url(../../assets/img/bg_nexar.png);
-  background-size: cover;
+  background: linear-gradient(135deg, #005a92 0%, #0c5887 100%);
   transition: width 0.3s ease-in-out;
 }
 
@@ -39,29 +38,38 @@ body {
 }
 
 .logo {
+<<<<<<< HEAD:templates/css/home/telainicial.css
   width: 50px; /* Ajuste conforme necessário */
+=======
+  width: 40px; /* Ajuste conforme necessï¿½rio */
+>>>>>>> 023c7179ee20dfef91be20965e658757e5eb986e:static/css/telainicial.css
   height: auto;
 }
 
 .logo-container {
   display: flex;
+<<<<<<< HEAD:templates/css/home/telainicial.css
   gap: 10px; /* Espaço entre a logo e o texto */
+=======
+  align-items: center;
+  gap: 10px; /* Espaï¿½o entre a logo e o texto */
+>>>>>>> 023c7179ee20dfef91be20965e658757e5eb986e:static/css/telainicial.css
 }
 
 .sidebar.collapsed .logo {
-  width: 30px; /* Reduz a logo quando a sidebar está colapsada */
+  width: 30px; /* Reduz a logo quando a sidebar estï¿½ colapsada */
 }
 
 .sidebar.collapsed .logo-container h4,
 .sidebar.collapsed .logo-container p {
-  display: none; /* Esconde o texto quando a sidebar está fechada */
+  display: none; /* Esconde o texto quando a sidebar estï¿½ fechada */
 }
 
 .sidebar-link {
   color: #a0a3bd;
   transition: all 0.2s ease;
   border-radius: 8px;
-  margin: 4px 5px;
+  margin: 4px 16px;
   white-space: nowrap;
   overflow: hidden;
   display: flex;
@@ -88,13 +96,19 @@ body {
 }
 
 .sidebar-link:hover {
-  color: #045385;
-  background: #ffffff;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
   transform: translateX(5px);
-  box-shadow: 000000 25%;
-  border: 1px solid #727171;
 }
 
+<<<<<<< HEAD:templates/css/home/telainicial.css
+=======
+.sidebar-link.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+>>>>>>> 023c7179ee20dfef91be20965e658757e5eb986e:static/css/telainicial.css
 .profile-section {
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding: 16px;
@@ -131,6 +145,7 @@ body {
 }
 
 /* Estilo para o header */
+<<<<<<< HEAD:templates/css/home/telainicial.css
 .logout-btn {
   display: flex;
   align-items: center;
@@ -159,3 +174,60 @@ body {
   position: relative;
   top: 1px; /* Ajusta ligeiramente a posição vertical */
 }
+=======
+/* HEADER */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(90deg, #003f66, #0c5887); /* Gradiente azul */
+    color: #ffffff;
+    padding: 15px 20px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  
+  /* ï¿½cone de voltar */
+  .header .back-btn {
+    background: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease-in-out;
+  }
+  
+  .header .back-btn:hover {
+    transform: scale(1.1);
+  }
+  
+  /* Logo Nexar */
+  .header .logo {
+    height: 40px;
+    margin-right: 10px;
+  }
+  
+  .header .company-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+
+  /* ConteÃºdo principal */
+.main-content {
+  transition: margin-left 0.3s ease;
+  margin-left: 300px; /* Margem inicial correspondente Ã  largura da sidebar */
+}
+
+/* ConteÃºdo ajustado quando a sidebar estÃ¡ colapsada */
+.sidebar.collapsed ~ .content .main-content {
+  margin-left: 90px; /* Ajuste da margem quando a sidebar Ã© colapsada */
+}
+>>>>>>> 023c7179ee20dfef91be20965e658757e5eb986e:static/css/telainicial.css
