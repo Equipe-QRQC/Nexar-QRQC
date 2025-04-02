@@ -19,21 +19,42 @@
 </head>
 
 
-<body>
 
-    <div class="p-4 d-flex align-items-center logo-container">
-        <img
-          src="/static/assets/img/nexar_logo.svg"
-          alt="Nexar Logo"
-          class="logo me-2"
-        />
-        <div class="text-white">
-          <h4 class="fw-bold mb-0">NEXAR</h4>
-          <p class="small hide-on-collapse">Soluções Tecnológicas</p>
-        </div>
-      </div>
 
-    <h1 class="titulo">Seja Bem-vindo!</h1>
-    <h1 class="subtitulo">Toque na <b>tela</b> para <b>iniciar</b>.</h1>
+<div class="p-4 d-flex align-items-center logo-container">
+  <img src="/static/assets/img/nexar_logo.svg" alt="Nexar Logo" class="logo me-2" />
+  <div class="text-white">
+      <h4 class="fw-bold mb-0">NEXAR</h4>
+      <p class="small hide-on-collapse">Soluções Tecnológicas</p>
+  </div>
+</div>
+
+<h1 class="titulo">Seja Bem-vindo!</h1>
+<h1 class="subtitulo">Toque na <b>tela</b> para <b>iniciar</b>.</h1>
+
+<script>
+  document.addEventListener("click", function(event) {
+      // Criando o efeito de toque
+      let touchEffect = document.createElement("div");
+      touchEffect.classList.add("touch-effect");
+      document.body.appendChild(touchEffect);
+
+      // Posicionando no ponto do clique
+      touchEffect.style.left = `${event.clientX - 50}px`;
+      touchEffect.style.top = `${event.clientY - 50}px`;
+
+      // Removendo o efeito após a animação
+      setTimeout(() => {
+          touchEffect.remove();
+      }, 500);
+
+      
+      setTimeout(() => {
+          window.location.href = "/telaInicial";
+      }, 300);
+  });
+</script>
+
+
 </body>
 </html>

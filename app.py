@@ -15,11 +15,11 @@ mysql = MySQL(app)
 
 @app.route('/')
 def index():
-    return render_template('telainicial.html')  
-
-@app.route('/inicialtotem')
-def totem():
     return render_template('inicialtotem.html')  
+
+@app.route('/telaInicial')
+def telaInicial():
+    return render_template('telaInicial.html')  
 
 
 
