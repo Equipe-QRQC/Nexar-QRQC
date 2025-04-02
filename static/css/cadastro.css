@@ -1,32 +1,5 @@
 
 
-  /* Estilo da barra superior */
-  .top-bar {
-    background-color: #125490;  /* Cor de fundo da barra */
-    height: 80px;  /* Altura da barra */
-    display: flex;
-    align-items: center;
-    justify-content: space-between; /* Título no centro */
-    padding: 0 20px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);  /* Sombra suave */
-  }
-
-  .title {
-    font-size: 24px;  /* Tamanho do texto do título */
-    color: white;  /* Cor do texto */
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-
-
-
-.titulo {
-
-  margin-left: 300px;
-  transition: margin-left 0.3s ease;
-}
 
 .sidebar.collapsed ~ .content .titulo {
   margin-left: 90px; /* Ajuste da margem quando a sidebar é colapsada */

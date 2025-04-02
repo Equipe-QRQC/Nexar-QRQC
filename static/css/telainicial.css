@@ -1,191 +1,114 @@
-:root {
-  --sidebar-width: 280px;
-  --sidebar-width-collapsed: 80px;
+
+/* CONTE�DO */
+.content {
+  margin-left: 250px;
+  transition: margin-left 0.3s ease-in-out;
+  padding: 0;
 }
 
-body {
-  overflow-x: hidden;
+.content.expanded {
+  margin-left: 80px;
 }
 
-.sidebar {
-  width: var(--sidebar-width);
-  height: 100vh;
-  background: linear-gradient(135deg, #005a92 0%, #0c5887 100%);
-  transition: width 0.3s ease-in-out;
-}
-
-.sidebar.collapsed {
-  width: var(--sidebar-width-collapsed);
-}
-
-.sidebar .toggle-btn {
+.toggle-btn {
   position: absolute;
-  right: -15px;
-  top: 20px;
-  background: white;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
-  border: none;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  z-index: 101;
+  top: 50px;
+  left: 232px;
   cursor: pointer;
+  z-index: 1000;
+  background: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 35px;
+  transition: left 0.3s ease-in-out;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.25);
+}
+.toggle-btn i {
+  color: #0055a4;
   transition: transform 0.3s ease;
 }
 
-.collapsed .toggle-btn {
-  transform: rotate(180deg);
+.header {
+  background: linear-gradient(
+    to right, 
+    #0D6193 0%, 
+    #08486E 16%, 
+    #001B2C 44%, 
+    #001B2C 47%
+  );
+  color: white;
+  padding: 15px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 1.5rem;
+  width: 100%;
+  box-sizing: border-box;
 }
-
-.logo {
-  width: 40px; /* Ajuste conforme necess�rio */
-  height: auto;
+.register-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 75vh;
+}
+.register-btn {
+  width: 302px;
+  height: 240px;
+  border: 2px solid #0055a4;
+  background: white;
+  padding: 40px;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+.register-btn:hover {
+  background: #e9ecef;
+  transform: scale(1.05);
+}
+.register-btn i {
+  font-size: 3rem;
+  color: #0055a4;
+}
+.register-text {
+  text-align: center;
+  margin-top: -100px;
+  font-size: 1.2rem;
+  font-weight: 300;
 }
 
 .logo-container {
   display: flex;
   align-items: center;
-  gap: 10px; /* Espa�o entre a logo e o texto */
+  gap: 10px;
 }
-
-.sidebar.collapsed .logo {
-  width: 30px; /* Reduz a logo quando a sidebar est� colapsada */
+.hide-on-collapse {
+  display: block;
 }
-
-.sidebar.collapsed .logo-container h4,
-.sidebar.collapsed .logo-container p {
-  display: none; /* Esconde o texto quando a sidebar est� fechada */
-}
-
-.sidebar-link {
-  color: #a0a3bd;
-  transition: all 0.2s ease;
-  border-radius: 8px;
-  margin: 4px 16px;
-  white-space: nowrap;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-}
-
-.sidebar-link i {
-  font-size: 1.3rem;
-  margin-right: 12px;
-}
-
-.sidebar.collapsed .sidebar-link {
-  justify-content: center;
-  padding: 12px;
-}
-
-.sidebar.collapsed .sidebar-link i {
-  margin-right: 0;
-}
-
-.sidebar.collapsed .sidebar-link span {
+.sidebar.collapsed .hide-on-collapse {
   display: none;
 }
-
-.sidebar-link:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateX(5px);
-}
-
-.sidebar-link.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.profile-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-}
-
-.profile-section img {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-}
-
-.profile-info {
-  margin-left: 12px;
-  transition: opacity 0.3s ease;
-}
-
-.sidebar.collapsed .profile-info {
-  opacity: 0;
-  visibility: hidden;
-}
-
-.main-content {
-  margin-left: var(--sidebar-width);
+.divider {
+  border: 1px solid;
+  height: 2px;
   background-color: #ffffff;
-  min-height: 100vh;
-  padding: 20px;
-  transition: margin-left 0.3s ease;
+  margin: -15px 0;
 }
 
-.sidebar.collapsed ~ .main-content {
-  margin-left: var(--sidebar-width-collapsed);
-}
-
-/* Estilo para o header */
-/* HEADER */
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: linear-gradient(90deg, #003f66, #0c5887); /* Gradiente azul */
-    color: #ffffff;
-    padding: 15px 20px;
-    font-size: 1.5rem;
-    font-weight: bold;
-    text-transform: uppercase;
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 80px;
   }
-  
-  /* �cone de voltar */
-  .header .back-btn {
-    background: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    transition: transform 0.2s ease-in-out;
+  .sidebar .nav-link span {
+    display: none;
   }
-  
-  .header .back-btn:hover {
-    transform: scale(1.1);
+  .content {
+    margin-left: 80px;
   }
-  
-  /* Logo Nexar */
-  .header .logo {
-    height: 40px;
-    margin-right: 10px;
+  .toggle-btn {
+    left: 80px;
   }
-  
-  .header .company-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  
-
-  /* Conteúdo principal */
-.main-content {
-  transition: margin-left 0.3s ease;
-  margin-left: 300px; /* Margem inicial correspondente à largura da sidebar */
-}
-
-/* Conteúdo ajustado quando a sidebar está colapsada */
-.sidebar.collapsed ~ .content .main-content {
-  margin-left: 90px; /* Ajuste da margem quando a sidebar é colapsada */
 }

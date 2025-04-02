@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'menu.html' %}
 
 {% block content %}
 <!DOCTYPE html>
@@ -28,11 +28,13 @@
 </head>
 <body>
     
-<div class="d-flex">
+<div class="content" id="content" >
+  <div class="header">Histórico</div>
+
+  
+
     <main class="main-content ">
-        <header class="header">
-            <h1>historico</h1>
-        </header>
+        
         <div class="container-fluid">
             <h2>Welcome to NexusFlow</h2>
             <p class="text-muted">
@@ -40,7 +42,8 @@
             </p>
         </div>
     </main>
-</div>
+  </div>
+<script src="/static/js/telainicial.js"></script>
 </body>
 </html>
 {% endblock %}
