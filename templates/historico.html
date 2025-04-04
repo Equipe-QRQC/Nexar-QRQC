@@ -6,196 +6,146 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}historico{% endblock %}
-    </title>
+    <title>Histórico de Ocorrências</title>
     <link rel="stylesheet" href="/static/css/telainicial.css" />
 
     <!-- Bootstrap 5.3 CSS -->
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-
-    <!-- Ícones do Bootstrap e FontAwesome -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
-    />
-    <link
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
-      rel="stylesheet"
-    />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet" />
 </head>
 <body>
+  <div class="content" id="content">
+    <div class="header">Historico</div>
+    
+    <div class="d-flex justify-content-between my-3 gap-2">
+      <input id="searchInput" class="form-control" type="text" placeholder="Pesquise..." />
+      <input id="dateInput" class="form-control" type="date" />
+      <select id="tipoSelect" class="form-select">
+        <option value="">Todos os tipos</option>
+        <option value="Falha Mecânica">Falha Mecânica</option>
+        <option value="Erro Operacional">Erro Operacional</option>
+        <option value="Pane Elétrica">Pane Elétrica</option>
+      </select>
+    </div>
 
-  <div class="d-flex">
-    <main class="main-content" style="margin-left: 400px; padding: 2rem; max-width: 90%; font-size: 20px;">
-
-      <header class="header">
-        <h1>Histórico de ocorrências</h1>
-      </header>
-
-      <div class="d-flex justify-content-between align-items-center my-3 gap-2 flex-nowrap" style="overflow-x: auto;">
-        <input id="searchInput" class="form-control" type="text" placeholder="Pesquise..." style="min-width: 200px; flex: 1;" />
-        <input id="dateInput" class="form-control" type="date" style="min-width: 200px; flex: 1;" />
-        <select id="tipoSelect" class="form-select" style="min-width: 200px; flex: 1;">
-          <option value="">Todos os tipos</option>
-          <option value="Falha Mecânica">Falha Mecânica</option>
-          <option value="Erro Operacional">Erro Operacional</option>
-          <option value="Pane Elétrica">Pane Elétrica</option>
-          <!-- Adicione mais se quiser -->
-        </select>
-      </div>      
-      
-      <div class="tabela-wrapper" style="min-width: 1200px;">
-        <table class="table table-responsive table-bordered">
-          <thead>
-            <tr>
-              <th>Ocorrência</th>
-              <th>Data</th>
-              <th>Descrição</th>
-              <th>Resposta</th>
-              <th>Ação</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <!-- linhas dinâmicas -->
-            <tr>
-              <td>Falha mecanica</td>
-              <td>2025-03-20</td>
-              <td>leo</td>
-              <td>aaaa</td>
-              <td><i class="fa fa-eye btn-abrir-modal"></i></td>
-
-              <!-- preencher com backend -->
-            </tr>
-            <tr id="linha-vazia" style="display: none;">
-              <td colspan="5" class="text-center text-muted py-5">Nenhum resultado encontrado.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-    </main>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Ocorrência</th>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Resposta</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody">
+        {% for ocorrencia in ocorrencias %}
+        <tr>
+          <td>{{ ocorrencia.tipo_ocorrencia }}</td>
+          <td>{{ ocorrencia.data_ocorrencia }}</td>
+          <td>{{ ocorrencia.descricao }}</td>
+          <td>{{ ocorrencia.resposta_ia }}</td>
+          <td><i class="fa fa-eye btn-abrir-modal" data-bs-toggle="modal" data-bs-target="#detalhesModal" data-ocorrencia="{{ ocorrencia.tipo_ocorrencia }}" data-data="{{ ocorrencia.data_ocorrencia }}" data-descricao="{{ ocorrencia.descricao }}" data-resposta="{{ ocorrencia.resposta_ia }}"></i></td>
+        </tr>
+        {% endfor %}
+        {% if not ocorrencias %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-5">Nenhum resultado encontrado.</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
   </div>
 
-  <!-- Modal Atualizado -->
-<div class="modal fade" id="detalhesModal" tabindex="-1" aria-labelledby="detalhesModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title w-100 text-center" id="detalhesModalLabel">Visualização da Ocorrência</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-      </div>
-      <div class="modal-body">
-        <div class="row mb-3">
-          <div class="col-md-6">
-            <label class="form-label"><strong>Ocorrência</strong></label>
-            <input type="text" class="form-control" id="modalOcorrencia" readonly>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label"><strong>Data</strong></label>
-            <input type="text" class="form-control" id="modalData" readonly>
-          </div>
+  <!-- Modal -->
+  <div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Detalhes da Ocorrência</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="mb-3">
-          <label class="form-label"><strong>Descrição</strong></label>
-          <textarea class="form-control" id="modalDescricao" rows="3" readonly></textarea>
-        </div>
-        <div class="mb-3">
-          <label class="form-label"><strong>Resposta</strong></label>
-          <textarea class="form-control" id="modalResposta" rows="4" readonly></textarea>
+        <div class="modal-body">
+          <p><strong>Ocorrência:</strong> <span id="modalOcorrencia"></span></p>
+          <p><strong>Data:</strong> <span id="modalData"></span></p>
+          <p><strong>Descrição:</strong> <span id="modalDescricao"></span></p>
+          <p><strong>Resposta:</strong> <span id="modalResposta"></span></p>
         </div>
       </div>
     </div>
   </div>
-</div>
 
-
-  <!-- Bootstrap e FontAwesome (se ainda não estiverem no seu projeto) -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
-  <!-- Scripts -->
   <script>
+    document.addEventListener("DOMContentLoaded", function () {
     const searchInput = document.getElementById("searchInput");
     const dateInput = document.getElementById("dateInput");
-    const tipoSelect = document.getElementById("tipoSelect"); // novo seletor
+    const tipoSelect = document.getElementById("tipoSelect");
     const tableBody = document.getElementById("tableBody");
   
     function filtrarTabela() {
-  const filtroNome = searchInput.value.toLowerCase();
-  const filtroData = dateInput.value;
-  const filtroTipo = tipoSelect.value;
+        const filtroNome = searchInput.value.toLowerCase();
+        const filtroData = dateInput.value;
+        const filtroTipo = tipoSelect.value;
 
-  const todasAsLinhas = Array.from(tableBody.querySelectorAll("tr"));
-  const linhaVazia = document.getElementById("linha-vazia");
+        const linhas = tableBody.querySelectorAll("tr");
+        let algumaLinhaVisivel = false;
 
-  let algumaLinhaVisivel = false;
+        linhas.forEach((linha) => {
+            if (linha.id === "linha-vazia") return; // Evita a linha de mensagem
 
-  todasAsLinhas.forEach((linha) => {
-    if (linha.id === "linha-vazia") return; // pula a linha de mensagem
+            const celulas = linha.getElementsByTagName("td");
+            if (celulas.length < 4) return; // Verifica se há dados suficientes
 
-    const celulas = linha.getElementsByTagName("td");
-    const textoOcorrencia = celulas[0]?.textContent || "";
-    const textoData = celulas[1]?.textContent;
-    const textoDescricao = celulas[2]?.textContent.toLowerCase() || "";
-    const textoResposta = celulas[3]?.textContent.toLowerCase() || "";
+            const textoOcorrencia = celulas[0].textContent.trim();
+            const textoData = celulas[1].textContent.trim();
+            const textoDescricao = celulas[2].textContent.toLowerCase();
+            const textoResposta = celulas[3].textContent.toLowerCase();
 
-    const combinaBusca = textoDescricao.includes(filtroNome) || textoResposta.includes(filtroNome);
-    const combinaData = !filtroData || textoData === filtroData;
-    const combinaTipo = !filtroTipo || textoOcorrencia === filtroTipo;
+            const combinaBusca = textoDescricao.includes(filtroNome) || textoResposta.includes(filtroNome);
+            const combinaData = !filtroData || textoData === filtroData;
+            const combinaTipo = !filtroTipo || textoOcorrencia === filtroTipo;
 
-    const mostrar = combinaBusca && combinaData && combinaTipo;
+            const mostrar = combinaBusca && combinaData && combinaTipo;
+            linha.style.display = mostrar ? "" : "none";
 
-    linha.style.display = mostrar ? "" : "none";
+            if (mostrar) {
+                algumaLinhaVisivel = true;
+            }
+        });
 
-    if (mostrar) {
-      algumaLinhaVisivel = true;
+        // Controla a exibição da linha vazia
+        const linhaVazia = document.getElementById("linha-vazia");
+        if (linhaVazia) {
+            linhaVazia.style.display = algumaLinhaVisivel ? "none" : "";
+        }
     }
-  });
 
-  // Exibe ou esconde a linha de "nenhum resultado"
-  if (linhaVazia) {
-    linhaVazia.style.display = algumaLinhaVisivel ? "none" : "";
-  }
-}
-
-
-  
+    // Adiciona eventos para ativar o filtro dinamicamente
     searchInput.addEventListener("input", filtrarTabela);
     dateInput.addEventListener("input", filtrarTabela);
-    tipoSelect.addEventListener("change", filtrarTabela); // novo evento
+    tipoSelect.addEventListener("change", filtrarTabela);
   
-    // Modal dinâmico
-    document.addEventListener("DOMContentLoaded", function () {
-  const modal = new bootstrap.Modal(document.getElementById("detalhesModal"));
+    // Ajuste para modal dinâmico
+    document.querySelectorAll(".btn-abrir-modal").forEach((icone) => {
+        icone.addEventListener("click", function () {
+            const linha = this.closest("tr");
+            const celulas = linha.querySelectorAll("td");
 
-  // Escuta todos os ícones com a classe 'btn-abrir-modal'
-  document.querySelectorAll(".btn-abrir-modal").forEach((icone) => {
-    icone.addEventListener("click", function () {
-      const linha = this.closest("tr");
-      const celulas = linha.querySelectorAll("td");
-
-      // Garantindo que os dados existam e preenchendo os campos
-      if (celulas.length >= 4) {
-        document.getElementById("modalOcorrencia").value = celulas[0].textContent.trim();
-        document.getElementById("modalData").value = celulas[1].textContent.trim();
-        document.getElementById("modalDescricao").value = celulas[2].textContent.trim();
-        document.getElementById("modalResposta").value = celulas[3].textContent.trim();
-        modal.show();
-      } else {
-        console.error("Linha da tabela não possui dados suficientes.");
-      }
+            if (celulas.length >= 4) {
+                document.getElementById("modalOcorrencia").value = celulas[0].textContent.trim();
+                document.getElementById("modalData").value = celulas[1].textContent.trim();
+                document.getElementById("modalDescricao").value = celulas[2].textContent.trim();
+                document.getElementById("modalResposta").value = celulas[3].textContent.trim();
+                const modal = new bootstrap.Modal(document.getElementById("detalhesModal"));
+                modal.show();
+            }
+        });
     });
-  });
 });
-
   </script>
-  
-
+  <script src="/static/js/telainicial.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-
 </html>
 {% endblock %}
