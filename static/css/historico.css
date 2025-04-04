@@ -26,4 +26,7 @@
   .main-content {
     width: 100% !important;
   }
-    
+  th {
+    min-width: 150px;
+  }
+  
