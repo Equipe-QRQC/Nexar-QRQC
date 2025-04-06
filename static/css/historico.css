@@ -148,3 +148,11 @@ td.resposta-coluna {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.fa-eye {
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: #969C9F;
+  margin-left: 50%;
+  margin-top: 10%;
+}
