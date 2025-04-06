@@ -51,12 +51,12 @@
   height: 75vh;
 }
 .register-btn {
-  width: 302px;
-  height: 240px;
+  width: 389px;
+  height: 298px;
   border: 2px solid #0055a4;
   background: white;
   padding: 40px;
-  border-radius: 5px;
+  border-radius: 25px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -69,14 +69,15 @@
   transform: scale(1.05);
 }
 .register-btn i {
-  font-size: 3rem;
+  font-size:  4.5rem;
   color: #0055a4;
 }
 .register-text {
   text-align: center;
-  margin-top: -100px;
+  margin-top: -70px;
   font-size: 1.2rem;
   font-weight: 300;
+  font-family: 'Poppins', sans-serif;
 }
 
 .logo-container {
