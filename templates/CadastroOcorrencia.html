@@ -12,120 +12,126 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet" />
+  
 </head>
 
 <body>
-  <div class="content" id="content">
-    <div class="header">Cadastro</div>
+    <!-- MENU LATERAL (menu.html) -->
 
-    <main class="main-content">
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="content" id="content">
+      <div class="header">Cadastro de Ocorrência</div>
 
-      {% if success %}
-      <p class="text-success text-center">Ocorrência registrada com sucesso!</p>
-      {% elif error %}
-      <p class="text-danger text-center">Erro ao registrar ocorrência. Tente novamente.</p>
-      {% endif %}
+      <main class="main-content">
+        <div class="container-fluid py-3">
+          {% if success %}
+          <p class="text-success text-center">Ocorrência registrada com sucesso!</p>
+          {% elif error %}
+          <p class="text-danger text-center">Erro ao registrar ocorrência. Tente novamente.</p>
+          {% endif %}
 
-      <form action="{{ url_for('registrar_ocorrencia') }}" method="POST">
-        <div class="row">
-          <!-- Identificação do Problema -->
-          <div class="col-md-6">
-            <h3>Identificação do Problema</h3>
-            <label>Data e Hora</label>
-            <input type="datetime-local" name="data_ocorrencia" class="form-control" required>
+          <form action="{{ url_for('registrar_ocorrencia') }}" method="POST">
+            <div class="row">
+              <div class="col-md-6">
+                <h4>Identificação do Problema</h4>
+                <div class="mb-3">
+                  <label class="form-label">Data e Hora</label>
+                  <input type="datetime-local" name="data_ocorrencia" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Nome do Operador</label>
+                  <input type="text" name="nome_operador" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Setor/Área afetada</label>
+                  <input type="text" name="setor_area" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Descrição do problema</label>
+                  <textarea name="descricao" class="form-control" rows="3" required></textarea>
+                </div>
+              </div>
 
-            <div class="mb-3">
-              <label class="form-label">Nome do Operador</label>
-              <input type="text" name="nome_operador" class="form-control" required>
+              <div class="col-md-6">
+                <h4>Classificação do Problema</h4>
+                <div class="mb-3">
+                  <label class="form-label">Tipo de Ocorrência</label>
+                  <select name="tipo_ocorrencia" class="form-select" required>
+                    <option value="Qualidade">Qualidade</option>
+                    <option value="Segurança">Segurança</option>
+                    <option value="Produção">Produção</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Nível de Impacto</label>
+                  <select name="nivel_impacto" class="form-select" required>
+                    <option value="Baixo">Baixo</option>
+                    <option value="Médio">Médio</option>
+                    <option value="Alto">Alto</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Problema Recorrente?</label>
+                  <select name="problema_recorrente" class="form-select" required>
+                    <option value="Sim">Sim</option>
+                    <option value="Não">Não</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Detalhamento Técnico</label>
+                  <select name="detalhamento_tecnico" class="form-select" required>
+                    <option value="Sim">Sim</option>
+                    <option value="Não">Não</option>
+                  </select>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="gerar_imagem" id="gerarImagem" value="1">
+                  <label class="form-check-label" for="gerarImagem">
+                    Gerar imagem da solução (IA visual)
+                  </label>
+                </div>
+              </div>
             </div>
 
-            <div class="mb-3">
-              <label class="form-label">Setor/Área afetada:</label>
-              <input type="text" name="setor_area" class="form-control" required>
+            <div class="text-center mt-4">
+              <button type="reset" class="btn btn-warning">Limpar</button>
+              <button type="button" class="btn btn-danger" onclick="history.back()">❮ Cancelar</button>
+              <button type="submit" class="btn btn-success">Continuar ❯</button>
             </div>
+          </form>
 
-            <div class="mb-3">
-              <label class="form-label">Descrição do problema:</label>
-              <textarea name="descricao" class="form-control" required></textarea>
+          <div id="loading-spinner"
+            class="d-none position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center"
+            style="z-index: 9999;">
+            <div class="text-center text-white">
+              <div class="spinner-border text-light" style="width: 4rem; height: 4rem;" role="status">
+                <span class="visually-hidden">Carregando...</span>
+              </div>
+              <p class="mt-3 fs-5">Gerando solução com IA...</p>
             </div>
           </div>
 
-          <!-- Classificação do Problema -->
-          <div class="col-md-6">
-            <h3>Classificação do Problema</h3>
-            <label class="input-group-text">Tipo de Ocorrência</label>
-            <select name="tipo_ocorrencia" class="form-select" required>
-              <option value="Qualidade">Qualidade</option>
-              <option value="Segurança">Segurança</option>
-              <option value="Produção">Produção</option>
-            </select>
-
-            <label class="input-group-text">Nível de Impacto</label>
-            <select name="nivel_impacto" class="form-select" required>
-              <option value="Baixo">Baixo</option>
-              <option value="Médio">Médio</option>
-              <option value="Alto">Alto</option>
-            </select>
-
-            <label class="input-group-text">Problema Recorrente?</label>
-            <select name="problema_recorrente" class="form-select" required>
-              <option value="Sim">Sim</option>
-              <option value="Não">Não</option>
-            </select>
-
-            <label class="input-group-text">Detalhamento Técnico</label>
-            <select name="detalhamento_tecnico" class="form-select" required>
-              <option value="Sim">Sim</option>
-              <option value="Não">Não</option>
-            </select>
-
-            <div class="form-check mt-3">
-              <input class="form-check-input" type="checkbox" name="gerar_imagem" id="gerarImagem" value="1">
-              <label class="form-check-label" for="gerarImagem">
-                Gerar imagem da solução (IA visual)
-              </label>
-            </div>
-          </div>
+          
         </div>
-
-        <div class="text-center mt-4">
-          <button type="reset" class="btn btn-warning">Limpar</button>
-          <button type="button" class="btn btn-danger">❮ Cancelar</button>
-          <button type="submit" class="btn btn-success">Continuar ❯</button>
-        </div>
-      </form>
-
-      <!-- Spinner de carregamento -->
-      <div id="loading-spinner" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-flex justify-content-center align-items-center" style="z-index: 9999;">
-        <div class="text-center text-white">
-          <div class="spinner-border text-light" style="width: 4rem; height: 4rem;" role="status">
-            <span class="visually-hidden">Carregando...</span>
-          </div>
-          <p class="mt-3 fs-5">Gerando solução com IA...</p>
-        </div>
-      </div>
-
-      {% if resposta_ia %}
-      <div class="mt-5">
-        <h5 class="text-success">Solução sugerida pela IA:</h5>
-        <div class="alert alert-success">{{ resposta_ia }}</div>
-
-        {% if imagem_gerada %}
-        <div class="text-center mt-4">
-          <h5>Imagem gerada pela IA:</h5>
-          <img src="{{ imagem_gerada }}" alt="Imagem IA" class="img-fluid rounded shadow" style="max-width: 512px;">
-        </div>
-        {% endif %}
-      </div>
-      {% endif %}
-
-    </main>
-  </div>
+      </main>
+    </div>
+  
 
   <script src="/static/js/telainicial.js"></script>
   <script>
-    document.querySelector('form').addEventListener('submit', function () {
-      document.getElementById('loading-spinner').classList.remove('d-none');
+    document.addEventListener("DOMContentLoaded", function () {
+      const toggleBtn = document.getElementById("botao-menu");
+      const sidebar = document.getElementById("sidebar");
+      const mainContent = document.getElementById("main-content");
+
+      toggleBtn?.addEventListener("click", () => {
+        sidebar.classList.toggle("collapsed");
+        mainContent.classList.toggle("menu-fechado");
+      });
+
+      document.querySelector('form').addEventListener('submit', function () {
+        document.getElementById('loading-spinner').classList.remove('d-none');
+      });
     });
   </script>
 </body>
