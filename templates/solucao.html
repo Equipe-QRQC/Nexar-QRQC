@@ -2,84 +2,155 @@
 
 {% block content %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Solução{% endblock %}</title>
-  
+
   <link rel="stylesheet" href="/static/css/telainicial.css" />
 
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
-  />
-
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <style>
+    body {
+      background: #f8f9fa;
+      font-size: 1.2rem;
+    }
+    .card-custom {
+      background: white;
+      border-radius: 20px;
+      padding: 30px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    }
+    h5.section-title {
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+    .data-label {
+      font-weight: 600;
+      color: #333;
+    }
+    .highlight-box {
+      background-color: #e9fbe8;
+      border-left: 5px solid #28a745;
+    }
+    .icon-title {
+      font-size: 1.5rem;
+    }
+    .btn-custom {
+      font-size: 1.3rem;
+      padding: 15px 40px;
+    }
+    .btn-tecnico {
+      background-color: #c62828;
+    color: white;
+    font-weight: bold;
+    padding: 12px 54px;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    width: 11rem;
+}
+
+  .btn-finalizar {
+    background-color: #2e7d32; /* verde forte */
+    color: white;
+    font-weight: bold;
+    padding: 12px  54px;
+    border: none;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    width: 11rem;
+  }
+
+  .btn-tecnico:hover {
+    background-color: #b71c1c;
+  }
+
+  .btn-finalizar:hover {
+    background-color: #1b5e20;
+  }
+
+  .botao-container {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-top: 40px;
+  }
+  </style>
 </head>
 <body>
 
-  <div class="content" id="content">
-  <div class="header ">Resposta de Ocorrência</div>
+<div class="content" id="content">
+  <div class="header">📋 Resposta de Ocorrência</div>
 
-  <div class="container my-4 px-3 px-md-5">
-    
-    <!-- Dados da Ocorrência -->
-    <div class="row g-4">
-      <div class="col-md-6">
-        <h5 class="mb-3 text-primary">📄 Dados da Ocorrência</h5>
-        <ul class="list-unstyled lh-lg">
-          <li><strong>Operador:</strong> {{ dados.nome_operador }}</li>
-          <li><strong>Data:</strong> {{ dados.data_ocorrencia }}</li>
-          <li><strong>Setor/Área:</strong> {{ dados.setor_area }}</li>
-          <li><strong>Tipo de Ocorrência:</strong> {{ dados.tipo_ocorrencia }}</li>
-          <li><strong>Nível de Impacto:</strong> {{ dados.nivel_impacto }}</li>
-          <li><strong>Problema Recorrente:</strong> {{ dados.problema_recorrente }}</li>
-          <li><strong>Detalhamento Técnico:</strong> {{ dados.detalhamento_tecnico }}</li>
+  <div class="container my-5">
+    <div class="card-custom">
+
+      <!-- Dados da Ocorrência -->
+      <div class="row g-4 mb-4">
+        <div class="col-md-6">
+          <h5 class="section-title text-primary icon-title">📄 Dados da Ocorrência</h5>
+          <ul class="list-unstyled lh-lg">
+            <li><span class="data-label">👷 Operador:</span> {{ dados.nome_operador }}</li>
+            <li><span class="data-label">📅 Data:</span> {{ dados.data_ocorrencia }}</li>
+            <li><span class="data-label">🏭 Setor/Área:</span> {{ dados.setor_area }}</li>
+            <li><span class="data-label">⚠️ Tipo:</span> {{ dados.tipo_ocorrencia }}</li>
+            <li><span class="data-label">🔥 Impacto:</span> {{ dados.nivel_impacto }}</li>
+            <li><span class="data-label">🔁 Recorrente:</span> {{ dados.problema_recorrente }}</li>
+            <li><span class="data-label">🔧 Técnico:</span> {{ dados.detalhamento_tecnico }}</li>
+          </ul>
+        </div>
+
+        <div class="col-md-6">
+          <h5 class="section-title text-warning icon-title">🛠️ Descrição do Problema</h5>
+          <div class="bg-light border rounded shadow-sm p-3" style="max-height: 300px; overflow:auto; font-size: 1.05rem;">
+            {{ dados.descricao }}
+          </div>
+        </div>
+      </div>
+
+      <hr />
+
+      <!-- Solução sugerida -->
+      <div class="p-4 bg-success bg-opacity-10 border-start border-4 border-success rounded">
+        <ul class="list-group">
+          {% for passo in resposta_ia.split('\n') if passo.strip() %}
+          <li class="list-group-item d-flex align-items-start bg-light mb-2 rounded shadow-sm">
+            <i class="fas fa-check-circle text-success me-3 mt-1 fs-5"></i>
+            <div>{{ passo }}</div>
+          </li>
+          {% endfor %}
         </ul>
       </div>
 
-      <div class="col-md-6">
-        <h5 class="mb-3 text-warning">🛠️ Descrição do Problema</h5>
-        <div class="bg-light border rounded p-3 h-100">
-          {{ dados.descricao }}
-        </div>
+      <!-- Imagem gerada pela IA -->
+      {% if imagem_gerada %}
+      <div class="text-center my-5">
+        <h5 class="section-title icon-title">🖼️ Imagem Gerada pela IA</h5>
+        <img src="{{ imagem_gerada }}" alt="Imagem gerada pela IA" class="img-fluid rounded shadow" style="max-width: 512px;">
       </div>
-    </div>
+      {% endif %}
 
-    <hr class="my-5" />
-
-    <!-- Solução sugerida -->
-    <div class="mb-4">
-      <h5 class="text-success">✅ Solução Sugerida:</h5>
-      <div class="bg-success bg-opacity-10 border-start border-success ps-3 py-3 rounded fs-5">
-        {{ resposta_ia }}
+      
+      <div class="botao-container">
+        <a href="{{ url_for('solicitacao') }}" class="btn-tecnico text-decoration-none">
+          Técnico
+        </a>
+      
+        <a href="{{ url_for('CadastroOcorrencia') }}" class="btn-finalizar text-decoration-none">
+          Finalizar
+        </a>
       </div>
-    </div>
 
-    <!-- Imagem gerada pela IA -->
-    {% if imagem_gerada %}
-    <div class="text-center my-5">
-      <h5 class="mb-3">🖼️ Imagem Gerada pela IA:</h5>
-      <img src="{{ imagem_gerada }}" alt="Imagem gerada pela IA" class="img-fluid rounded shadow" style="max-width: 512px;">
     </div>
-    {% endif %}
-
-    <!-- Botão para nova ocorrência -->
-    <div class="text-center mt-5">
-      <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">
-        <i class="fas fa-plus-circle me-2"></i>Registrar nova ocorrência
-      </a>
-    </div>
-
   </div>
 </div>
-  <script src="/static/js/telainicial.js"></script>
+
+<script src="/static/js/telainicial.js"></script>
 </body>
 </html>
 {% endblock %}
