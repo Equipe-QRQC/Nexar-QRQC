@@ -125,10 +125,12 @@ def registrar_ocorrencia():
         Setor: {setor_area}.
         Tipo: {tipo_ocorrencia}. Impacto: {nivel_impacto}. Recorrente: {problema_recorrente}. Detalhamento técnico: {detalhamento_tecnico}.
         Descrição do problema: {descricao}.
-        Gere uma solução direta, prática e eficaz para o operador aplicar imediatamente.
+        
+        Gere uma solução em formato de passo a passo numerado, com instruções objetivas e técnicas que o operador possa aplicar imediatamente na prática.
+        Evite explicações longas, foque em ações diretas e claras.
         """
         resposta_ia = get_ai_response(prompt)
-
+        
         imagem_url = None
         if gerar_imagem_checkbox:
             imagem_url = gerar_imagem(resposta_ia)
