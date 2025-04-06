@@ -1,4 +1,7 @@
-
+.body{
+  font-size: 1.2rem;
+  font-family: 'Inter', sans-serif;
+}
 
 
 .sidebar.collapsed ~ .content .titulo {
@@ -98,4 +101,8 @@
       width: 100%;
       margin-bottom: 20px;
     }
+  }
+
+  .btn-abrir-modal{
+    padding: 50%;
   }

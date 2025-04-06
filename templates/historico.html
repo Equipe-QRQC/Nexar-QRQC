@@ -13,6 +13,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet" />
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
 </head>
 <body>
 
@@ -35,9 +36,9 @@
       <div class="col-md-4">
         <select id="tipoSelect" class="form-select">
           <option value="">Todos os tipos</option>
-          <option value="Falha Mecânica">Falha Mecânica</option>
-          <option value="Erro Operacional">Erro Operacional</option>
-          <option value="Pane Elétrica">Pane Elétrica</option>
+          <option value="Qualidade">Qualidade</option>
+          <option value="Segurança">Segurança</option>
+          <option value="Produção">Produção</option>
         </select>
       </div>
     </div>
@@ -45,7 +46,7 @@
     <!-- Tabela -->
     <table class="table table-bordered">
       <thead>
-        <tr>
+        <tr id="tabelaHist">
           <th>Ocorrência</th>
           <th>Data</th>
           <th>Descrição</th>
@@ -57,9 +58,13 @@
         {% for ocorrencia in ocorrencias %}
         <tr>
           <td>{{ ocorrencia.tipo_ocorrencia }}</td>
-          <td>{{ ocorrencia.data_ocorrencia }}</td>
+          <td>
+            {{ ocorrencia.data_ocorrencia[:10].split('-')[2] }}/{{ ocorrencia.data_ocorrencia[:10].split('-')[1] }}/{{ ocorrencia.data_ocorrencia[:10].split('-')[0] }}
+            às
+            {{ ocorrencia.data_ocorrencia[11:] }}
+          </td>          
           <td>{{ ocorrencia.descricao }}</td>
-          <td>{{ ocorrencia.resposta_ia }}</td>
+          <td class="resposta-coluna">{{ ocorrencia.resposta_ia }}</td>
           <td>
             <i class="fa fa-eye btn-abrir-modal" data-bs-toggle="modal" data-bs-target="#detalhesModal"
                data-ocorrencia="{{ ocorrencia.tipo_ocorrencia }}"
@@ -82,7 +87,7 @@
 
   <!-- Modal -->
   <div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">Detalhes da Ocorrência</h5>
