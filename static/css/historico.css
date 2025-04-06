@@ -1,0 +1,32 @@
+.main-content {
+    flex-grow: 1;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  
+  .table {
+    min-width: 100%;
+    table-layout: fixed;
+  }
+  
+  #tableBody {
+    display: table-row-group;
+    min-height: 200px;
+  }
+  
+  
+  header.header {
+    width: 100%;
+    max-width: 100%;
+    flex-shrink: 0;
+  }
+  
+  .container-fluid,
+  .main-content {
+    width: 100% !important;
+  }
+  th {
+    min-width: 150px;
+  }
+  
