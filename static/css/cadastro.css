@@ -1,9 +1,3 @@
-.body{
-  font-size: 1.2rem;
-  font-family: 'Inter', sans-serif;
-}
-
-
 .sidebar.collapsed ~ .content .titulo {
   margin-left: 90px; /* Ajuste da margem quando a sidebar é colapsada */
 }
@@ -81,6 +75,108 @@
     opacity: 0.9;
   }
 
+  #content > main > div > form{
+    padding: 4%;
+  }
+
+
+
+  /* Alterações - LUMA */
+
+  .text-center.mt-4 {
+    display: flex;
+    justify-content: center;
+    gap: 7%; 
+    margin-top: 30px; 
+  }
+  
+  #content > main > div > form > div.text-center.mt-4 > button.btn.btn-warning{
+    width: 12%;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800; 
+    font-size: 20px; 
+    color: #ffffff;
+;
+  }
+
+  #content > main > div > form > div.text-center.mt-4 > button.btn.btn-danger{
+    width: 12%;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800;
+    font-size: 19px!important; 
+    color: #ffffff;
+
+  }
+
+  #content > main > div > form > div.text-center.mt-4 > button.btn.btn-success{
+    width: 12%;
+    font-family: 'Inter', sans-serif;
+    font-weight: 800; 
+    font-size: 19px!important; 
+    color: #ffffff;
+  }
+
+  #content > main > div > form > div.row > div:nth-child(1) > div:nth-child(5) > textarea{
+    border: 1px solid #000;
+  }
+
+  #content > main > div > form > div.row > div:nth-child(1) > div:nth-child(4) > input{
+    border: 1px solid #000;
+  }
+
+  #content > main > div > form > div.row > div:nth-child(1) > div:nth-child(3) > input{
+    border: 1px solid #000;
+  }
+
+  #content > main > div > form > div.row > div:nth-child(1) > div:nth-child(2) > input{
+    border: 1px solid #000;
+  }
+  #content > main > div > form > div.row > div:nth-child(2) > div:nth-child(2) > select{
+    border: 1px solid #000;
+  }
+  #content > main > div > form > div.row > div:nth-child(2) > div:nth-child(3) > select{
+    border: 1px solid #000;
+  }
+  #content > main > div > form > div.row > div:nth-child(2) > div:nth-child(4) > select{
+    border: 1px solid #000;
+
+  }
+  #content > main > div > form > div.row > div:nth-child(2) > div:nth-child(5) > select{
+    border: 1px solid #000;
+
+  }
+  #gerarImagem{
+    border: 1px solid #000;
+
+  }
+
+  #content > main > div > form > div.row > div:nth-child(1) > h4 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500; 
+  }
+  
+  #content > main > div > form > div.row > div:nth-child(2) > h4{
+    font-family: 'Inter', sans-serif;
+    font-weight: 500; 
+  }
+  #content > main > div > form > div.row > div:nth-child(2){
+    width: 44%;
+  }
+  #content > main > div > form > div.row > div:nth-child(1){
+    width: 44%;
+  }
+
+  #content > main > div > form > div.row{
+    margin-left: 4vw;
+    gap: 5vw;
+  }
+
+  /* Alterações - LUMA -*/
+
+
+
+
+
   /* Responsividade */
   @media (max-width: 768px) {
     .sidebar {
@@ -106,3 +202,8 @@
   .btn-abrir-modal{
     padding: 50%;
   }
+    .col-md-6 {
+      flex: 0 0 auto;
+      width: 45%;
+  }
+}
