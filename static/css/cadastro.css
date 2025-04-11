@@ -197,16 +197,13 @@
       width: 100%;
       margin-bottom: 20px;
     }
-    
+  }
+
+  .btn-abrir-modal{
+    padding: 50%;
+  }
     .col-md-6 {
       flex: 0 0 auto;
       width: 45%;
   }
 }
-
-  
-  
-
-
-
-  
