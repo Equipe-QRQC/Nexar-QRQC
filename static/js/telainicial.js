@@ -1,4 +1,4 @@
-//  Lógica do JS - Botão sidebar
+
 
 function toggleSidebar() {
   let sidebar = document.getElementById("sidebar");
