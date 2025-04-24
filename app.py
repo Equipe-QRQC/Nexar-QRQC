@@ -9,7 +9,6 @@ from twilio.rest import Client
 # Carrega variáveis de ambiente
 load_dotenv()
 
-# Configuração OpenAI (renomeando para evitar conflito)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Credenciais do Twilio
