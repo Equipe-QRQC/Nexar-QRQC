@@ -15,12 +15,12 @@
 </head>
 <body>
 
-<!-- Cabeçalho -->
+<!-- cabeçaalho -->
 <div class="content" id="content">
   <h1 class="header">Histórico de Ocorrências</h1>
 </div>
 
-<!-- Filtros -->
+<!-- filtros -->
 <div class="container mb-3">
   <div class="row">
     <div class="col-md-4">
@@ -30,7 +30,8 @@
       </div>
     </div>
     <div class="col-md-4">
-      <input id="dateInput" class="form-control" type="text" placeholder="Pesquise pela data" />
+      <input id="dateInput" class="form-control" type="date" placeholder="Pesquise pela data" />
+
     </div>
     
     <div class="col-md-4">
@@ -44,8 +45,7 @@
   </div>
 </div>
 
-<!-- Tabela -->
-<!-- ENVOLVA FORA DE QUALQUER CONTAINER BOOTSTRAP -->
+<!-- tabela -->
 <div class="tabela-externa-wrapper">
   <div class="tabela-centralizada">
     <table class="table">
@@ -59,7 +59,7 @@
         </tr>
       </thead>
       <tbody id="tableBody">
-        {% for ocorrencia in ocorrencias %}
+          {% for ocorrencia in ocorrencias %}
           {% set data_ocorrencia = ocorrencia.data_ocorrencia[:10].split('-') %}
           {% set data_formatada = data_ocorrencia[2] ~ '/' ~ data_ocorrencia[1] ~ '/' ~ data_ocorrencia[0] %}
           {% set hora_formatada = ocorrencia.data_ocorrencia[11:] %}
@@ -87,12 +87,10 @@
         {% endif %}
       </tbody>
     </table>
-
-    <!-- Paginação -->
+<!-- paginação -->
     <div id="pagination" class="pagination-container"></div>
   </div>
 </div>
-
 
 <!-- Modal -->
 <div class="modal fade" id="detalhesModal" tabindex="-1" aria-hidden="true">
@@ -126,122 +124,8 @@
   </div>
 </div>
 
-<!-- Scripts -->
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const btns = document.querySelectorAll(".btn-abrir-modal");
-  btns.forEach((btn) => {
-    btn.addEventListener("click", function () {
-      document.getElementById("modalOcorrencia").value = this.getAttribute("data-ocorrencia");
-      document.getElementById("modalData").value = this.getAttribute("data-data") + " " + this.getAttribute("data-hora");
-      document.getElementById("modalDescricao").value = this.getAttribute("data-descricao");
-      document.getElementById("modalResposta").value = this.getAttribute("data-resposta");
-    });
-  });
 
-  // Filtro
-  const searchInput = document.getElementById("searchInput");
-  const dateInput = document.getElementById("dateInput");
-  const tipoSelect = document.getElementById("tipoSelect");
-  const tableBody = document.getElementById("tableBody");
-
-  function filtrarTabela() {
-    const filtroTexto = searchInput.value.toLowerCase();
-    const filtroData = dateInput.value;
-    const filtroTipo = tipoSelect.value;
-    const linhas = tableBody.querySelectorAll("tr");
-    let algumaVisivel = false;
-
-    linhas.forEach((linha) => {
-      const celulas = linha.querySelectorAll("td");
-      if (celulas.length < 4) return;
-
-      const textoOcorrencia = celulas[0].textContent.toLowerCase();
-      const textoData = celulas[1].textContent.trim();
-      const textoDescricao = celulas[2].textContent.toLowerCase();
-      const textoResposta = celulas[3].textContent.toLowerCase();
-
-      const combinaTexto = textoDescricao.includes(filtroTexto) || textoResposta.includes(filtroTexto);
-      const combinaTipo = !filtroTipo || textoOcorrencia === filtroTipo.toLowerCase();
-      const combinaData = !filtroData || textoData.includes(filtroData.split("-").reverse().join("/"));
-
-      const mostrar = combinaTexto && combinaTipo && combinaData;
-      linha.style.display = mostrar ? "" : "none";
-      if (mostrar) algumaVisivel = true;
-    });
-
-    const linhaVazia = document.getElementById("linha-vazia");
-    if (linhaVazia) {
-      linhaVazia.style.display = algumaVisivel ? "none" : "";
-    }
-  }
-
-  searchInput.addEventListener("input", filtrarTabela);
-  dateInput.addEventListener("input", filtrarTabela);
-  tipoSelect.addEventListener("change", filtrarTabela);
-
-  // Paginação
-  const rowsPerPage = 15;
-  let currentPage = 1;
-  const allRows = Array.from(tableBody.querySelectorAll("tr"));
-  const pagination = document.getElementById("pagination");
-
-  function renderPagination(totalPages) {
-    pagination.innerHTML = "";
-
-    // Botão anterior
-const prevBtn = document.createElement("button");
-prevBtn.innerHTML = "&larr;";
-
-    prevBtn.disabled = currentPage === 1;
-    prevBtn.className = "pagination-btn";
-    prevBtn.onclick = () => {
-      currentPage--;
-      updateTable();
-    };
-    pagination.appendChild(prevBtn);
-
-    for (let i = 1; i <= totalPages; i++) {
-      const pageBtn = document.createElement("button");
-      pageBtn.textContent = i;
-      pageBtn.className = "pagination-btn" + (i === currentPage ? " active" : "");
-      pageBtn.onclick = () => {
-        currentPage = i;
-        updateTable();
-      };
-      pagination.appendChild(pageBtn);
-    }
-
-    // Botão próximo
-const nextBtn = document.createElement("button");
-nextBtn.innerHTML = "&rarr;";
-
-    nextBtn.disabled = currentPage === totalPages;
-    nextBtn.className = "pagination-btn";
-    nextBtn.onclick = () => {
-      currentPage++;
-      updateTable();
-    };
-    pagination.appendChild(nextBtn);
-  }
-
-  function updateTable() {
-    const totalRows = allRows.length;
-    const totalPages = Math.ceil(totalRows / rowsPerPage);
-    const start = (currentPage - 1) * rowsPerPage;
-    const end = start + rowsPerPage;
-
-    allRows.forEach((row, index) => {
-      row.style.display = (index >= start && index < end) ? "" : "none";
-    });
-
-    renderPagination(totalPages);
-  }
-
-  updateTable();
-});
-</script>
-
+<script src="/static/js/historico.js"></script>
 <script src="/static/js/telainicial.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>

@@ -52,7 +52,7 @@
 
 .table td:last-child,
 .table th:last-child {
-  width: 60px;
+  width: 80px;
   text-align: center;
 }
 
@@ -187,14 +187,14 @@
 }
 
 .tabela-centralizada {
-  width: 1320px; /* pode ajustar até 1440px se quiser mais largo */
+  width: 1400px; /* pode ajustar até 1440px se quiser mais largo */
   max-width: 100%;
 }
 
 .table th,
 .table td {
   padding: 18px 20px;
-  font-size: 15px;
+  font-size: 22px;
 }
 
 .table td.resposta-coluna,
