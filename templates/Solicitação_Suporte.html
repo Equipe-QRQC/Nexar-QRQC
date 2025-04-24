@@ -14,46 +14,48 @@
 </head>
 <body>
 <div class="content" id="content">
-    <div class="header">REGISTRO DE NOVA OCORRÊNCIA</div>
+    <div class="header">Solicitação de suporte</div>
 
     <main class="main-content">
         <div class="container py-4" style="max-width: 900px;">
-            <div class="row g-4 mb-4">
+            <form action="/enviar" method="POST">
+                <div class="row g-4 mb-4">
 
-                <div class="col-md-4">
-                    <label for="nome" class="form-label fw-bold">👤 Nome do Solicitante</label>
-                    <input type="text" class="form-control shadow-sm" id="nome" placeholder="Digite seu nome">
+                    <div class="col-md-4">
+                        <label for="nome" class="form-label fw-bold">👤 Nome do Solicitante</label>
+                        <input type="text" class="form-control shadow-sm" id="nome" name="nome" placeholder="Digite seu nome">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="setor" class="form-label fw-bold">🏢 Setor Solicitante</label>
+                        <select class="form-select shadow-sm" id="setor" name="setor">
+                            <option selected>Qualidade</option>
+                            <option value="1">RH</option>
+                            <option value="2">TI</option>
+                            <option value="3">Financeiro</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label for="prioridade" class="form-label fw-bold">⚠️ Prioridade</label>
+                        <select class="form-select shadow-sm" id="prioridade" name="prioridade">
+                            <option selected>Baixa</option>
+                            <option value="1">Média</option>
+                            <option value="2">Alta</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div class="col-md-4">
-                    <label for="setor" class="form-label fw-bold">🏢 Setor Solicitante</label>
-                    <select class="form-select shadow-sm" id="setor">
-                        <option selected>Qualidade</option>
-                        <option value="1">RH</option>
-                        <option value="2">TI</option>
-                        <option value="3">Financeiro</option>
-                    </select>
+                <div class="mb-4">
+                    <label for="motivo" class="form-label fw-bold">📝 Motivo da Solicitação</label>
+                    <textarea class="form-control shadow-sm" id="motivo" name="motivo" rows="5" placeholder="Descreva a situação com clareza..."></textarea>
                 </div>
 
-                <div class="col-md-4">
-                    <label for="prioridade" class="form-label fw-bold">⚠️ Prioridade</label>
-                    <select class="form-select shadow-sm" id="prioridade">
-                        <option selected>Baixa</option>
-                        <option value="1">Média</option>
-                        <option value="2">Alta</option>
-                    </select>
+                <div class="text-center mt-5">
+                    <button type="button" class="btn btn-danger btn-lg px-5 me-3 shadow-sm">Cancelar</button>
+                    <button type="submit" class="btn btn-success btn-lg px-5 shadow-sm">Enviar</button>
                 </div>
-            </div>
-
-            <div class="mb-4">
-                <label for="motivo" class="form-label fw-bold">📝 Motivo da Solicitação</label>
-                <textarea class="form-control shadow-sm" id="motivo" rows="5" placeholder="Descreva a situação com clareza..."></textarea>
-            </div>
-
-            <div class="text-center mt-5">
-                <button type="button" class="btn btn-danger btn-lg px-5 me-3 shadow-sm">Cancelar</button>
-                <button type="button" class="btn btn-success btn-lg px-5 shadow-sm">Enviar</button>
-            </div>
+            </form>
         </div>
     </main>
 </div>

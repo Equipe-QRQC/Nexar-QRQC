@@ -3,14 +3,23 @@ import sqlite3
 from flask import Flask, render_template, request
 from openai import OpenAI
 from dotenv import load_dotenv
+from twilio.rest import Client
+
 
 # Carrega variáveis de ambiente
 load_dotenv()
 
-# Configuração OpenAI
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Configuração OpenAI (renomeando para evitar conflito)
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Inicializa Flask
+# Credenciais do Twilio
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
+TWILIO_DESTINATARIO = os.getenv("TWILIO_DESTINATARIO")
+
+twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
 app = Flask(__name__)
 
 # Banco de dados SQLite
@@ -170,7 +179,53 @@ def registrar_ocorrencia():
     except Exception as e:
         print(f"Erro ao registrar ocorrência: {e}")
         return render_template('CadastroOcorrencia.html', error=True)
+    
+@app.route('/enviar', methods=['POST'])
+def enviar():
+    nome = request.form['nome']
+    setor = request.form['setor']
+    prioridade = request.form['prioridade']
+    motivo = request.form['motivo']
 
+    # Mapeamento do setor
+    setores = {
+        "1": "RH",
+        "2": "TI",
+        "3": "Financeiro",
+        "Qualidade": "Qualidade"
+    }
+    setor_nome = setores.get(setor, "Desconhecido")
 
+    # Mapeamento da prioridade
+    prioridades = {
+        "0": "Baixa",
+        "1": "Média",
+        "2": "Alta"
+    }
+    prioridade_nome = prioridades.get(prioridade, "Desconhecida")
+
+    corpo_msg = f"""
+    📌 Nexar - Solicitação de Suporte
+    👤 Nome do Solicitante: {nome}
+    🏢 Setor: {setor_nome}
+    ⚠️ Prioridade: {prioridade_nome}
+    📝 Motivo: {motivo}
+    """
+
+    try:
+        # Enviar mensagem via Twilio WhatsApp
+        mensagem = twilio_client.messages.create(
+            body=corpo_msg,
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=TWILIO_DESTINATARIO  # Substitua pelo número de destino
+        )
+
+        # Se a mensagem for enviada com sucesso, redireciona para a página de sucesso
+        return render_template('sucesso.html', mensagem=f"Mensagem enviada com sucesso! SID: {mensagem.sid}")
+
+    except Exception as e:
+        # Se ocorrer algum erro, exibe a mensagem de erro
+        return render_template('sucesso.html', mensagem=f"Erro ao enviar a solicitação: {e}")
+    
 if __name__ == '__main__':
     app.run(debug=True)
