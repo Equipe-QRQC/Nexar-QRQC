@@ -50,9 +50,10 @@
   text-overflow: ellipsis;
 }
 
+/* ULTIMA COLUNA */
 .table td:last-child,
 .table th:last-child {
-  width: 80px;
+  width: 110px;
   text-align: center;
 }
 
@@ -157,11 +158,6 @@
 }
 
 
-.table td:nth-child(3),
-.table td.resposta-coluna {
-  max-width: 300px;
-}
-
 .custom-table-wrapper {
   width: 1180px;
   max-width: 100%;
@@ -187,18 +183,14 @@
 }
 
 .tabela-centralizada {
-  width: 1400px; /* pode ajustar até 1440px se quiser mais largo */
+  width: 1300px; /* ATÉ 1440 PX */
   max-width: 100%;
 }
 
+/* TAMANHO DAS LETRAS E DA TAELA */
 .table th,
 .table td {
   padding: 18px 20px;
-  font-size: 22px;
-}
-
-.table td.resposta-coluna,
-.table td:nth-child(3) {
-  max-width: 320px;
+  font-size: 35px;
 }
 
