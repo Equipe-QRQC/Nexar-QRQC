@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexar QRQC — Login</title>
+  <link rel="stylesheet" href="/static/css/design-system.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    body {
+      background: var(--sidebar-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .login-wrapper {
+      display: flex;
+      width: 100%;
+      max-width: 900px;
+      min-height: 520px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-lg);
+    }
+
+    /* Painel esquerdo — identidade */
+    .login-brand {
+      flex: 1;
+      background: linear-gradient(145deg, #0A1628 0%, #112240 60%, #0D3358 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-brand::before {
+      content: '';
+      position: absolute;
+      width: 340px; height: 340px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(14,165,233,.12) 0%, transparent 70%);
+      top: -80px; right: -80px;
+    }
+
+    .login-brand::after {
+      content: '';
+      position: absolute;
+      width: 240px; height: 240px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(14,165,233,.08) 0%, transparent 70%);
+      bottom: -60px; left: -60px;
+    }
+
+    .login-brand img {
+      width: 120px;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+      filter: brightness(0) invert(1);
+    }
+
+    .login-brand h2 {
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .login-brand p {
+      color: rgba(255,255,255,.45);
+      font-size: 13px;
+      text-align: center;
+      margin-top: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 32px;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand-tag {
+      background: rgba(14,165,233,.15);
+      border: 1px solid rgba(14,165,233,.25);
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: var(--radius-full);
+    }
+
+    /* Painel direito — formulário */
+    .login-form-panel {
+      width: 380px;
+      background: var(--bg-card);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px 40px;
+    }
+
+    .login-form-panel h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .login-form-panel .subtitle {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-bottom: 32px;
+    }
+
+    .login-field {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .login-field i {
+      position: absolute;
+      left: 13px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-light);
+      font-size: 14px;
+    }
+
+    .login-field input {
+      width: 100%;
+      padding: 11px 14px 11px 38px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg-input);
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .login-field input:focus {
+      border-color: var(--primary);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(14,165,233,.1);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-login:hover { background: var(--primary-dark); }
+
+    .error-msg {
+      background: var(--danger-light);
+      color: var(--danger);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .login-lang {
+      display: flex;
+      gap: 6px;
+      justify-content: center;
+      margin-top: 28px;
+    }
+
+    .login-lang a {
+      color: var(--text-light);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      transition: var(--transition);
+    }
+
+    .login-lang a:hover, .login-lang a.active { color: var(--primary); }
+
+    .login-hint {
+      margin-top: 24px;
+      padding: 12px;
+      background: var(--bg-page);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .login-brand { display: none; }
+      .login-form-panel { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrapper">
+
+    <!-- Identidade -->
+    <div class="login-brand">
+      <img src="/static/assets/img/nexar_logo.svg" alt="Nexar" />
+      <h2>NEXAR QRQC</h2>
+      <p>Sistema de Gestão de Ocorrências com IA</p>
+      <div class="brand-tags">
+        <span class="brand-tag"><i class="fas fa-robot"></i> GPT-4o Vision</span>
+        <span class="brand-tag"><i class="fas fa-industry"></i> Industrial</span>
+        <span class="brand-tag"><i class="fas fa-shield-alt"></i> ISO 9001</span>
+        <span class="brand-tag"><i class="fas fa-chart-line"></i> Dashboard</span>
+      </div>
+    </div>
+
+    <!-- Formulário -->
+    <div class="login-form-panel">
+      <h3>{{ t.bem_vindo }}</h3>
+      <p class="subtitle">Entre com suas credenciais para continuar</p>
+
+      {% if erro %}
+      <div class="error-msg">
+        <i class="fas fa-exclamation-circle"></i> {{ erro }}
+      </div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="login-field">
+          <i class="fas fa-envelope"></i>
+          <input type="email" name="email" placeholder="{{ t.email }}" required autocomplete="email" />
+        </div>
+        <div class="login-field">
+          <i class="fas fa-lock"></i>
+          <input type="password" name="senha" placeholder="{{ t.senha }}" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn-login">
+          <i class="fas fa-sign-in-alt"></i> {{ t.entrar }}
+        </button>
+      </form>
+
+      <div class="login-hint">
+        <i class="fas fa-info-circle"></i>
+        Admin padrão: <strong>admin@nexar.com</strong> / <strong>nexar2026</strong>
+      </div>
+
+      <div class="login-lang">
+        <a href="{{ url_for('set_lang', lang='pt') }}" class="{{ 'active' if lang == 'pt' }}">PT</a>
+        <a href="{{ url_for('set_lang', lang='en') }}" class="{{ 'active' if lang == 'en' }}">EN</a>
+        <a href="{{ url_for('set_lang', lang='es') }}" class="{{ 'active' if lang == 'es' }}">ES</a>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

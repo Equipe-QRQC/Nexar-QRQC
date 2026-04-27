@@ -1,0 +1,84 @@
+{% extends 'menu.html' %}
+{% block title %}Máquinas — Nexar QRQC{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-cogs"></i> {{ t.maquinas }}
+  </div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('cadastro_maquina') }}" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> {{ t.nova_maquina }}
+    </a>
+  </div>
+</div>
+
+<div class="page-body">
+
+  {% if maquinas %}
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+    {% for m in maquinas %}
+    <div class="card" style="transition:var(--transition);"
+         onmouseover="this.style.boxShadow='var(--shadow-lg)'"
+         onmouseout="this.style.boxShadow='var(--shadow-sm)'">
+      <div class="card-header">
+        <span class="card-title" style="font-size:14px;">
+          <i class="fas fa-cog"></i> {{ m.nome }}
+        </span>
+        {% if m.setor %}
+        <span class="badge badge-primary" style="font-size:11px;">{{ m.setor }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body" style="padding:16px;">
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+          {% if m.fabricante %}
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Fabricante</span>
+            <span style="font-size:13px;">{{ m.fabricante }}</span>
+          </div>
+          {% endif %}
+          {% if m.modelo %}
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Modelo</span>
+            <span style="font-size:13px;">{{ m.modelo }}</span>
+          </div>
+          {% endif %}
+          {% if m.ano %}
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Ano</span>
+            <span style="font-size:13px;">{{ m.ano }}</span>
+          </div>
+          {% endif %}
+        </div>
+        {% if m.descricao %}
+        <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5; margin-bottom:16px;">
+          {{ m.descricao[:120] }}{% if m.descricao|length > 120 %}...{% endif %}
+        </p>
+        {% endif %}
+        <div style="display:flex; gap:8px;">
+          <a href="{{ url_for('CadastroOcorrencia') }}?maquina={{ m.id }}"
+             class="btn btn-primary btn-sm" style="flex:1; justify-content:center;">
+            <i class="fas fa-exclamation-triangle"></i> Ocorrência
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div style="
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:400px; text-align:center; color:var(--text-muted);
+  ">
+    <i class="fas fa-cogs" style="font-size:52px; opacity:.2; margin-bottom:16px;"></i>
+    <h3 style="font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px;">Nenhuma máquina cadastrada</h3>
+    <p style="font-size:14px; margin-bottom:24px;">Cadastre as máquinas para habilitar o diagnóstico técnico com IA.</p>
+    <a href="{{ url_for('cadastro_maquina') }}" class="btn btn-primary">
+      <i class="fas fa-plus"></i> {{ t.nova_maquina }}
+    </a>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

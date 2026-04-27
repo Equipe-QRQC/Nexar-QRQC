@@ -1,153 +1,140 @@
 {% extends 'menu.html' %}
+{% block title %}Diagnóstico Técnico — Nexar QRQC{% endblock %}
 
 {% block content %}
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Solução{% endblock %}</title>
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-check-circle" style="color:var(--success);"></i> {{ t.diagnostico }}
+  </div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('solicitacao') }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-headset"></i> {{ t.solicitar_suporte }}
+    </a>
+    <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> {{ t.finalizar }}
+    </a>
+  </div>
+</div>
 
-  <link rel="stylesheet" href="/static/css/telainicial.css" />
+<div class="page-body">
+  <div class="grid-2" style="align-items:start;">
 
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Coluna 1 — Dados + Solução -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
 
-  <style>
-   
-    .card-custom {
-      background: white;
-      border-radius: 20px;
-      padding: 30px;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-    }
-    h5.section-title {
-      font-weight: bold;
-      margin-bottom: 15px;
-    }
-    .data-label {
-      font-weight: 600;
-      color: #333;
-    }
-    .highlight-box {
-      background-color: #e9fbe8;
-      border-left: 5px solid #28a745;
-    }
-    .icon-title {
-      font-size: 1.5rem;
-    }
-    .btn-custom {
-      font-size: 1.3rem;
-      padding: 15px 40px;
-    }
-    .btn-tecnico {
-      background-color: #c62828;
-    color: white;
-    font-weight: bold;
-    padding: 12px 54px;
-    border: none;
-    border-radius: 12px;
-    font-size: 1.1rem;
-    width: 11rem;
-}
-
-  .btn-finalizar {
-    background-color: #2e7d32; /* verde forte */
-    color: white;
-    font-weight: bold;
-    padding: 12px  54px;
-    border: none;
-    border-radius: 12px;
-    font-size: 1.1rem;
-    width: 11rem;
-  }
-
-  .btn-tecnico:hover {
-    background-color: #b71c1c;
-  }
-
-  .btn-finalizar:hover {
-    background-color: #1b5e20;
-  }
-
-  .botao-container {
-    display: flex;
-    justify-content: center;
-    gap: 30px;
-    margin-top: 40px;
-  }
-  </style>
-</head>
-<body>
-
-<div class="content" id="content">
-  <div class="header">📋 Resposta de Ocorrência</div>
-
-  <div class="container my-5">
-    <div class="card-custom">
-
-      <!-- Dados da Ocorrência -->
-      <div class="row g-4 mb-4">
-        <div class="col-md-6">
-          <h5 class="section-title text-primary icon-title">📄 Dados da Ocorrência</h5>
-          <ul class="list-unstyled lh-lg">
-            <li><span class="data-label">👷 Operador:</span> {{ dados.nome_operador }}</li>
-            <li><span class="data-label">📅 Data:</span> {{ dados.data_ocorrencia }}</li>
-            <li><span class="data-label">🏭 Setor/Área:</span> {{ dados.setor_area }}</li>
-            <li><span class="data-label">⚠️ Tipo:</span> {{ dados.tipo_ocorrencia }}</li>
-            <li><span class="data-label">🔥 Impacto:</span> {{ dados.nivel_impacto }}</li>
-            <li><span class="data-label">🔁 Recorrente:</span> {{ dados.problema_recorrente }}</li>
-            <li><span class="data-label">🔧 Técnico:</span> {{ dados.detalhamento_tecnico }}</li>
-          </ul>
+      <!-- Dados da ocorrência -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-file-alt"></i> Dados da Ocorrência</span>
+          {% if dados.nivel_impacto == 'Alto' %}
+            <span class="badge badge-danger">🔴 Impacto Alto</span>
+          {% elif dados.nivel_impacto == 'Médio' %}
+            <span class="badge badge-warning">🟡 Impacto Médio</span>
+          {% else %}
+            <span class="badge badge-success">🟢 Impacto Baixo</span>
+          {% endif %}
         </div>
+        <div class="card-body">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Operador</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.nome_operador }}</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Data</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.data_ocorrencia }}</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Setor</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.setor_area }}</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Máquina</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.maquina_nome or '—' }}</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Tipo</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.tipo_ocorrencia }}</div>
+            </div>
+            <div>
+              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Recorrente</div>
+              <div style="font-size:14px; font-weight:500;">{{ dados.problema_recorrente }}</div>
+            </div>
+          </div>
 
-        <div class="col-md-6">
-          <h5 class="section-title text-warning icon-title">🛠️ Descrição do Problema</h5>
-          <div class="bg-light border rounded shadow-sm p-3" style="max-height: 300px; overflow:auto; font-size: 1.05rem;">
-            {{ dados.descricao }}
+          <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Descrição</div>
+            <div style="font-size:14px; color:var(--text); line-height:1.6; background:var(--bg-page); padding:12px; border-radius:var(--radius-sm);">
+              {{ dados.descricao }}
+            </div>
           </div>
         </div>
       </div>
 
-      <hr />
-
-      <!-- Solução sugerida -->
-      <div class="p-4 bg-success bg-opacity-10 border-start border-4 border-success rounded">
-        <ul class="list-group">
-          {% for passo in resposta_ia.split('\n') if passo.strip() %}
-          <li class="list-group-item d-flex align-items-start bg-light mb-2 rounded shadow-sm">
-            <i class="fas fa-check-circle text-success me-3 mt-1 fs-5"></i>
-            <div>{{ passo }}</div>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-
-      <!-- Imagem gerada pela IA -->
-      {% if imagem_gerada %}
-      <div class="text-center my-5">
-        <h5 class="section-title icon-title">🖼️ Imagem Gerada pela IA</h5>
-        <img src="{{ imagem_gerada }}" alt="Imagem gerada pela IA" class="img-fluid rounded shadow" style="max-width: 512px;">
-      </div>
-      {% endif %}
-
-      
-      <div class="botao-container">
-        <a href="{{ url_for('solicitacao') }}" class="btn-tecnico text-decoration-none">
-          Técnico
-        </a>
-      
-        <a href="{{ url_for('CadastroOcorrencia') }}" class="btn-finalizar text-decoration-none">
-          Finalizar
-        </a>
+      <!-- Solução IA -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-robot"></i> {{ t.solucao }}</span>
+          <span class="badge badge-primary">GPT-4o</span>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
+            {% for passo in resposta_ia.split('\n') if passo.strip() %}
+            <div style="
+              display:flex; align-items:flex-start; gap:12px;
+              padding:12px 16px;
+              background:var(--bg-page);
+              border-radius:var(--radius-sm);
+              border-left:3px solid var(--primary);
+            ">
+              <i class="fas fa-check-circle" style="color:var(--success); margin-top:2px; flex-shrink:0;"></i>
+              <span style="font-size:14px; line-height:1.6; color:var(--text);">{{ passo }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
       </div>
 
     </div>
+
+    <!-- Coluna 2 — Diagrama -->
+    <div>
+      {% if diagrama_url %}
+      <div class="card" style="position:sticky; top:76px;">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
+          <a href="{{ diagrama_url }}" target="_blank" class="btn btn-outline btn-sm">
+            <i class="fas fa-expand"></i> Ampliar
+          </a>
+        </div>
+        <div class="card-body" style="padding:0; text-align:center; background:#1a1a2e;">
+          <img src="{{ diagrama_url }}"
+               alt="Diagrama técnico da máquina"
+               style="max-width:100%; max-height:520px; object-fit:contain; display:block; margin:0 auto; padding:16px;" />
+        </div>
+        <div style="padding:12px 16px; background:var(--bg-page); border-top:1px solid var(--border);">
+          <p style="font-size:12px; color:var(--text-muted); margin:0;">
+            <i class="fas fa-info-circle" style="color:var(--primary);"></i>
+            A IA analisou este diagrama para gerar o diagnóstico acima.
+          </p>
+        </div>
+      </div>
+      {% else %}
+      <div class="card" style="position:sticky; top:76px;">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
+        </div>
+        <div class="card-body" style="text-align:center; padding:48px 24px; color:var(--text-muted);">
+          <i class="fas fa-image" style="font-size:40px; margin-bottom:12px; opacity:.3; display:block;"></i>
+          <p style="font-size:13px;">Nenhum diagrama disponível para esta máquina.</p>
+          <a href="{{ url_for('maquinas') }}" class="btn btn-outline btn-sm" style="margin-top:12px;">
+            <i class="fas fa-upload"></i> Adicionar diagrama
+          </a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
   </div>
 </div>
-
-<script src="/static/js/telainicial.js"></script>
-</body>
-</html>
 {% endblock %}

@@ -1,44 +1,70 @@
 {% extends 'menu.html' %}
+{% block title %}Nova Ocorrência — Nexar QRQC{% endblock %}
 
 {% block content %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Tela inicial{% endblock %}
-    </title>
-    <link rel="stylesheet" href="/static/css/telainicial.css" />
-
-    <link
-      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-      rel="stylesheet"
-    />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
-    />
-
-
-    <!-- Script JS do Bootstrap -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-</head>
-
-
-<body>
-    
-<div class="content" id="content">
-  <div class="header">REGISTRO DE NOVA OCORRÊNCIA</div>
-  <div class="register-box">
-    <!-- Botão que redireciona para  tela de cadastro -->
-    <a href="{{ url_for('CadastroOcorrencia') }}" class="register-btn">
-      <i class="fas fa-plus-square"></i>
-    </a>
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-plus-circle"></i> {{ t.nova_ocorrencia }}
   </div>
-  <p class="register-text">Registre sua ocorrência</p>
 </div>
- 
-    <script src="/static/js/telainicial.js"></script>
-</body>
-</html>
+
+<div class="page-body" style="display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 60px);">
+  <div style="text-align:center; max-width: 480px; width:100%;">
+
+    <div style="margin-bottom: 32px;">
+      <div style="
+        width: 80px; height: 80px;
+        background: var(--primary-light);
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 16px;
+      ">
+        <i class="fas fa-industry" style="font-size:32px; color: var(--primary);"></i>
+      </div>
+      <h2 style="font-size:22px; font-weight:700; color:var(--text); margin-bottom:8px;">
+        Registrar Ocorrência
+      </h2>
+      <p style="color:var(--text-muted); font-size:14px;">
+        Selecione a máquina, descreva o problema e receba o diagnóstico técnico gerado pela IA em segundos.
+      </p>
+    </div>
+
+    <a href="{{ url_for('CadastroOcorrencia') }}" style="
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 16px 40px;
+      border-radius: var(--radius);
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(14,165,233,.4);
+      transition: var(--transition);
+    " onmouseover="this.style.background='var(--primary-dark)'"
+       onmouseout="this.style.background='var(--primary)'">
+      <i class="fas fa-plus"></i> Nova Ocorrência
+    </a>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:40px;">
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
+        <i class="fas fa-robot" style="color:var(--primary); font-size:20px; margin-bottom:8px; display:block;"></i>
+        <div style="font-size:12px; font-weight:600; color:var(--text);">GPT-4o Vision</div>
+        <div style="font-size:11px; color:var(--text-muted);">Diagnóstico visual</div>
+      </div>
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
+        <i class="fas fa-cogs" style="color:var(--success); font-size:20px; margin-bottom:8px; display:block;"></i>
+        <div style="font-size:12px; font-weight:600; color:var(--text);">Por Máquina</div>
+        <div style="font-size:11px; color:var(--text-muted);">Diagnóstico preciso</div>
+      </div>
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
+        <i class="fas fa-bolt" style="color:var(--warning); font-size:20px; margin-bottom:8px; display:block;"></i>
+        <div style="font-size:12px; font-weight:600; color:var(--text);">Instantâneo</div>
+        <div style="font-size:11px; color:var(--text-muted);">Resultado em segundos</div>
+      </div>
+    </div>
+
+  </div>
+</div>
 {% endblock %}

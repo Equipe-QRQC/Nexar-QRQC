@@ -1,0 +1,141 @@
+{% extends 'menu.html' %}
+{% block title %}Cadastrar Máquina — Nexar QRQC{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-plus-circle"></i> {{ t.cadastrar_maquina }}
+  </div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('maquinas') }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-arrow-left"></i> Voltar
+    </a>
+  </div>
+</div>
+
+<div class="page-body">
+  <div style="max-width:760px; margin:0 auto;">
+    <form action="{{ url_for('cadastro_maquina') }}" method="POST" enctype="multipart/form-data">
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-info-circle"></i> Identificação</span>
+        </div>
+        <div class="card-body">
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">{{ t.nome }} *</label>
+              <input type="text" name="nome" class="form-control"
+                     placeholder="Ex: Torno CNC 01" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t.setor }}</label>
+              <input type="text" name="setor" class="form-control"
+                     placeholder="Ex: Linha de Produção 3" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t.fabricante }}</label>
+              <input type="text" name="fabricante" class="form-control"
+                     placeholder="Ex: Romi, Siemens..." />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t.modelo }}</label>
+              <input type="text" name="modelo" class="form-control"
+                     placeholder="Ex: GL 240M" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">{{ t.ano }}</label>
+              <input type="text" name="ano" class="form-control" placeholder="Ex: 2018" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Descrição / Observações</label>
+            <textarea name="descricao" class="form-control" rows="3"
+                      placeholder="Informações adicionais sobre a máquina, capacidade, localização, etc."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagramas }}</span>
+        </div>
+        <div class="card-body">
+          <div id="dropZone" style="
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 40px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--bg-page);
+          "
+          ondragover="event.preventDefault(); this.style.borderColor='var(--primary)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="handleDrop(event)"
+          onclick="document.getElementById('diagramasInput').click()">
+            <i class="fas fa-cloud-upload-alt" style="font-size:36px; color:var(--text-light); margin-bottom:12px; display:block;"></i>
+            <p style="font-size:14px; font-weight:600; color:var(--text); margin-bottom:4px;">
+              Clique ou arraste os arquivos aqui
+            </p>
+            <p style="font-size:12px; color:var(--text-muted);">
+              PNG, JPG, JPEG ou PDF — múltiplos arquivos aceitos
+            </p>
+          </div>
+
+          <input type="file" id="diagramasInput" name="diagramas" multiple
+                 accept=".png,.jpg,.jpeg,.pdf" style="display:none"
+                 onchange="showFiles(this.files)" />
+
+          <div id="fileList" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;"></div>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:10px;">
+        <a href="{{ url_for('maquinas') }}" class="btn btn-outline">
+          <i class="fas fa-times"></i> {{ t.cancelar }}
+        </a>
+        <button type="submit" class="btn btn-primary btn-lg">
+          <i class="fas fa-save"></i> Salvar Máquina
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function showFiles(files) {
+    const list = document.getElementById('fileList');
+    list.innerHTML = '';
+    [...files].forEach(f => {
+      const item = document.createElement('div');
+      item.style.cssText = `
+        display:flex; align-items:center; gap:10px; padding:10px 14px;
+        background:var(--bg-page); border-radius:var(--radius-sm);
+        border:1px solid var(--border); font-size:13px;
+      `;
+      const icon = f.type.includes('pdf') ? 'fa-file-pdf' : 'fa-file-image';
+      const color = f.type.includes('pdf') ? 'var(--danger)' : 'var(--primary)';
+      item.innerHTML = `
+        <i class="fas ${icon}" style="color:${color}; font-size:16px;"></i>
+        <span style="flex:1;">${f.name}</span>
+        <span style="color:var(--text-muted); font-size:11px;">${(f.size/1024).toFixed(1)} KB</span>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    document.getElementById('dropZone').style.borderColor = 'var(--border)';
+    const input = document.getElementById('diagramasInput');
+    const dt = new DataTransfer();
+    [...e.dataTransfer.files].forEach(f => dt.items.add(f));
+    input.files = dt.files;
+    showFiles(dt.files);
+  }
+</script>
+{% endblock %}
