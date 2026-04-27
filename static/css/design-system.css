@@ -105,7 +105,7 @@ body {
   white-space: nowrap;
 }
 
-.sidebar-logo img { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; border-radius: 6px; }
+.sidebar-logo img { width: 48px; height: 48px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 0 6px rgba(14,165,233,.5)); }
 
 .sidebar-logo-text h4 {
   color: #fff;
