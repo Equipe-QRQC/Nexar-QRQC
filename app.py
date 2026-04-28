@@ -302,10 +302,10 @@ def historico():
         return render_template("historico.html", ocorrencias=[])
 
 
-@app.route("/Solicitação_Suporte")
+@app.route("/suporte")
 @login_required
 def solicitacao():
-    return render_template("Solicitação_Suporte.html")
+    return render_template("suporte.html")
 
 
 @app.route("/CadastroOcorrencia")

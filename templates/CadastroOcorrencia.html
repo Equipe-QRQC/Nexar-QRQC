@@ -89,60 +89,43 @@
 
           <div class="form-group">
             <label class="form-label">{{ t.impacto }}</label>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:4px;">
-              <label style="cursor:pointer;">
-                <input type="radio" name="nivel_impacto" value="Baixo" style="display:none" class="impact-radio" />
-                <div class="impact-btn" data-level="baixo" style="
-                  text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                  border:2px solid var(--border); font-size:12px; font-weight:600;
-                  color:var(--text-muted); transition:var(--transition); cursor:pointer;
-                ">🟢 Baixo</div>
-              </label>
-              <label style="cursor:pointer;">
-                <input type="radio" name="nivel_impacto" value="Médio" style="display:none" class="impact-radio" />
-                <div class="impact-btn" data-level="medio" style="
-                  text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                  border:2px solid var(--border); font-size:12px; font-weight:600;
-                  color:var(--text-muted); transition:var(--transition); cursor:pointer;
-                ">🟡 Médio</div>
-              </label>
-              <label style="cursor:pointer;">
-                <input type="radio" name="nivel_impacto" value="Alto" style="display:none" class="impact-radio" />
-                <div class="impact-btn" data-level="alto" style="
-                  text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                  border:2px solid var(--border); font-size:12px; font-weight:600;
-                  color:var(--text-muted); transition:var(--transition); cursor:pointer;
-                ">🔴 Alto</div>
-              </label>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:4px;" id="impactoGroup">
+              <div class="impact-btn" data-value="Baixo" data-level="baixo" onclick="selImpacto(this)" style="
+                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
+                border:2px solid var(--border); font-size:12px; font-weight:600;
+                color:var(--text-muted); transition:var(--transition); cursor:pointer;
+              ">🟢 Baixo</div>
+              <div class="impact-btn" data-value="Médio" data-level="medio" onclick="selImpacto(this)" style="
+                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
+                border:2px solid var(--border); font-size:12px; font-weight:600;
+                color:var(--text-muted); transition:var(--transition); cursor:pointer;
+              ">🟡 Médio</div>
+              <div class="impact-btn" data-value="Alto" data-level="alto" onclick="selImpacto(this)" style="
+                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
+                border:2px solid var(--border); font-size:12px; font-weight:600;
+                color:var(--text-muted); transition:var(--transition); cursor:pointer;
+              ">🔴 Alto</div>
             </div>
-            <!-- hidden input fallback -->
-            <select name="nivel_impacto_sel" id="nivelImpactoSel" class="form-select" style="display:none" required>
-              <option value="Baixo">Baixo</option>
-              <option value="Médio">Médio</option>
-              <option value="Alto">Alto</option>
-            </select>
+            <input type="hidden" name="nivel_impacto" id="nivelImpactoVal" value="" />
+            <small id="impactoErro" style="color:var(--danger); display:none; font-size:12px;">⚠ Selecione o nível de impacto</small>
           </div>
 
           <div class="form-group">
             <label class="form-label">{{ t.recorrente }}</label>
-            <div style="display:flex; gap:8px;">
-              <label style="flex:1; cursor:pointer;">
-                <input type="radio" name="problema_recorrente" value="Sim" required style="display:none" />
-                <div class="toggle-opt" style="
-                  text-align:center; padding:10px; border-radius:var(--radius-sm);
-                  border:2px solid var(--border); font-size:13px; font-weight:600;
-                  color:var(--text-muted); transition:var(--transition); cursor:pointer;
-                ">Sim</div>
-              </label>
-              <label style="flex:1; cursor:pointer;">
-                <input type="radio" name="problema_recorrente" value="Não" required style="display:none" />
-                <div class="toggle-opt" style="
-                  text-align:center; padding:10px; border-radius:var(--radius-sm);
-                  border:2px solid var(--border); font-size:13px; font-weight:600;
-                  color:var(--text-muted); transition:var(--transition); cursor:pointer;
-                ">Não</div>
-              </label>
+            <div style="display:flex; gap:8px;" id="recorrenteGroup">
+              <div class="toggle-opt" data-value="Sim" onclick="selRecorrente(this)" style="
+                flex:1; text-align:center; padding:10px; border-radius:var(--radius-sm);
+                border:2px solid var(--border); font-size:13px; font-weight:600;
+                color:var(--text-muted); transition:var(--transition); cursor:pointer;
+              ">Sim</div>
+              <div class="toggle-opt" data-value="Não" onclick="selRecorrente(this)" style="
+                flex:1; text-align:center; padding:10px; border-radius:var(--radius-sm);
+                border:2px solid var(--border); font-size:13px; font-weight:600;
+                color:var(--text-muted); transition:var(--transition); cursor:pointer;
+              ">Não</div>
             </div>
+            <input type="hidden" name="problema_recorrente" id="recorrenteVal" value="" />
+            <small id="recorrenteErro" style="color:var(--danger); display:none; font-size:12px;">⚠ Selecione se é recorrente</small>
           </div>
 
           <div class="form-group" style="margin-bottom:0;">
@@ -183,40 +166,63 @@
 
 {% block scripts %}
 <script>
-  // Seleção visual de impacto
-  document.querySelectorAll('.impact-radio').forEach(radio => {
-    radio.closest('label').addEventListener('click', function() {
+  // Impacto
+  function selImpacto(el) {
+    document.querySelectorAll('.impact-btn').forEach(b => {
+      b.style.borderColor = 'var(--border)';
+      b.style.color = 'var(--text-muted)';
+      b.style.background = 'transparent';
+    });
+    const colors = { baixo: 'var(--success)', medio: 'var(--warning)', alto: 'var(--danger)' };
+    const bgs   = { baixo: 'var(--success-light)', medio: 'var(--warning-light)', alto: 'var(--danger-light)' };
+    const level = el.dataset.level;
+    el.style.borderColor = colors[level];
+    el.style.color = colors[level];
+    el.style.background = bgs[level];
+    document.getElementById('nivelImpactoVal').value = el.dataset.value;
+    document.getElementById('impactoErro').style.display = 'none';
+  }
+
+  // Recorrente
+  function selRecorrente(el) {
+    document.querySelectorAll('.toggle-opt').forEach(o => {
+      o.style.borderColor = 'var(--border)';
+      o.style.color = 'var(--text-muted)';
+      o.style.background = 'transparent';
+    });
+    el.style.borderColor = 'var(--primary)';
+    el.style.color = 'var(--primary)';
+    el.style.background = 'var(--primary-light)';
+    document.getElementById('recorrenteVal').value = el.dataset.value;
+    document.getElementById('recorrenteErro').style.display = 'none';
+  }
+
+  // Submit com validação
+  document.getElementById('formOcorrencia').addEventListener('submit', function(e) {
+    let valido = true;
+
+    if (!document.getElementById('nivelImpactoVal').value) {
+      document.getElementById('impactoErro').style.display = 'block';
       document.querySelectorAll('.impact-btn').forEach(b => {
-        b.style.borderColor = 'var(--border)';
-        b.style.color = 'var(--text-muted)';
-        b.style.background = 'transparent';
+        b.style.borderColor = 'var(--danger)';
       });
-      const btn = this.querySelector('.impact-btn');
-      const level = btn.dataset.level;
-      const colors = { baixo: 'var(--success)', medio: 'var(--warning)', alto: 'var(--danger)' };
-      btn.style.borderColor = colors[level];
-      btn.style.color = colors[level];
-      btn.style.background = level === 'baixo' ? 'var(--success-light)' :
-                              level === 'medio' ? 'var(--warning-light)' : 'var(--danger-light)';
-    });
-  });
+      valido = false;
+    }
 
-  // Seleção visual Sim/Não
-  document.querySelectorAll('.toggle-opt').forEach(opt => {
-    opt.closest('label').addEventListener('click', function() {
-      this.closest('.form-group').querySelectorAll('.toggle-opt').forEach(o => {
-        o.style.borderColor = 'var(--border)';
-        o.style.color = 'var(--text-muted)';
-        o.style.background = 'transparent';
+    if (!document.getElementById('recorrenteVal').value) {
+      document.getElementById('recorrenteErro').style.display = 'block';
+      document.querySelectorAll('.toggle-opt').forEach(o => {
+        o.style.borderColor = 'var(--danger)';
       });
-      opt.style.borderColor = 'var(--primary)';
-      opt.style.color = 'var(--primary)';
-      opt.style.background = 'var(--primary-light)';
-    });
-  });
+      valido = false;
+    }
 
-  // Mostrar loading ao submeter
-  document.getElementById('formOcorrencia').addEventListener('submit', function() {
+    if (!valido) {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     document.getElementById('loadingOverlay').classList.add('show');
   });
 </script>
