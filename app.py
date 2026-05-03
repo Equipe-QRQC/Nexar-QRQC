@@ -33,13 +33,14 @@ app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
 # Obter chave: https://aistudio.google.com/apikey
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
 
-# Cadeia de modelos: tenta na ordem. Se 429/quota em um, cai no próximo.
+# Cadeia de modelos: tenta na ordem. Se 429/quota/404 em um, cai no próximo.
 # Pode forçar um único modelo definindo GEMINI_MODEL no .env.
+# Obs: modelos 1.5-flash e 1.5-flash-8b foram descontinuados em set/2025.
 _DEFAULT_CHAIN = [
     "gemini-2.5-flash",
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash-lite",
 ]
 _user_model = os.getenv("GEMINI_MODEL", "").strip()
 GEMINI_MODELS = [_user_model] if _user_model else _DEFAULT_CHAIN
@@ -421,10 +422,10 @@ def chat():
             logger.exception(f"[chat/{modelo}] erro")
             break
 
-    if ultimo_erro and _is_quota_error(ultimo_erro):
-        msg = ("⚠️ Cota da IA esgotada em todos os modelos disponíveis. "
+    if ultimo_erro and _should_try_next_model(ultimo_erro):
+        msg = ("⚠️ Todos os modelos da IA falharam (cota, indisponibilidade ou modelo descontinuado). "
                "Aguarde alguns minutos ou configure uma nova chave em outra conta Google.")
-        return jsonify({"resposta": msg}), 429
+        return jsonify({"resposta": msg}), 503
     return jsonify({"resposta": f"Erro ao consultar a IA: {ultimo_erro}"}), 500
 
 
@@ -449,10 +450,25 @@ def _fallback_response(prompt: str) -> str:
     )
 
 
-def _is_quota_error(err: Exception) -> bool:
-    """Detecta se é erro de cota/rate limit (429 RESOURCE_EXHAUSTED)."""
+def _should_try_next_model(err: Exception) -> bool:
+    """
+    Decide se vale a pena tentar o próximo modelo da cadeia.
+    Inclui: 429 (cota), 404 (modelo descontinuado/inválido), 503 (indisponível).
+    """
     s = str(err)
-    return "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower() or "rate limit" in s.lower()
+    s_low = s.lower()
+    indicadores = [
+        "429", "RESOURCE_EXHAUSTED", "quota", "rate limit",       # cota
+        "404", "NOT_FOUND", "is not found", "is not supported",   # modelo descontinuado/inválido
+        "503", "UNAVAILABLE", "overloaded",                        # serviço indisponível
+        "DEADLINE_EXCEEDED", "timeout",                            # timeout
+    ]
+    return any(ind in s or ind.lower() in s_low for ind in indicadores)
+
+
+# Mantém compatibilidade com possíveis chamadas externas
+def _is_quota_error(err: Exception) -> bool:
+    return _should_try_next_model(err)
 
 
 def get_ai_response(
@@ -525,14 +541,17 @@ def get_ai_response(
 
         except Exception as e:
             ultimo_erro = e
-            if _is_quota_error(e):
-                logger.warning(f"[{modelo}] cota esgotada — tentando próximo modelo")
+            if _should_try_next_model(e):
+                motivo = "404/descontinuado" if ("404" in str(e) or "NOT_FOUND" in str(e)) else "cota/timeout/indisponível"
+                logger.warning(f"[{modelo}] {motivo} — tentando próximo modelo")
                 continue
             logger.exception(f"[{modelo}] erro não-cota")
             break
 
     # Esgotou todos os modelos
-    if ultimo_erro and _is_quota_error(ultimo_erro):
+    err_str = str(ultimo_erro) if ultimo_erro else ""
+    is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+    if ultimo_erro and is_quota:
         msg = (
             "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
             "**Soluções possíveis:**\n"
