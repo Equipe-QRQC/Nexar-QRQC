@@ -47,19 +47,29 @@ GEMINI_MODELS = [_user_model] if _user_model else _DEFAULT_CHAIN
 GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
 
 SYSTEM_INSTRUCTION = (
-    "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC). "
-    "Responde em português técnico, objetivo e prático. "
-    "Quando há diagrama anexado, referencia componentes e cotas observados. "
-    "Estruture diagnósticos em 4 seções com markdown: "
-    "**1. Causa provável**, **2. Componentes a verificar**, "
-    "**3. Procedimento de inspeção**, **4. Quando escalar**."
+    "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC) "
+    "com 20 anos de experiência em chão de fábrica. Responde em português técnico, "
+    "objetivo e prático. Quando há diagrama anexado, referencia componentes e cotas observados.\n\n"
+    "Estruture TODA resposta de diagnóstico em 4 seções numeradas com markdown:\n\n"
+    "**1. Causa provável**\n"
+    "Explique a hipótese principal em 3-5 linhas, citando os sintomas relatados que sustentam o "
+    "diagnóstico (pressão, temperatura, ruídos, histórico). Identifique o componente primário suspeito.\n\n"
+    "**2. Componentes a verificar**\n"
+    "Liste 4-7 componentes em ordem de prioridade. Para cada um: nome técnico + breve justificativa.\n\n"
+    "**3. Procedimento de inspeção**\n"
+    "Passo a passo numerado (5-8 passos), começando OBRIGATORIAMENTE por procedimentos de segurança "
+    "(LOTO, despressurização, isolamento elétrico). Inclua medições específicas e critérios de aceitação.\n\n"
+    "**4. Quando escalar para o fabricante**\n"
+    "Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que indicam que a manutenção "
+    "interna não é suficiente.\n\n"
+    "Seja DETALHADO em cada seção — manutentor precisa de informação acionável, não respostas vagas."
 )
 
 GEN_CONFIG = genai_types.GenerateContentConfig(
     system_instruction=SYSTEM_INSTRUCTION,
     temperature=0.4,
     top_p=0.9,
-    max_output_tokens=1024,
+    max_output_tokens=2048,  # aumentado para permitir respostas detalhadas
 )
 
 
@@ -492,15 +502,20 @@ def _detectar_componentes(
     prompt_bbox = (
         "Analise o diagrama técnico industrial em anexo.\n\n"
         "DIAGNÓSTICO PRÉVIO DE UM ENGENHEIRO:\n"
-        f"{diagnostico_texto[:1500]}\n\n"
-        "TAREFA: Localize de 3 a 6 componentes do diagrama que sejam relevantes "
-        "para esse diagnóstico. Para cada componente, retorne JSON com:\n"
-        "- box_2d: [ymin, xmin, ymax, xmax] em 0-1000 (cubra EXATAMENTE o desenho do componente)\n"
-        "- label: nome do componente como aparece no diagrama (ex: 'BOMBA', 'FILTRO', 'VEDACOES')\n"
-        "- tipo: 'critico' (componente com falha provável), 'atencao' (inspecionar), 'info' (referência)\n"
-        "- descricao: 1 frase explicando a relevância (max 80 caracteres)\n\n"
-        "IMPORTANTE: cubra os componentes REAIS do diagrama, não áreas vazias. "
-        "Priorize 1-2 'critico', 2-3 'atencao' e 1 'info'."
+        f"{diagnostico_texto[:2000]}\n\n"
+        "TAREFA: Localize no diagrama os componentes relevantes para o diagnóstico acima.\n\n"
+        "REGRAS OBRIGATÓRIAS:\n"
+        "1. SEMPRE inclua o COMPONENTE PRIMÁRIO mencionado na seção 'Causa provável' do diagnóstico "
+        "(ex: se o diagnóstico diz 'falha na BOMBA', a bomba DEVE estar como tipo='critico').\n"
+        "2. Inclua de 3 a 6 componentes total, distribuídos como: 1-2 'critico', 2-3 'atencao', "
+        "0-1 'info'.\n"
+        "3. Cada bbox deve cobrir EXATAMENTE o desenho/rótulo do componente real — nunca áreas vazias.\n"
+        "4. Use o NOME EXATO do rótulo como aparece no diagrama (ex: 'BOMBA', 'FILTRO', 'VEDACOES').\n\n"
+        "FORMATO DE CADA COMPONENTE:\n"
+        "- box_2d: [ymin, xmin, ymax, xmax] em 0-1000\n"
+        "- label: nome curto do componente como aparece no diagrama\n"
+        "- tipo: 'critico' | 'atencao' | 'info'\n"
+        "- descricao: 1 frase (max 100 chars) ligando este componente ao diagnóstico"
     )
 
     for modelo in modelos:
