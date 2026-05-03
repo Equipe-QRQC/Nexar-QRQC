@@ -77,31 +77,38 @@ class Anotacao(BaseModel):
     descricao: str = Field(description="Por que este ponto é relevante para o diagnóstico")
 
 
-class DiagnosticoEstruturado(BaseModel):
-    """Resposta da IA com diagnóstico em texto + anotações no diagrama."""
-    diagnostico: str = Field(
-        description="Diagnóstico técnico completo em markdown com 4 seções numeradas"
+class ComponenteDetectado(BaseModel):
+    """Componente identificado no diagrama com bounding box."""
+    box_2d: list[int] = Field(
+        description="Bounding box [ymin, xmin, ymax, xmax] normalizado em 0-1000",
+        min_length=4,
+        max_length=4,
     )
-    anotacoes: list[Anotacao] = Field(
-        default_factory=list,
-        description="Lista de pontos de interesse no diagrama (apenas se diagrama foi fornecido)",
+    label: str = Field(description="Nome curto do componente como aparece no diagrama")
+    tipo: Literal["critico", "atencao", "info"] = Field(
+        description="critico=falha provável, atencao=inspecionar, info=referência"
     )
+    descricao: str = Field(description="Por que este componente é relevante (1 frase)")
 
 
-GEN_CONFIG_STRUCTURED = genai_types.GenerateContentConfig(
+class DeteccaoComponentes(BaseModel):
+    """Lista de componentes detectados no diagrama com posições precisas."""
+    componentes: list[ComponenteDetectado]
+
+
+# Config para a 2ª chamada (detecção de bounding boxes)
+GEN_CONFIG_BBOX = genai_types.GenerateContentConfig(
     system_instruction=(
-        SYSTEM_INSTRUCTION
-        + "\n\nVocê DEVE retornar JSON válido conforme o schema. "
-        "No campo 'diagnostico' coloque o texto markdown completo (4 seções numeradas). "
-        "No campo 'anotacoes' inclua de 2 a 5 pontos relevantes no diagrama, "
-        "com coordenadas em PORCENTAGEM (0-100) da largura/altura da imagem. "
-        "Use tipo='critico' para falha provável, 'atencao' para inspecionar, 'info' para referência."
+        "Você é um especialista em visão computacional aplicada a diagramas técnicos industriais. "
+        "Sua tarefa é localizar precisamente componentes mencionados em um diagnóstico, "
+        "retornando bounding boxes no formato [ymin, xmin, ymax, xmax] normalizado em 0-1000. "
+        "Seja preciso: a caixa deve cobrir EXATAMENTE o desenho/rótulo do componente, sem áreas vazias."
     ),
-    temperature=0.4,
+    temperature=0.1,  # baixa temperatura → mais determinístico para coordenadas
     top_p=0.9,
-    max_output_tokens=1500,
+    max_output_tokens=800,
     response_mime_type="application/json",
-    response_schema=DiagnosticoEstruturado,
+    response_schema=DeteccaoComponentes,
 )
 
 gemini_client = None
@@ -450,6 +457,96 @@ def _fallback_response(prompt: str) -> str:
     )
 
 
+def _bbox_para_overlay(bbox: list[int]) -> dict:
+    """
+    Converte bounding box do Gemini [ymin, xmin, ymax, xmax] em 0-1000
+    para coordenadas de overlay (centro x%, centro y%, raio%).
+    """
+    ymin, xmin, ymax, xmax = bbox
+    cx = (xmin + xmax) / 2 / 10  # 0-1000 → 0-100
+    cy = (ymin + ymax) / 2 / 10
+    largura  = (xmax - xmin) / 10
+    altura   = (ymax - ymin) / 10
+    # Raio = metade do menor lado, com piso/teto razoáveis
+    raio = max(2.5, min(8.0, max(largura, altura) / 2))
+    return {
+        "x": round(cx, 2),
+        "y": round(cy, 2),
+        "raio": round(raio, 2),
+    }
+
+
+def _detectar_componentes(
+    img_obj,
+    diagnostico_texto: str,
+    modelos: list[str],
+) -> list[dict]:
+    """
+    Segunda chamada à IA: usa visão computacional para localizar componentes
+    mencionados no diagnóstico, retornando bounding boxes precisos.
+    Retorna lista de anotações no formato {x, y, raio, tipo, titulo, descricao}.
+    """
+    if not gemini_client or img_obj is None:
+        return []
+
+    prompt_bbox = (
+        "Analise o diagrama técnico industrial em anexo.\n\n"
+        "DIAGNÓSTICO PRÉVIO DE UM ENGENHEIRO:\n"
+        f"{diagnostico_texto[:1500]}\n\n"
+        "TAREFA: Localize de 3 a 6 componentes do diagrama que sejam relevantes "
+        "para esse diagnóstico. Para cada componente, retorne JSON com:\n"
+        "- box_2d: [ymin, xmin, ymax, xmax] em 0-1000 (cubra EXATAMENTE o desenho do componente)\n"
+        "- label: nome do componente como aparece no diagrama (ex: 'BOMBA', 'FILTRO', 'VEDACOES')\n"
+        "- tipo: 'critico' (componente com falha provável), 'atencao' (inspecionar), 'info' (referência)\n"
+        "- descricao: 1 frase explicando a relevância (max 80 caracteres)\n\n"
+        "IMPORTANTE: cubra os componentes REAIS do diagrama, não áreas vazias. "
+        "Priorize 1-2 'critico', 2-3 'atencao' e 1 'info'."
+    )
+
+    for modelo in modelos:
+        try:
+            response = gemini_client.models.generate_content(
+                model=modelo,
+                contents=[prompt_bbox, img_obj],
+                config=GEN_CONFIG_BBOX,
+            )
+            parsed: DeteccaoComponentes | None = response.parsed
+            if not parsed:
+                try:
+                    raw = json.loads(response.text or "{}")
+                    parsed = DeteccaoComponentes(**raw)
+                except Exception:
+                    logger.warning(f"[bbox/{modelo}] resposta sem JSON parseável")
+                    continue
+
+            anotacoes: list[dict] = []
+            for c in parsed.componentes:
+                # Validação: bbox deve estar em 0-1000 e ter área positiva
+                ymin, xmin, ymax, xmax = c.box_2d
+                if not (0 <= ymin < ymax <= 1000 and 0 <= xmin < xmax <= 1000):
+                    logger.warning(f"[bbox] descartado bbox inválido: {c.box_2d} ({c.label})")
+                    continue
+                centro = _bbox_para_overlay(c.box_2d)
+                anotacoes.append({
+                    **centro,
+                    "tipo": c.tipo,
+                    "titulo": c.label,
+                    "descricao": c.descricao,
+                })
+
+            if anotacoes:
+                logger.info(f"[bbox] {len(anotacoes)} componente(s) localizado(s) por {modelo}")
+                return anotacoes
+            logger.warning(f"[bbox/{modelo}] retornou 0 componentes válidos")
+        except Exception as e:
+            if _should_try_next_model(e):
+                logger.warning(f"[bbox/{modelo}] erro transitório — tentando próximo")
+                continue
+            logger.exception(f"[bbox/{modelo}] erro definitivo, abortando detecção")
+            break
+    return []
+
+
 def _should_try_next_model(err: Exception) -> bool:
     """
     Decide se vale a pena tentar o próximo modelo da cadeia.
@@ -476,13 +573,14 @@ def get_ai_response(
     imagem_path: str | None = None,
 ) -> tuple[str, list[dict], str]:
     """
+    Fluxo em 2 chamadas:
+    1) Diagnóstico em markdown (rápido, sem JSON)
+    2) Se há imagem, detecção de componentes via bounding boxes (preciso)
+
     Retorna (texto_diagnostico, anotacoes, status).
     - texto_diagnostico: markdown
-    - anotacoes: lista de dicts {x, y, raio, tipo, titulo, descricao} (vazia se sem imagem)
+    - anotacoes: lista de dicts {x, y, raio, tipo, titulo, descricao}
     - status: 'ok' | 'fallback' | 'erro'
-
-    Quando há imagem, usa structured output (JSON) para devolver diagnóstico + anotações.
-    Quando não há imagem, usa text generation simples (mais rápido e barato).
     """
     if not gemini_client:
         return (_fallback_response(prompt), [], "fallback")
@@ -501,68 +599,61 @@ def get_ai_response(
 
     has_image = img_obj is not None
     partes: list = [prompt] + ([img_obj] if has_image else [])
-    config = GEN_CONFIG_STRUCTURED if has_image else GEN_CONFIG
 
     ultimo_erro: Exception | None = None
+    modelo_usado: str | None = None
+    texto_diagnostico: str = ""
+
+    # ── 1ª chamada: diagnóstico em texto markdown ─────────────────────────────
     for modelo in GEMINI_MODELS:
         try:
             response = gemini_client.models.generate_content(
                 model=modelo,
                 contents=partes,
-                config=config,
+                config=GEN_CONFIG,
             )
-
-            if has_image:
-                # Structured output: JSON parseado automaticamente em response.parsed
-                parsed: DiagnosticoEstruturado | None = response.parsed
-                if not parsed:
-                    # Fallback: tentar parsear o texto como JSON manualmente
-                    try:
-                        raw = json.loads(response.text or "{}")
-                        parsed = DiagnosticoEstruturado(**raw)
-                    except Exception:
-                        logger.warning(f"[{modelo}] resposta sem JSON parseável")
-                        continue
-                texto = (parsed.diagnostico or "").strip()
-                anotacoes = [a.model_dump() for a in parsed.anotacoes]
-                if not texto:
-                    continue
-                if modelo != GEMINI_MODELS[0]:
-                    logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
-                logger.info(f"[ia] {len(anotacoes)} anotação(ões) geradas")
-                return (texto, anotacoes, "ok")
-            else:
-                texto = (response.text or "").strip()
-                if not texto:
-                    continue
-                if modelo != GEMINI_MODELS[0]:
-                    logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
-                return (texto, [], "ok")
-
+            texto = (response.text or "").strip()
+            if not texto:
+                logger.warning(f"[{modelo}] resposta vazia, tentando próximo")
+                continue
+            texto_diagnostico = texto
+            modelo_usado = modelo
+            if modelo != GEMINI_MODELS[0]:
+                logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
+            break
         except Exception as e:
             ultimo_erro = e
             if _should_try_next_model(e):
                 motivo = "404/descontinuado" if ("404" in str(e) or "NOT_FOUND" in str(e)) else "cota/timeout/indisponível"
                 logger.warning(f"[{modelo}] {motivo} — tentando próximo modelo")
                 continue
-            logger.exception(f"[{modelo}] erro não-cota")
+            logger.exception(f"[{modelo}] erro não-transitório")
             break
 
-    # Esgotou todos os modelos
-    err_str = str(ultimo_erro) if ultimo_erro else ""
-    is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
-    if ultimo_erro and is_quota:
-        msg = (
-            "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
-            "**Soluções possíveis:**\n"
-            "1. Aguarde alguns minutos e tente novamente\n"
-            "2. Crie uma **nova chave em outra conta Google**: https://aistudio.google.com/apikey\n"
-            "3. Use um projeto Google Cloud que **nunca teve billing ativado** (free tier completo)\n"
-            "4. Considere migrar para outro provedor (Claude, Groq, DeepSeek)\n\n"
-        )
-    else:
-        msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
-    return (msg + _fallback_response(prompt), [], "erro")
+    # Se nenhum modelo respondeu o diagnóstico → erro
+    if not texto_diagnostico:
+        err_str = str(ultimo_erro) if ultimo_erro else ""
+        is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+        if ultimo_erro and is_quota:
+            msg = (
+                "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
+                "**Soluções possíveis:**\n"
+                "1. Aguarde alguns minutos e tente novamente\n"
+                "2. Crie uma **nova chave em outra conta Google**: https://aistudio.google.com/apikey\n"
+                "3. Use um projeto Google Cloud que **nunca teve billing ativado**\n\n"
+            )
+        else:
+            msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
+        return (msg + _fallback_response(prompt), [], "erro")
+
+    # ── 2ª chamada: detecção de componentes (bounding boxes) ──────────────────
+    anotacoes: list[dict] = []
+    if has_image:
+        # Reordena a cadeia de modelos: começa com o que funcionou na 1ª chamada
+        modelos_bbox = [modelo_usado] + [m for m in GEMINI_MODELS if m != modelo_usado]
+        anotacoes = _detectar_componentes(img_obj, texto_diagnostico, modelos_bbox)
+
+    return (texto_diagnostico, anotacoes, "ok")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
