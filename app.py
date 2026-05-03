@@ -1,13 +1,16 @@
 import os
 import io
+import json
 import logging
 import sqlite3
 from datetime import datetime
+from typing import Literal
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from google import genai
 from google.genai import types as genai_types
 from PIL import Image
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from twilio.rest import Client
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -56,6 +59,48 @@ GEN_CONFIG = genai_types.GenerateContentConfig(
     temperature=0.4,
     top_p=0.9,
     max_output_tokens=1024,
+)
+
+
+# ── Schemas para structured output (Diagnóstico + Anotações) ──────────────────
+
+class Anotacao(BaseModel):
+    """Marcação de um componente crítico no diagrama da máquina."""
+    x: float = Field(description="Posição X em % da largura (0-100)", ge=0, le=100)
+    y: float = Field(description="Posição Y em % da altura (0-100)", ge=0, le=100)
+    raio: float = Field(default=4.0, description="Raio do círculo em % da largura (3-8)", ge=2, le=10)
+    tipo: Literal["critico", "atencao", "info"] = Field(
+        description="critico=falha provável, atencao=ponto de inspeção, info=referência geral"
+    )
+    titulo: str = Field(description="Nome curto do componente (ex: 'Vedação do flange')")
+    descricao: str = Field(description="Por que este ponto é relevante para o diagnóstico")
+
+
+class DiagnosticoEstruturado(BaseModel):
+    """Resposta da IA com diagnóstico em texto + anotações no diagrama."""
+    diagnostico: str = Field(
+        description="Diagnóstico técnico completo em markdown com 4 seções numeradas"
+    )
+    anotacoes: list[Anotacao] = Field(
+        default_factory=list,
+        description="Lista de pontos de interesse no diagrama (apenas se diagrama foi fornecido)",
+    )
+
+
+GEN_CONFIG_STRUCTURED = genai_types.GenerateContentConfig(
+    system_instruction=(
+        SYSTEM_INSTRUCTION
+        + "\n\nVocê DEVE retornar JSON válido conforme o schema. "
+        "No campo 'diagnostico' coloque o texto markdown completo (4 seções numeradas). "
+        "No campo 'anotacoes' inclua de 2 a 5 pontos relevantes no diagrama, "
+        "com coordenadas em PORCENTAGEM (0-100) da largura/altura da imagem. "
+        "Use tipo='critico' para falha provável, 'atencao' para inspecionar, 'info' para referência."
+    ),
+    temperature=0.4,
+    top_p=0.9,
+    max_output_tokens=1500,
+    response_mime_type="application/json",
+    response_schema=DiagnosticoEstruturado,
 )
 
 gemini_client = None
@@ -233,6 +278,7 @@ def init_db():
     cols = [r["name"] for r in c.execute("PRAGMA table_info(ocorrencias)").fetchall()]
     migracoes = {
         "ia_status":           "ALTER TABLE ocorrencias ADD COLUMN ia_status TEXT DEFAULT 'ok'",
+        "anotacoes_ia":        "ALTER TABLE ocorrencias ADD COLUMN anotacoes_ia TEXT",
         "status":              "ALTER TABLE ocorrencias ADD COLUMN status TEXT DEFAULT 'Aberta'",
         "diagrama_url":        "ALTER TABLE ocorrencias ADD COLUMN diagrama_url TEXT",
         "resposta_ia":         "ALTER TABLE ocorrencias ADD COLUMN resposta_ia TEXT",
@@ -409,26 +455,37 @@ def _is_quota_error(err: Exception) -> bool:
     return "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower() or "rate limit" in s.lower()
 
 
-def get_ai_response(prompt: str, imagem_path: str | None = None) -> tuple[str, str]:
+def get_ai_response(
+    prompt: str,
+    imagem_path: str | None = None,
+) -> tuple[str, list[dict], str]:
     """
-    Retorna (resposta, status). status ∈ {'ok', 'fallback', 'erro'}.
-    Tenta a cadeia de modelos Gemini em ordem; se um der 429, vai pro próximo.
+    Retorna (texto_diagnostico, anotacoes, status).
+    - texto_diagnostico: markdown
+    - anotacoes: lista de dicts {x, y, raio, tipo, titulo, descricao} (vazia se sem imagem)
+    - status: 'ok' | 'fallback' | 'erro'
+
+    Quando há imagem, usa structured output (JSON) para devolver diagnóstico + anotações.
+    Quando não há imagem, usa text generation simples (mais rápido e barato).
     """
     if not gemini_client:
-        return (_fallback_response(prompt), "fallback")
+        return (_fallback_response(prompt), [], "fallback")
 
-    # Monta conteúdo: texto + imagem (se houver)
-    partes: list = [prompt]
+    # Tenta abrir a imagem (se houver)
+    img_obj = None
     if imagem_path and os.path.exists(imagem_path):
         ext = imagem_path.rsplit(".", 1)[-1].lower()
         if ext in ("png", "jpg", "jpeg"):
             try:
-                img = Image.open(imagem_path)
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                partes.append(img)
+                img_obj = Image.open(imagem_path)
+                if img_obj.mode in ("RGBA", "P"):
+                    img_obj = img_obj.convert("RGB")
             except Exception as e:
                 logger.warning(f"Não foi possível abrir imagem {imagem_path}: {e}")
+
+    has_image = img_obj is not None
+    partes: list = [prompt] + ([img_obj] if has_image else [])
+    config = GEN_CONFIG_STRUCTURED if has_image else GEN_CONFIG
 
     ultimo_erro: Exception | None = None
     for modelo in GEMINI_MODELS:
@@ -436,21 +493,41 @@ def get_ai_response(prompt: str, imagem_path: str | None = None) -> tuple[str, s
             response = gemini_client.models.generate_content(
                 model=modelo,
                 contents=partes,
-                config=GEN_CONFIG,
+                config=config,
             )
-            texto = (response.text or "").strip()
-            if not texto:
-                logger.warning(f"[{modelo}] resposta vazia, tentando próximo modelo")
-                continue
-            if modelo != GEMINI_MODELS[0]:
-                logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
-            return (texto, "ok")
+
+            if has_image:
+                # Structured output: JSON parseado automaticamente em response.parsed
+                parsed: DiagnosticoEstruturado | None = response.parsed
+                if not parsed:
+                    # Fallback: tentar parsear o texto como JSON manualmente
+                    try:
+                        raw = json.loads(response.text or "{}")
+                        parsed = DiagnosticoEstruturado(**raw)
+                    except Exception:
+                        logger.warning(f"[{modelo}] resposta sem JSON parseável")
+                        continue
+                texto = (parsed.diagnostico or "").strip()
+                anotacoes = [a.model_dump() for a in parsed.anotacoes]
+                if not texto:
+                    continue
+                if modelo != GEMINI_MODELS[0]:
+                    logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
+                logger.info(f"[ia] {len(anotacoes)} anotação(ões) geradas")
+                return (texto, anotacoes, "ok")
+            else:
+                texto = (response.text or "").strip()
+                if not texto:
+                    continue
+                if modelo != GEMINI_MODELS[0]:
+                    logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
+                return (texto, [], "ok")
+
         except Exception as e:
             ultimo_erro = e
             if _is_quota_error(e):
                 logger.warning(f"[{modelo}] cota esgotada — tentando próximo modelo")
                 continue
-            # Erro não relacionado a cota: para o loop e reporta
             logger.exception(f"[{modelo}] erro não-cota")
             break
 
@@ -466,7 +543,7 @@ def get_ai_response(prompt: str, imagem_path: str | None = None) -> tuple[str, s
         )
     else:
         msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
-    return (msg + _fallback_response(prompt), "erro")
+    return (msg + _fallback_response(prompt), [], "erro")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -641,8 +718,9 @@ Descrição: {descricao}
 
 Use linguagem técnica objetiva, em português. Foque em ações práticas imediatas."""
 
-    resposta_ia, ia_status = get_ai_response(prompt, diagrama_path)
-    logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}")
+    resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
+    logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
+    anotacoes_json = json.dumps(anotacoes, ensure_ascii=False) if anotacoes else None
 
     # ── Persistência ─────────────────────────────────────────────────────────
     try:
@@ -651,11 +729,11 @@ Use linguagem técnica objetiva, em português. Foque em ações práticas imedi
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, ia_status, diagrama_url, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
             (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
              tipo_ocorrencia, nivel_impacto, problema_recorrente,
-             detalhamento_tecnico, resposta_ia, ia_status, diagrama_url),
+             detalhamento_tecnico, resposta_ia, ia_status, anotacoes_json, diagrama_url),
         )
         ocorrencia_id = cursor.lastrowid
         conn.commit()
@@ -684,6 +762,7 @@ Use linguagem técnica objetiva, em português. Foque em ações práticas imedi
         resposta_ia=resposta_ia,
         ia_status=ia_status,
         diagrama_url=diagrama_url,
+        anotacoes=anotacoes,
     )
 
 

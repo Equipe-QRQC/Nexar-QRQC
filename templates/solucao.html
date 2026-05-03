@@ -140,22 +140,109 @@
       <div class="card" style="position:sticky; top:76px;">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
-          <a href="{{ diagrama_url }}" target="_blank" class="btn btn-outline btn-sm">
-            <i class="fas fa-expand"></i> Ampliar
-          </a>
+          <div style="display:flex; gap:6px;">
+            {% if anotacoes %}
+            <button id="toggleAnotacoes" class="btn btn-outline btn-sm" type="button" onclick="toggleAnotacoes()" title="Mostrar/ocultar anotações da IA">
+              <i class="fas fa-eye-slash" id="iconToggle"></i> <span id="textToggle">Ocultar</span>
+            </button>
+            {% endif %}
+            <a href="{{ diagrama_url }}" target="_blank" class="btn btn-outline btn-sm">
+              <i class="fas fa-expand"></i> Ampliar
+            </a>
+          </div>
         </div>
         <div class="card-body" style="padding:0; text-align:center; background:#1a1a2e;">
-          <img src="{{ diagrama_url }}"
-               alt="Diagrama técnico da máquina"
-               style="max-width:100%; max-height:520px; object-fit:contain; display:block; margin:0 auto; padding:16px;" />
+          <div id="diagramWrap" style="position:relative; display:inline-block; max-width:100%;">
+            <img id="diagramImg" src="{{ diagrama_url }}"
+                 alt="Diagrama técnico da máquina"
+                 style="max-width:100%; max-height:520px; object-fit:contain; display:block; margin:0 auto; padding:16px;" />
+            {% if anotacoes %}
+            <div id="annotationLayer" style="position:absolute; inset:16px; pointer-events:none;">
+              {% for a in anotacoes %}
+              {% set cor = '#EF4444' if a.tipo == 'critico' else '#F59E0B' if a.tipo == 'atencao' else '#3B82F6' %}
+              <div class="annotation-marker"
+                   data-num="{{ loop.index }}"
+                   data-titulo="{{ a.titulo | e }}"
+                   data-descricao="{{ a.descricao | e }}"
+                   data-tipo="{{ a.tipo }}"
+                   style="
+                    position:absolute;
+                    left:{{ a.x }}%; top:{{ a.y }}%;
+                    width:{{ a.raio * 2 }}%;
+                    aspect-ratio:1/1;
+                    transform:translate(-50%,-50%);
+                    border:3px solid {{ cor }};
+                    border-radius:50%;
+                    background:{{ cor }}33;
+                    box-shadow:0 0 0 2px rgba(255,255,255,.6), 0 0 14px {{ cor }};
+                    pointer-events:auto; cursor:pointer;
+                    display:flex; align-items:center; justify-content:center;
+                    font-size:13px; font-weight:700; color:#fff;
+                    text-shadow:0 1px 2px rgba(0,0,0,.6);
+                    animation: pulse-{{ a.tipo }} 2s ease-in-out infinite;
+                  ">{{ loop.index }}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
         </div>
-        <div style="padding:12px 16px; background:var(--bg-page); border-top:1px solid var(--border);">
-          <p style="font-size:12px; color:var(--text-muted); margin:0;">
+
+        {% if anotacoes %}
+        <!-- Lista de anotações -->
+        <div style="background:var(--bg-page); border-top:1px solid var(--border); padding:12px 16px;">
+          <p style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">
+            <i class="fas fa-map-marker-alt" style="color:var(--primary);"></i>
+            {{ anotacoes|length }} ponto(s) marcado(s) pela IA
+          </p>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            {% for a in anotacoes %}
+            {% set cor = '#EF4444' if a.tipo == 'critico' else '#F59E0B' if a.tipo == 'atencao' else '#3B82F6' %}
+            <div class="annotation-item"
+                 data-num="{{ loop.index }}"
+                 style="display:flex; gap:10px; align-items:flex-start; padding:8px; background:#fff; border-radius:var(--radius-sm); border-left:3px solid {{ cor }}; cursor:pointer;"
+                 onmouseenter="highlightMarker({{ loop.index }})"
+                 onmouseleave="unhighlightMarker({{ loop.index }})">
+              <div style="
+                width:20px; height:20px; border-radius:50%;
+                background:{{ cor }}; color:#fff;
+                display:flex; align-items:center; justify-content:center;
+                font-size:11px; font-weight:700; flex-shrink:0;
+              ">{{ loop.index }}</div>
+              <div style="flex:1; font-size:12px;">
+                <strong style="color:{{ cor }}; font-size:12px;">{{ a.titulo }}</strong>
+                <div style="color:var(--text-muted); margin-top:2px; line-height:1.4;">{{ a.descricao }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <div style="padding:10px 16px; background:var(--bg-page); border-top:1px solid var(--border);">
+          <p style="font-size:11px; color:var(--text-muted); margin:0;">
             <i class="fas fa-info-circle" style="color:var(--primary);"></i>
-            A IA analisou este diagrama para gerar o diagnóstico.
+            {% if anotacoes %}
+              Diagrama original preservado · marcações em camada de overlay
+            {% else %}
+              A IA analisou este diagrama para gerar o diagnóstico
+            {% endif %}
           </p>
         </div>
       </div>
+
+      <!-- Tooltip flutuante -->
+      <div id="markerTooltip" style="
+        display:none; position:fixed; z-index:1000;
+        background:#0D1117; color:#fff;
+        padding:10px 14px; border-radius:8px;
+        font-size:13px; line-height:1.5;
+        max-width:260px; pointer-events:none;
+        box-shadow: 0 6px 20px rgba(0,0,0,.3);
+      ">
+        <div id="ttTitulo" style="font-weight:700; margin-bottom:4px;"></div>
+        <div id="ttDescricao" style="font-size:12px; opacity:.85;"></div>
+      </div>
+
       {% else %}
       <div class="card" style="position:sticky; top:76px;">
         <div class="card-header">
@@ -189,6 +276,27 @@
     text-align:center; line-height:22px; font-size:12px; font-weight:700;
     margin-right:6px;
   }
+
+  /* Pulsos das anotações no diagrama */
+  @keyframes pulse-critico {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 0 14px #EF4444; }
+    50%      { box-shadow: 0 0 0 2px rgba(255,255,255,.8), 0 0 24px #EF4444; }
+  }
+  @keyframes pulse-atencao {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 0 12px #F59E0B; }
+    50%      { box-shadow: 0 0 0 2px rgba(255,255,255,.8), 0 0 22px #F59E0B; }
+  }
+  @keyframes pulse-info {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(255,255,255,.6), 0 0 10px #3B82F6; }
+    50%      { box-shadow: 0 0 0 2px rgba(255,255,255,.8), 0 0 18px #3B82F6; }
+  }
+  .annotation-marker.highlighted {
+    transform: translate(-50%,-50%) scale(1.25) !important;
+    transition: transform .2s;
+  }
+  .annotation-marker { transition: transform .2s; }
+  .annotation-item:hover { background:#F8FAFC !important; }
+  .annotation-layer-hidden { display:none !important; }
 </style>
 {% endblock %}
 
@@ -217,5 +325,60 @@
       setTimeout(() => { btn.innerHTML = txt; }, 1800);
     });
   }
+
+  // ── Anotações no diagrama ───────────────────────────────────────────────
+  let anotacoesVisiveis = true;
+  function toggleAnotacoes() {
+    const layer = document.getElementById('annotationLayer');
+    const icon  = document.getElementById('iconToggle');
+    const txt   = document.getElementById('textToggle');
+    if (!layer) return;
+    anotacoesVisiveis = !anotacoesVisiveis;
+    layer.classList.toggle('annotation-layer-hidden', !anotacoesVisiveis);
+    if (icon) icon.className = anotacoesVisiveis ? 'fas fa-eye-slash' : 'fas fa-eye';
+    if (txt)  txt.textContent  = anotacoesVisiveis ? 'Ocultar' : 'Mostrar';
+  }
+
+  function highlightMarker(num) {
+    const m = document.querySelector(`.annotation-marker[data-num="${num}"]`);
+    if (m) m.classList.add('highlighted');
+  }
+  function unhighlightMarker(num) {
+    const m = document.querySelector(`.annotation-marker[data-num="${num}"]`);
+    if (m) m.classList.remove('highlighted');
+  }
+
+  // Tooltip on marker hover
+  (function () {
+    const markers = document.querySelectorAll('.annotation-marker');
+    const tt = document.getElementById('markerTooltip');
+    if (!tt || markers.length === 0) return;
+    const ttTitulo = document.getElementById('ttTitulo');
+    const ttDesc   = document.getElementById('ttDescricao');
+
+    markers.forEach(m => {
+      m.addEventListener('mouseenter', e => {
+        ttTitulo.textContent = m.dataset.titulo || '';
+        ttDesc.textContent   = m.dataset.descricao || '';
+        tt.style.display = 'block';
+      });
+      m.addEventListener('mousemove', e => {
+        tt.style.left = (e.clientX + 14) + 'px';
+        tt.style.top  = (e.clientY + 14) + 'px';
+      });
+      m.addEventListener('mouseleave', () => { tt.style.display = 'none'; });
+
+      // Click rola até o item correspondente na lista
+      m.addEventListener('click', () => {
+        const num = m.dataset.num;
+        const item = document.querySelector(`.annotation-item[data-num="${num}"]`);
+        if (item) {
+          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          item.style.background = '#FEF3C7';
+          setTimeout(() => { item.style.background = ''; }, 1500);
+        }
+      });
+    });
+  })();
 </script>
 {% endblock %}
