@@ -48,28 +48,16 @@ GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
 
 SYSTEM_INSTRUCTION = (
     "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC) "
-    "com 20 anos de experiência em chão de fábrica. Responde em português técnico, "
-    "objetivo e prático. Quando há diagrama anexado, referencia componentes e cotas observados.\n\n"
-    "Estruture TODA resposta de diagnóstico em 4 seções numeradas com markdown:\n\n"
-    "**1. Causa provável**\n"
-    "Explique a hipótese principal em 3-5 linhas, citando os sintomas relatados que sustentam o "
-    "diagnóstico (pressão, temperatura, ruídos, histórico). Identifique o componente primário suspeito.\n\n"
-    "**2. Componentes a verificar**\n"
-    "Liste 4-7 componentes em ordem de prioridade. Para cada um: nome técnico + breve justificativa.\n\n"
-    "**3. Procedimento de inspeção**\n"
-    "Passo a passo numerado (5-8 passos), começando OBRIGATORIAMENTE por procedimentos de segurança "
-    "(LOTO, despressurização, isolamento elétrico). Inclua medições específicas e critérios de aceitação.\n\n"
-    "**4. Quando escalar para o fabricante**\n"
-    "Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que indicam que a manutenção "
-    "interna não é suficiente.\n\n"
-    "Seja DETALHADO em cada seção — manutentor precisa de informação acionável, não respostas vagas."
+    "com 20 anos de experiência em chão de fábrica. Responda em português técnico, "
+    "objetivo e detalhado — manutentor precisa de informação acionável. "
+    "Quando há diagrama anexado, referencia componentes e cotas observados."
 )
 
 GEN_CONFIG = genai_types.GenerateContentConfig(
     system_instruction=SYSTEM_INSTRUCTION,
-    temperature=0.4,
+    temperature=0.5,
     top_p=0.9,
-    max_output_tokens=2048,  # aumentado para permitir respostas detalhadas
+    max_output_tokens=4096,  # generoso para garantir 4 seções completas
 )
 
 
@@ -826,22 +814,30 @@ def registrar_ocorrencia():
         # Continua mesmo sem contexto da máquina — não é fatal.
 
     # ── Prompt para a IA ─────────────────────────────────────────────────────
-    prompt = f"""Você é um engenheiro sênior de manutenção industrial.
+    prompt = f"""{maquina_info}
+DADOS DA OCORRÊNCIA:
+- Operador: {nome_operador}
+- Data: {data_ocorrencia}
+- Setor: {setor_area}
+- Tipo: {tipo_ocorrencia} | Impacto: {nivel_impacto} | Recorrente: {problema_recorrente}
+- Descrição: {descricao}
+- Detalhamento técnico: {detalhamento_tecnico}
 
-{maquina_info}
-Ocorrência registrada por {nome_operador} em {data_ocorrencia}.
-Setor: {setor_area} | Tipo: {tipo_ocorrencia} | Impacto: {nivel_impacto} | Recorrente: {problema_recorrente}
-Detalhamento técnico: {detalhamento_tecnico}
-Descrição: {descricao}
+{"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
 
-{"Analise o diagrama técnico da máquina anexado e " if diagrama_path else ""}Gere um diagnóstico técnico estruturado em 4 seções claras, separadas por linha em branco:
+**1. Causa provável**
+Hipótese principal em 3-5 linhas. Cite os sintomas específicos do detalhamento que sustentam o diagnóstico (pressão, temperatura, ruídos, histórico de manutenção). Identifique o componente primário suspeito.
 
-1. **Causa provável**
-2. **Componentes a verificar**{" (referencie cotas do diagrama quando relevante)" if diagrama_path else ""}
-3. **Procedimento de inspeção passo a passo**
-4. **Quando escalar para o fabricante**
+**2. Componentes a verificar**
+Liste 4-7 componentes em ordem de prioridade. Para cada um, escreva uma linha: "- Nome técnico: justificativa".
 
-Use linguagem técnica objetiva, em português. Foque em ações práticas imediatas."""
+**3. Procedimento de inspeção**
+Lista numerada de 5-8 passos. OBRIGATÓRIO começar por isolamento de segurança (LOTO, despressurização, bloqueio elétrico). Inclua medições específicas (valores e tolerâncias quando aplicável).
+
+**4. Quando escalar para o fabricante**
+Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que indicam que a manutenção interna não é suficiente.
+
+Use linguagem técnica em português. Foque em ações práticas imediatas. Seja DETALHADO em cada seção."""
 
     resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
     logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
