@@ -5,18 +5,37 @@
 <div class="topbar">
   <div class="topbar-title">
     <i class="fas fa-check-circle" style="color:var(--success);"></i> {{ t.diagnostico }}
+    {% if dados.id %}
+    <span style="font-size:13px; color:var(--text-muted); margin-left:10px;">#{{ dados.id }}</span>
+    {% endif %}
   </div>
   <div class="topbar-actions">
+    <a href="{{ url_for('historico') }}" class="btn btn-ghost btn-sm">
+      <i class="fas fa-history"></i> {{ t.historico }}
+    </a>
     <a href="{{ url_for('solicitacao') }}" class="btn btn-outline btn-sm">
       <i class="fas fa-headset"></i> {{ t.solicitar_suporte }}
     </a>
     <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
-      <i class="fas fa-plus"></i> {{ t.finalizar }}
+      <i class="fas fa-plus"></i> Nova ocorrência
     </a>
   </div>
 </div>
 
 <div class="page-body">
+
+  {% if ia_status == 'erro' %}
+  <div style="background:var(--danger-light); color:var(--danger); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
+    <i class="fas fa-exclamation-triangle"></i>
+    <span style="font-size:13px;">A IA falhou ao gerar o diagnóstico — exibindo análise genérica de fallback. Verifique sua chave Gemini nos logs.</span>
+  </div>
+  {% elif ia_status == 'fallback' %}
+  <div style="background:var(--warning-light); color:#9A6700; padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
+    <i class="fas fa-circle-info"></i>
+    <span style="font-size:13px;">IA offline — diagnóstico genérico aplicado. Configure GEMINI_API_KEY no .env para análise personalizada.</span>
+  </div>
+  {% endif %}
+
   <div class="grid-2" style="align-items:start;">
 
     <!-- Coluna 1 — Dados + Solução -->
@@ -37,61 +56,79 @@
         <div class="card-body">
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Operador</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.nome_operador }}</div>
+              <div class="label-mini">Operador</div>
+              <div class="value-mini">{{ dados.nome_operador }}</div>
             </div>
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Data</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.data_ocorrencia }}</div>
+              <div class="label-mini">Data</div>
+              <div class="value-mini">{{ dados.data_ocorrencia }}</div>
             </div>
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Setor</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.setor_area }}</div>
+              <div class="label-mini">Setor</div>
+              <div class="value-mini">{{ dados.setor_area }}</div>
             </div>
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Máquina</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.maquina_nome or '—' }}</div>
+              <div class="label-mini">Máquina</div>
+              <div class="value-mini">{{ dados.maquina_nome or '—' }}</div>
             </div>
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Tipo</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.tipo_ocorrencia }}</div>
+              <div class="label-mini">Tipo</div>
+              <div class="value-mini">{{ dados.tipo_ocorrencia }}</div>
             </div>
             <div>
-              <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;">Recorrente</div>
-              <div style="font-size:14px; font-weight:500;">{{ dados.problema_recorrente }}</div>
+              <div class="label-mini">Recorrente</div>
+              <div class="value-mini">{{ dados.problema_recorrente }}</div>
             </div>
           </div>
 
           <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
-            <div style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">Descrição</div>
-            <div style="font-size:14px; color:var(--text); line-height:1.6; background:var(--bg-page); padding:12px; border-radius:var(--radius-sm);">
-              {{ dados.descricao }}
-            </div>
+            <div class="label-mini" style="margin-bottom:6px;">Descrição</div>
+            <div style="font-size:14px; color:var(--text); line-height:1.6; background:var(--bg-page); padding:12px; border-radius:var(--radius-sm); white-space:pre-wrap;">{{ dados.descricao }}</div>
           </div>
+
+          {% if dados.detalhamento_tecnico %}
+          <div style="margin-top:12px;">
+            <div class="label-mini" style="margin-bottom:6px;">Detalhamento técnico</div>
+            <div style="font-size:13px; color:var(--text-muted); line-height:1.6; background:var(--bg-page); padding:12px; border-radius:var(--radius-sm); white-space:pre-wrap;">{{ dados.detalhamento_tecnico }}</div>
+          </div>
+          {% endif %}
         </div>
       </div>
 
       <!-- Solução IA -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title"><i class="fas fa-robot"></i> {{ t.solucao }}</span>
-          <span class="badge badge-primary">GPT-4o</span>
+          <span class="card-title">
+            <i class="fas fa-robot"></i> {{ t.solucao }}
+          </span>
+          {% if ia_status == 'ok' %}
+            <span class="badge badge-primary">✨ Gemini 2.0 Flash</span>
+          {% elif ia_status == 'fallback' %}
+            <span class="badge badge-warning">Fallback offline</span>
+          {% else %}
+            <span class="badge badge-danger">Erro IA</span>
+          {% endif %}
         </div>
-        <div class="card-body" style="padding:0;">
-          <div style="padding:20px; display:flex; flex-direction:column; gap:10px;">
-            {% for passo in resposta_ia.split('\n') if passo.strip() %}
-            <div style="
-              display:flex; align-items:flex-start; gap:12px;
-              padding:12px 16px;
-              background:var(--bg-page);
-              border-radius:var(--radius-sm);
-              border-left:3px solid var(--primary);
-            ">
-              <i class="fas fa-check-circle" style="color:var(--success); margin-top:2px; flex-shrink:0;"></i>
-              <span style="font-size:14px; line-height:1.6; color:var(--text);">{{ passo }}</span>
-            </div>
-            {% endfor %}
+        <div class="card-body">
+          {% if resposta_ia %}
+          <div id="iaContent" style="
+            font-size:14px; line-height:1.75; color:var(--text);
+            background:var(--bg-page); padding:18px 20px;
+            border-radius:var(--radius-sm); border-left:3px solid var(--primary);
+            white-space:pre-wrap; word-wrap:break-word;
+          ">{{ resposta_ia }}</div>
+
+          <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+            <button class="btn btn-ghost btn-sm" onclick="copiarIA()" type="button">
+              <i class="fas fa-copy"></i> Copiar diagnóstico
+            </button>
           </div>
+          {% else %}
+          <div style="text-align:center; padding:36px 16px; color:var(--text-muted);">
+            <i class="fas fa-robot" style="font-size:32px; opacity:.3; display:block; margin-bottom:12px;"></i>
+            <p style="font-size:13px;">A IA não retornou conteúdo.</p>
+          </div>
+          {% endif %}
         </div>
       </div>
 
@@ -115,7 +152,7 @@
         <div style="padding:12px 16px; background:var(--bg-page); border-top:1px solid var(--border);">
           <p style="font-size:12px; color:var(--text-muted); margin:0;">
             <i class="fas fa-info-circle" style="color:var(--primary);"></i>
-            A IA analisou este diagrama para gerar o diagnóstico acima.
+            A IA analisou este diagrama para gerar o diagnóstico.
           </p>
         </div>
       </div>
@@ -137,4 +174,48 @@
 
   </div>
 </div>
+
+<style>
+  .label-mini {
+    font-size:11px; color:var(--text-muted); font-weight:600;
+    text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;
+  }
+  .value-mini { font-size:14px; font-weight:500; }
+  /* Estilo para markdown básico inline (negrito) renderizado por JS */
+  #iaContent strong { color:var(--primary); font-weight:700; }
+  #iaContent .ia-step-num {
+    display:inline-block; min-width:22px; height:22px;
+    background:var(--primary); color:#fff; border-radius:50%;
+    text-align:center; line-height:22px; font-size:12px; font-weight:700;
+    margin-right:6px;
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Renderiza markdown muito leve no diagnóstico: **negrito** e numeração 1./2./3./4.
+  (function () {
+    const el = document.getElementById('iaContent');
+    if (!el) return;
+    let html = el.innerHTML;
+    // **bold**
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // numeração no início da linha (1. / 2. / 3. ...) -> badge circular
+    html = html.replace(/(^|\n)\s*(\d{1,2})\.\s+/g,
+      '$1<span class="ia-step-num">$2</span>');
+    el.innerHTML = html;
+  })();
+
+  function copiarIA() {
+    const el = document.getElementById('iaContent');
+    if (!el) return;
+    navigator.clipboard.writeText(el.innerText).then(() => {
+      const btn = event.currentTarget;
+      const txt = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+      setTimeout(() => { btn.innerHTML = txt; }, 1800);
+    });
+  }
+</script>
 {% endblock %}

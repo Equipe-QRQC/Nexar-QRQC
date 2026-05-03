@@ -1,6 +1,7 @@
 Flask==3.1.0
 Flask-Login==0.6.3
-openai==1.76.0
+google-genai>=1.0.0
+Pillow>=10.0.0
 python-dotenv==1.1.0
 twilio==9.5.2
 werkzeug==3.1.3

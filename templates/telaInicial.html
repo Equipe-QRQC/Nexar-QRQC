@@ -1,70 +1,219 @@
 {% extends 'menu.html' %}
-{% block title %}Nova Ocorrência — Nexar QRQC{% endblock %}
+{% block title %}Dashboard — Nexar QRQC{% endblock %}
 
 {% block content %}
 <div class="topbar">
   <div class="topbar-title">
-    <i class="fas fa-plus-circle"></i> {{ t.nova_ocorrencia }}
+    <i class="fas fa-chart-line"></i> Dashboard
   </div>
-</div>
-
-<div class="page-body" style="display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 60px);">
-  <div style="text-align:center; max-width: 480px; width:100%;">
-
-    <div style="margin-bottom: 32px;">
-      <div style="
-        width: 80px; height: 80px;
-        background: var(--primary-light);
-        border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        margin: 0 auto 16px;
-      ">
-        <i class="fas fa-industry" style="font-size:32px; color: var(--primary);"></i>
-      </div>
-      <h2 style="font-size:22px; font-weight:700; color:var(--text); margin-bottom:8px;">
-        Registrar Ocorrência
-      </h2>
-      <p style="color:var(--text-muted); font-size:14px;">
-        Selecione a máquina, descreva o problema e receba o diagnóstico técnico gerado pela IA em segundos.
-      </p>
-    </div>
-
-    <a href="{{ url_for('CadastroOcorrencia') }}" style="
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--primary);
-      color: #fff;
-      font-size: 16px;
-      font-weight: 600;
-      padding: 16px 40px;
-      border-radius: var(--radius);
-      text-decoration: none;
-      box-shadow: 0 4px 14px rgba(14,165,233,.4);
-      transition: var(--transition);
-    " onmouseover="this.style.background='var(--primary-dark)'"
-       onmouseout="this.style.background='var(--primary)'">
-      <i class="fas fa-plus"></i> Nova Ocorrência
+  <div class="topbar-actions">
+    <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
+      <i class="fas fa-plus"></i> {{ t.nova_ocorrencia }}
     </a>
+  </div>
+</div>
 
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:40px;">
-      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
-        <i class="fas fa-robot" style="color:var(--primary); font-size:20px; margin-bottom:8px; display:block;"></i>
-        <div style="font-size:12px; font-weight:600; color:var(--text);">GPT-4o Vision</div>
-        <div style="font-size:11px; color:var(--text-muted);">Diagnóstico visual</div>
+<div class="page-body">
+
+  <!-- ── Saudação ─────────────────────────────────────────────────────────── -->
+  <div style="margin-bottom:18px;">
+    <h2 style="font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px;">
+      Olá, {{ current_user.nome.split()[0] }} 👋
+    </h2>
+    <p style="color:var(--text-muted); font-size:13px;">
+      Aqui está o panorama atual das ocorrências e máquinas.
+    </p>
+  </div>
+
+  <!-- ── KPIs ─────────────────────────────────────────────────────────────── -->
+  <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:22px;">
+
+    {% set cards = [
+      ('Total',      kpis.total,        'fa-clipboard-list', 'var(--primary)'),
+      ('Abertas',    kpis.abertas,      'fa-folder-open',    'var(--warning)'),
+      ('Resolvidas', kpis.resolvidas,   'fa-check-circle',   'var(--success)'),
+      ('Alto Imp.',  kpis.alto_impacto, 'fa-exclamation-triangle','var(--danger)'),
+      ('Máquinas',   kpis.maquinas,     'fa-cogs',           '#8B5CF6'),
+    ] %}
+
+    {% for label, valor, icon, cor in cards %}
+    <div class="card" style="padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+        <span style="font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px;">{{ label }}</span>
+        <div style="
+          width:32px; height:32px; border-radius:8px;
+          background:{{ cor }}15;
+          display:flex; align-items:center; justify-content:center;
+        ">
+          <i class="fas {{ icon }}" style="color:{{ cor }}; font-size:14px;"></i>
+        </div>
       </div>
-      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
-        <i class="fas fa-cogs" style="color:var(--success); font-size:20px; margin-bottom:8px; display:block;"></i>
-        <div style="font-size:12px; font-weight:600; color:var(--text);">Por Máquina</div>
-        <div style="font-size:11px; color:var(--text-muted);">Diagnóstico preciso</div>
+      <div style="font-size:26px; font-weight:700; color:var(--text); line-height:1;">{{ valor }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── Distribuição por tipo + ações rápidas ────────────────────────────── -->
+  <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:16px; margin-bottom:22px;">
+
+    <!-- Distribuição -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="fas fa-chart-bar"></i> Distribuição por tipo</span>
       </div>
-      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; text-align:center;">
-        <i class="fas fa-bolt" style="color:var(--warning); font-size:20px; margin-bottom:8px; display:block;"></i>
-        <div style="font-size:12px; font-weight:600; color:var(--text);">Instantâneo</div>
-        <div style="font-size:11px; color:var(--text-muted);">Resultado em segundos</div>
+      <div class="card-body">
+        {% if por_tipo %}
+          {% set max_n = por_tipo[0].n if por_tipo[0].n > 0 else 1 %}
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            {% for t_row in por_tipo %}
+            {% set pct = (t_row.n * 100 // max_n) %}
+            {% set cor = 'var(--primary)' if t_row.tipo == 'Qualidade'
+                          else 'var(--danger)'  if t_row.tipo == 'Segurança'
+                          else 'var(--warning)' if t_row.tipo == 'Produção'
+                          else 'var(--success)' if t_row.tipo == 'Manutenção'
+                          else 'var(--text-light)' %}
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                <span style="font-weight:600; color:var(--text);">{{ t_row.tipo }}</span>
+                <span style="color:var(--text-muted);">{{ t_row.n }} ocorrência(s)</span>
+              </div>
+              <div style="height:8px; background:var(--bg-page); border-radius:4px; overflow:hidden;">
+                <div style="height:100%; width:{{ pct }}%; background:{{ cor }}; border-radius:4px; transition:width .4s;"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div style="text-align:center; padding:32px 0; color:var(--text-muted);">
+            <i class="fas fa-chart-bar" style="font-size:28px; opacity:.3; display:block; margin-bottom:8px;"></i>
+            <p style="font-size:13px;">Nenhuma ocorrência registrada ainda.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Ações rápidas -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="fas fa-bolt"></i> Ações rápidas</span>
+      </div>
+      <div class="card-body">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <a href="{{ url_for('CadastroOcorrencia') }}" class="quick-action" style="background:var(--primary-light); color:var(--primary);">
+            <i class="fas fa-plus-circle"></i>
+            <div>
+              <strong>Nova ocorrência</strong>
+              <small>Registrar problema</small>
+            </div>
+          </a>
+          <a href="{{ url_for('historico') }}" class="quick-action" style="background:#F1F5F9; color:var(--text);">
+            <i class="fas fa-history"></i>
+            <div>
+              <strong>Histórico</strong>
+              <small>Ver registros</small>
+            </div>
+          </a>
+          <a href="{{ url_for('maquinas') }}" class="quick-action" style="background:#FAF5FF; color:#8B5CF6;">
+            <i class="fas fa-cogs"></i>
+            <div>
+              <strong>Máquinas</strong>
+              <small>Gerenciar ativos</small>
+            </div>
+          </a>
+          <a href="{{ url_for('solicitacao') }}" class="quick-action" style="background:#FEF3C7; color:#9A6700;">
+            <i class="fas fa-headset"></i>
+            <div>
+              <strong>Suporte</strong>
+              <small>Solicitar ajuda</small>
+            </div>
+          </a>
+        </div>
       </div>
     </div>
 
   </div>
+
+  <!-- ── Últimas ocorrências ──────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fas fa-clock"></i> Últimas ocorrências</span>
+      <a href="{{ url_for('historico') }}" class="btn btn-ghost btn-sm">
+        Ver todas <i class="fas fa-arrow-right"></i>
+      </a>
+    </div>
+    <div class="card-body" style="padding:0;">
+      {% if ultimas %}
+      <table class="table" style="margin:0;">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Máquina</th>
+            <th>Operador</th>
+            <th>Tipo</th>
+            <th>Impacto</th>
+            <th>IA</th>
+            <th>Status</th>
+            <th>Quando</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in ultimas %}
+          <tr>
+            <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
+            <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
+            <td style="font-size:13px;">{{ o.nome_operador }}</td>
+            <td>
+              {% if o.tipo_ocorrencia == 'Qualidade' %}<span class="badge badge-primary">{{ o.tipo_ocorrencia }}</span>
+              {% elif o.tipo_ocorrencia == 'Segurança' %}<span class="badge badge-danger">{{ o.tipo_ocorrencia }}</span>
+              {% elif o.tipo_ocorrencia == 'Produção' %}<span class="badge badge-warning">{{ o.tipo_ocorrencia }}</span>
+              {% else %}<span class="badge badge-info">{{ o.tipo_ocorrencia or '—' }}</span>{% endif %}
+            </td>
+            <td>
+              {% if o.nivel_impacto == 'Alto' %}<span class="badge badge-danger">🔴 Alto</span>
+              {% elif o.nivel_impacto == 'Médio' %}<span class="badge badge-warning">🟡 Médio</span>
+              {% else %}<span class="badge badge-success">🟢 Baixo</span>{% endif %}
+            </td>
+            <td>
+              {% if o.ia_status == 'ok' %}<span class="badge badge-success">✓</span>
+              {% elif o.ia_status == 'fallback' %}<span class="badge badge-warning">offline</span>
+              {% else %}<span class="badge badge-danger">erro</span>{% endif %}
+            </td>
+            <td>
+              {% if o.status in ('Resolvida','Fechada') %}<span class="badge badge-success">{{ o.status }}</span>
+              {% elif o.status == 'Em andamento' %}<span class="badge badge-warning">{{ o.status }}</span>
+              {% else %}<span class="badge badge-info">{{ o.status or 'Aberta' }}</span>{% endif %}
+            </td>
+            <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+              {{ o.data_registro[:16] if o.data_registro else '—' }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center; padding:48px 24px; color:var(--text-muted);">
+        <i class="fas fa-inbox" style="font-size:36px; opacity:.3; display:block; margin-bottom:12px;"></i>
+        <p style="font-size:14px; margin-bottom:14px;">Nenhuma ocorrência registrada ainda.</p>
+        <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
+          <i class="fas fa-plus"></i> Registrar a primeira
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
 </div>
+
+<style>
+  .quick-action {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px; border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition: var(--transition);
+  }
+  .quick-action:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .quick-action i { font-size: 20px; }
+  .quick-action strong { display:block; font-size: 13px; font-weight: 600; }
+  .quick-action small { display:block; font-size: 11px; opacity: .7; margin-top:1px; }
+</style>
 {% endblock %}

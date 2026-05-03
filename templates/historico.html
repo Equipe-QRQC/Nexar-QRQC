@@ -121,14 +121,14 @@
             <td>
               <button class="btn btn-ghost btn-icon btn-abrir-modal"
                       data-id="{{ o.id }}"
-                      data-maquina="{{ o.maquina_nome or '—' }}"
-                      data-operador="{{ o.nome_operador }}"
-                      data-tipo="{{ o.tipo_ocorrencia }}"
-                      data-impacto="{{ o.nivel_impacto }}"
-                      data-data="{{ o.data_ocorrencia }}"
-                      data-descricao="{{ o.descricao | replace('"', '&quot;') }}"
-                      data-resposta="{{ o.resposta_ia | replace('"', '&quot;') }}"
-                      data-diagrama="{{ o.diagrama_url or '' }}"
+                      data-maquina="{{ (o.maquina_nome or '—') | e }}"
+                      data-operador="{{ o.nome_operador | e }}"
+                      data-tipo="{{ o.tipo_ocorrencia | e }}"
+                      data-impacto="{{ o.nivel_impacto | e }}"
+                      data-data="{{ o.data_ocorrencia | e }}"
+                      data-descricao="{{ (o.descricao or '') | e }}"
+                      data-resposta="{{ (o.resposta_ia or '') | e }}"
+                      data-diagrama="{{ (o.diagrama_url or '') | e }}"
                       title="Ver detalhes">
                 <i class="fas fa-eye" style="color:var(--primary);"></i>
               </button>
@@ -203,8 +203,9 @@
         </div>
         <div id="modalResposta" style="
           background:var(--bg-page); padding:14px; border-radius:var(--radius-sm);
-          font-size:13px; line-height:1.7; max-height:280px; overflow-y:auto;
+          font-size:13px; line-height:1.7; max-height:320px; overflow-y:auto;
           border-left:3px solid var(--primary);
+          white-space:pre-wrap; word-wrap:break-word;
         "></div>
       </div>
 
@@ -248,8 +249,16 @@
       document.getElementById('modalMaquina').textContent = this.dataset.maquina;
       document.getElementById('modalOperador').textContent= this.dataset.operador;
       document.getElementById('modalData').textContent    = this.dataset.data;
-      document.getElementById('modalDescricao').textContent = this.dataset.descricao;
-      document.getElementById('modalResposta').textContent  = this.dataset.resposta;
+      document.getElementById('modalDescricao').textContent = this.dataset.descricao || '—';
+      // textContent preserva newlines + white-space:pre-wrap renderiza-os
+      const respostaRaw = this.dataset.resposta || 'Sem diagnóstico registrado.';
+      const target = document.getElementById('modalResposta');
+      target.textContent = respostaRaw;
+      // Realça **bold** e numeração 1./2./3.
+      target.innerHTML = target.innerHTML
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--primary);">$1</strong>')
+        .replace(/(^|\n)\s*(\d{1,2})\.\s+/g,
+          '$1<span style="display:inline-block;min-width:22px;height:22px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:6px;">$2</span>');
 
       const diagrama = this.dataset.diagrama;
       const wrap = document.getElementById('modalDiagramaWrap');

@@ -1,60 +1,169 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang or 'pt' }}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>inicial nexar</title>
-    <link rel="stylesheet" href="/static/css/inicialtotem.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poltawski+Nowy:wght@300;400;700&display=swap" rel="stylesheet">
-
-
-
- <!-- Bootstrap 5.3 CSS -->
- <link
- href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
- rel="stylesheet"
-/>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexar QRQC — Bem-vindo</title>
+  <link rel="stylesheet" href="/static/css/inicialtotem.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(140deg, #0A1628 0%, #112240 60%, #0D3358 100%);
+      color: #fff;
+      overflow: hidden;
+      cursor: pointer;
+      user-select: none;
+    }
+    body::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(circle at 20% 25%, rgba(14,165,233,.18) 0%, transparent 55%),
+        radial-gradient(circle at 80% 75%, rgba(14,165,233,.12) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .totem {
+      position: relative;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      padding: 32px;
+      text-align: center;
+    }
+    .totem-logo {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 8px;
+    }
+    .totem-logo img { width: 64px; filter: drop-shadow(0 0 16px rgba(14,165,233,.6)); }
+    .totem-logo h1 {
+      font-size: 28px; font-weight: 700; letter-spacing: 1px;
+    }
+    .totem-logo p {
+      font-size: 12px; color: rgba(255,255,255,.5);
+      margin-top: 2px;
+    }
+    .totem h2 {
+      font-size: clamp(38px, 6vw, 64px);
+      font-weight: 700; line-height: 1.1;
+      margin-top: 16px;
+    }
+    .totem h2 b { color: #38BDF8; }
+    .totem .sub {
+      font-size: clamp(15px, 2vw, 18px);
+      color: rgba(255,255,255,.55);
+      max-width: 540px;
+    }
+    .totem .cta {
+      margin-top: 24px;
+      padding: 16px 36px;
+      border: 2px solid #38BDF8;
+      border-radius: 999px;
+      font-size: 15px; font-weight: 600;
+      color: #fff;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 10px;
+      transition: all .3s ease;
+    }
+    .totem .cta:hover { background: #38BDF8; color: #0A1628; }
+    .totem .pulse {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #38BDF8;
+      box-shadow: 0 0 0 0 #38BDF8;
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(56,189,248,.6); }
+      70%  { box-shadow: 0 0 0 18px rgba(56,189,248,0); }
+      100% { box-shadow: 0 0 0 0 rgba(56,189,248,0); }
+    }
+    .totem .features {
+      display: flex; gap: 24px; flex-wrap: wrap;
+      margin-top: 40px;
+      justify-content: center;
+    }
+    .feature {
+      display: flex; align-items: center; gap: 8px;
+      color: rgba(255,255,255,.4);
+      font-size: 13px;
+    }
+    .feature i { color: #38BDF8; }
+    .totem .footer-mini {
+      position: absolute;
+      bottom: 18px;
+      font-size: 11px;
+      color: rgba(255,255,255,.3);
+      letter-spacing: .5px;
+    }
+    .touch-effect {
+      position: absolute;
+      width: 100px; height: 100px;
+      border: 2px solid rgba(56,189,248,.6);
+      border-radius: 50%;
+      pointer-events: none;
+      animation: ripple .5s ease-out;
+    }
+    @keyframes ripple {
+      0%   { opacity: 1; transform: scale(.4); }
+      100% { opacity: 0; transform: scale(1.5); }
+    }
+  </style>
 </head>
+<body id="totem">
 
+  <div class="totem">
+    <div class="totem-logo">
+      <img src="/static/assets/img/nexar_logo.svg" alt="Nexar Logo" />
+      <div>
+        <h1>NEXAR</h1>
+        <p>Soluções Tecnológicas</p>
+      </div>
+    </div>
 
+    <h2>Sistema <b>QRQC</b></h2>
+    <p class="sub">
+      Gestão de ocorrências industriais com diagnóstico técnico em tempo real
+      através de Inteligência Artificial.
+    </p>
 
+    <div class="cta">
+      <span class="pulse"></span>
+      Toque para iniciar
+    </div>
 
-<div class="p-4 d-flex align-items-center logo-container">
-  <img src="/static/assets/img/nexar_logo.svg" alt="Nexar Logo" class="logo me-2" />
-  <div class="text-white">
-      <h4 class="fw-bold mb-0">NEXAR</h4>
-      <p class="small hide-on-collapse">Soluções Tecnológicas</p>
+    <div class="features">
+      <div class="feature"><i class="fas fa-robot"></i> Diagnóstico Gemini 2.0</div>
+      <div class="feature"><i class="fas fa-cogs"></i> Histórico por máquina</div>
+      <div class="feature"><i class="fas fa-shield-alt"></i> ISO 9001</div>
+    </div>
+
+    <div class="footer-mini">© 2026 Nexar — pressione qualquer ponto da tela</div>
   </div>
-</div>
 
-<h1 class="titulo">Seja Bem-vindo!</h1>
-<h1 class="subtitulo">Toque na <b>tela</b> para <b>iniciar</b>.</h1>
+  <script>
+    document.addEventListener("click", function (event) {
+      const fx = document.createElement("div");
+      fx.className = "touch-effect";
+      document.body.appendChild(fx);
+      fx.style.left = (event.clientX - 50) + "px";
+      fx.style.top  = (event.clientY - 50) + "px";
+      setTimeout(() => fx.remove(), 500);
+      setTimeout(() => { window.location.href = "/login"; }, 320);
+    });
 
-<script>
-  document.addEventListener("click", function(event) {
-      // Criando o efeito de toque
-      let touchEffect = document.createElement("div");
-      touchEffect.classList.add("touch-effect");
-      document.body.appendChild(touchEffect);
-
-      // Posicionando no ponto do clique
-      touchEffect.style.left = `${event.clientX - 50}px`;
-      touchEffect.style.top = `${event.clientY - 50}px`;
-
-      // Removendo o efeito após a animação
-      setTimeout(() => {
-          touchEffect.remove();
-      }, 500);
-
-      
-      setTimeout(() => {
-          window.location.href = "/telaInicial";
-      }, 300);
-  });
-</script>
-
-
+    // Tecla Enter / Espaço também ativa
+    document.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        window.location.href = "/login";
+      }
+    });
+  </script>
 </body>
 </html>

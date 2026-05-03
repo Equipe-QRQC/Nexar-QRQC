@@ -1,9 +1,13 @@
 import os
-import base64
+import io
+import logging
 import sqlite3
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
+from datetime import datetime
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from openai import OpenAI
+from google import genai
+from google.genai import types as genai_types
+from PIL import Image
 from dotenv import load_dotenv
 from twilio.rest import Client
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,16 +15,70 @@ from werkzeug.utils import secure_filename
 
 load_dotenv()
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+)
+logger = logging.getLogger("nexar.qrqc")
+
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
+# Modelo: gemini-2.0-flash (free tier: 15 req/min, 1500 req/dia)
+# Obter chave: https://aistudio.google.com/apikey
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
 
-ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+# Cadeia de modelos: tenta na ordem. Se 429/quota em um, cai no próximo.
+# Pode forçar um único modelo definindo GEMINI_MODEL no .env.
+_DEFAULT_CHAIN = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+]
+_user_model = os.getenv("GEMINI_MODEL", "").strip()
+GEMINI_MODELS = [_user_model] if _user_model else _DEFAULT_CHAIN
+GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
+
+SYSTEM_INSTRUCTION = (
+    "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC). "
+    "Responde em português técnico, objetivo e prático. "
+    "Quando há diagrama anexado, referencia componentes e cotas observados. "
+    "Estruture diagnósticos em 4 seções com markdown: "
+    "**1. Causa provável**, **2. Componentes a verificar**, "
+    "**3. Procedimento de inspeção**, **4. Quando escalar**."
+)
+
+GEN_CONFIG = genai_types.GenerateContentConfig(
+    system_instruction=SYSTEM_INSTRUCTION,
+    temperature=0.4,
+    top_p=0.9,
+    max_output_tokens=1024,
+)
+
+gemini_client = None
+if GEMINI_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_KEY)
+        logger.info(f"Gemini inicializado — modelo {GEMINI_MODEL}")
+    except Exception as e:
+        logger.warning(f"Falha ao inicializar Gemini: {e}")
+else:
+    logger.warning("GEMINI_API_KEY não configurada — respostas da IA usarão fallback offline.")
+
+# ── Twilio ────────────────────────────────────────────────────────────────────
+ACCOUNT_SID            = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN             = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-TWILIO_DESTINATARIO = os.getenv("TWILIO_DESTINATARIO")
-twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+TWILIO_DESTINATARIO    = os.getenv("TWILIO_DESTINATARIO")
+twilio_client = None
+if ACCOUNT_SID and AUTH_TOKEN:
+    try:
+        twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
+    except Exception as e:
+        logger.warning(f"Twilio não inicializado: {e}")
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -94,6 +152,8 @@ TRANSLATIONS = {
 }
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -102,6 +162,21 @@ def get_db():
     conn = sqlite3.connect("qrqc.db")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def normalizar_data(raw: str) -> str:
+    """
+    Converte 'datetime-local' (`2024-01-15T10:30`) ou ISO em string normalizada
+    'YYYY-MM-DD HH:MM'. Se vazio/inválido, devolve agora.
+    """
+    if not raw:
+        return datetime.now().strftime("%Y-%m-%d %H:%M")
+    raw = raw.strip().replace("T", " ")
+    try:
+        dt = datetime.fromisoformat(raw)
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return raw[:16]  # corta no minuto se o parse falhar
 
 
 def init_db():
@@ -147,12 +222,37 @@ def init_db():
             problema_recorrente TEXT,
             detalhamento_tecnico TEXT,
             resposta_ia TEXT,
+            ia_status TEXT DEFAULT 'ok',
             diagrama_url TEXT,
             status TEXT DEFAULT 'Aberta',
             data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (maquina_id) REFERENCES maquinas(id)
         );
     """)
+    # Migração leve: adiciona colunas que possam estar ausentes em DBs antigos.
+    cols = [r["name"] for r in c.execute("PRAGMA table_info(ocorrencias)").fetchall()]
+    migracoes = {
+        "ia_status":           "ALTER TABLE ocorrencias ADD COLUMN ia_status TEXT DEFAULT 'ok'",
+        "status":              "ALTER TABLE ocorrencias ADD COLUMN status TEXT DEFAULT 'Aberta'",
+        "diagrama_url":        "ALTER TABLE ocorrencias ADD COLUMN diagrama_url TEXT",
+        "resposta_ia":         "ALTER TABLE ocorrencias ADD COLUMN resposta_ia TEXT",
+        "detalhamento_tecnico":"ALTER TABLE ocorrencias ADD COLUMN detalhamento_tecnico TEXT",
+        "problema_recorrente": "ALTER TABLE ocorrencias ADD COLUMN problema_recorrente TEXT",
+        "nivel_impacto":       "ALTER TABLE ocorrencias ADD COLUMN nivel_impacto TEXT",
+        "tipo_ocorrencia":     "ALTER TABLE ocorrencias ADD COLUMN tipo_ocorrencia TEXT",
+        "setor_area":          "ALTER TABLE ocorrencias ADD COLUMN setor_area TEXT",
+        "nome_operador":       "ALTER TABLE ocorrencias ADD COLUMN nome_operador TEXT",
+        "data_ocorrencia":     "ALTER TABLE ocorrencias ADD COLUMN data_ocorrencia TEXT",
+        "maquina_id":          "ALTER TABLE ocorrencias ADD COLUMN maquina_id INTEGER",
+    }
+    for col, sql in migracoes.items():
+        if col not in cols:
+            try:
+                c.execute(sql)
+                logger.info(f"Migração: coluna {col} adicionada em ocorrencias.")
+            except Exception as e:
+                logger.warning(f"Migração de {col} falhou: {e}")
+
     admin = c.execute("SELECT id FROM usuarios WHERE email = 'admin@nexar.com'").fetchone()
     if not admin:
         c.execute(
@@ -204,7 +304,7 @@ def login():
         conn.close()
         if u and check_password_hash(u["senha_hash"], senha):
             login_user(User(u["id"], u["nome"], u["email"], u["perfil"]))
-            return redirect(url_for("telaInicial"))
+            return redirect(url_for("dashboard"))
         lang = session.get("lang", "pt")
         erro = {"pt": "E-mail ou senha incorretos.", "en": "Invalid email or password.", "es": "Correo o contraseña incorrectos."}.get(lang)
         return render_template("login.html", erro=erro)
@@ -222,67 +322,204 @@ def logout():
 def set_lang(lang):
     if lang in ["pt", "en", "es"]:
         session["lang"] = lang
-    return redirect(request.referrer or url_for("telaInicial"))
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 # ── AI Chat ───────────────────────────────────────────────────────────────────
 
+def _historico_para_gemini(historico: list[dict]) -> list[dict]:
+    """
+    Converte histórico estilo OpenAI ({role:'user'|'assistant', content:str})
+    para o formato do Gemini ({role:'user'|'model', parts:[{text}]}).
+    """
+    out = []
+    for m in historico or []:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if not content:
+            continue
+        gemini_role = "model" if role in ("assistant", "model") else "user"
+        out.append({"role": gemini_role, "parts": [{"text": content}]})
+    return out
+
+
 @app.route("/chat", methods=["POST"])
 @login_required
 def chat():
-    data = request.get_json()
-    mensagem = data.get("mensagem", "")
-    historico = data.get("historico", [])
-    messages = [
-        {"role": "system", "content": (
-            "Você é um assistente técnico industrial da Nexar, especializado em manutenção, "
-            "qualidade e resolução de ocorrências industriais (QRQC). "
-            "Responda de forma objetiva, técnica e prática em português."
-        )}
-    ] + historico + [{"role": "user", "content": mensagem}]
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o", messages=messages, max_tokens=600
+    if not gemini_client:
+        return jsonify({"resposta": "⚠️ IA offline — configure GEMINI_API_KEY no .env."}), 503
+    data = request.get_json(silent=True) or {}
+    mensagem = (data.get("mensagem") or "").strip()
+    historico = data.get("historico") or []
+    if not mensagem:
+        return jsonify({"resposta": "Por favor, escreva uma pergunta."}), 400
+
+    historico_gemini = _historico_para_gemini(historico)
+    ultimo_erro: Exception | None = None
+    for modelo in GEMINI_MODELS:
+        try:
+            chat_session = gemini_client.chats.create(
+                model=modelo,
+                history=historico_gemini,
+                config=GEN_CONFIG,
+            )
+            response = chat_session.send_message(mensagem)
+            texto = (response.text or "").strip()
+            if texto:
+                return jsonify({"resposta": texto})
+        except Exception as e:
+            ultimo_erro = e
+            if _is_quota_error(e):
+                logger.warning(f"[chat/{modelo}] cota esgotada — tentando próximo modelo")
+                continue
+            logger.exception(f"[chat/{modelo}] erro")
+            break
+
+    if ultimo_erro and _is_quota_error(ultimo_erro):
+        msg = ("⚠️ Cota da IA esgotada em todos os modelos disponíveis. "
+               "Aguarde alguns minutos ou configure uma nova chave em outra conta Google.")
+        return jsonify({"resposta": msg}), 429
+    return jsonify({"resposta": f"Erro ao consultar a IA: {ultimo_erro}"}), 500
+
+
+# ── AI Response (com fallback robusto) ────────────────────────────────────────
+
+def _fallback_response(prompt: str) -> str:
+    """Resposta gerada localmente quando a IA está indisponível."""
+    return (
+        "⚠️ IA temporariamente indisponível — diagnóstico genérico:\n\n"
+        "1. **Causa provável:** verificar histórico recente da máquina, possíveis falhas mecânicas, "
+        "elétricas ou de processo.\n"
+        "2. **Componentes a verificar:** sensores principais, atuadores, sistema de refrigeração e "
+        "lubrificação, conexões elétricas.\n"
+        "3. **Procedimento de inspeção:**\n"
+        "   • Desligar a máquina e bloquear/sinalizar (LOTO).\n"
+        "   • Inspeção visual de vazamentos, ruídos anormais e sobreaquecimento.\n"
+        "   • Verificar leituras dos sensores e parâmetros do CLP.\n"
+        "   • Conferir últimos planos de manutenção preventiva.\n"
+        "4. **Quando escalar:** caso o problema persista após inspeção inicial ou represente risco "
+        "à segurança, escalar imediatamente para o engenheiro de manutenção/fabricante.\n\n"
+        "Por favor, configure GEMINI_API_KEY no arquivo .env para diagnósticos personalizados."
+    )
+
+
+def _is_quota_error(err: Exception) -> bool:
+    """Detecta se é erro de cota/rate limit (429 RESOURCE_EXHAUSTED)."""
+    s = str(err)
+    return "429" in s or "RESOURCE_EXHAUSTED" in s or "quota" in s.lower() or "rate limit" in s.lower()
+
+
+def get_ai_response(prompt: str, imagem_path: str | None = None) -> tuple[str, str]:
+    """
+    Retorna (resposta, status). status ∈ {'ok', 'fallback', 'erro'}.
+    Tenta a cadeia de modelos Gemini em ordem; se um der 429, vai pro próximo.
+    """
+    if not gemini_client:
+        return (_fallback_response(prompt), "fallback")
+
+    # Monta conteúdo: texto + imagem (se houver)
+    partes: list = [prompt]
+    if imagem_path and os.path.exists(imagem_path):
+        ext = imagem_path.rsplit(".", 1)[-1].lower()
+        if ext in ("png", "jpg", "jpeg"):
+            try:
+                img = Image.open(imagem_path)
+                if img.mode in ("RGBA", "P"):
+                    img = img.convert("RGB")
+                partes.append(img)
+            except Exception as e:
+                logger.warning(f"Não foi possível abrir imagem {imagem_path}: {e}")
+
+    ultimo_erro: Exception | None = None
+    for modelo in GEMINI_MODELS:
+        try:
+            response = gemini_client.models.generate_content(
+                model=modelo,
+                contents=partes,
+                config=GEN_CONFIG,
+            )
+            texto = (response.text or "").strip()
+            if not texto:
+                logger.warning(f"[{modelo}] resposta vazia, tentando próximo modelo")
+                continue
+            if modelo != GEMINI_MODELS[0]:
+                logger.info(f"[ia] sucesso no modelo de fallback: {modelo}")
+            return (texto, "ok")
+        except Exception as e:
+            ultimo_erro = e
+            if _is_quota_error(e):
+                logger.warning(f"[{modelo}] cota esgotada — tentando próximo modelo")
+                continue
+            # Erro não relacionado a cota: para o loop e reporta
+            logger.exception(f"[{modelo}] erro não-cota")
+            break
+
+    # Esgotou todos os modelos
+    if ultimo_erro and _is_quota_error(ultimo_erro):
+        msg = (
+            "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
+            "**Soluções possíveis:**\n"
+            "1. Aguarde alguns minutos e tente novamente\n"
+            "2. Crie uma **nova chave em outra conta Google**: https://aistudio.google.com/apikey\n"
+            "3. Use um projeto Google Cloud que **nunca teve billing ativado** (free tier completo)\n"
+            "4. Considere migrar para outro provedor (Claude, Groq, DeepSeek)\n\n"
         )
-        return jsonify({"resposta": response.choices[0].message.content.strip()})
-    except Exception as e:
-        return jsonify({"resposta": f"Erro: {e}"}), 500
-
-
-# ── AI Response ───────────────────────────────────────────────────────────────
-
-def get_ai_response(prompt, imagem_path=None):
-    try:
-        content = [{"type": "text", "text": prompt}]
-        if imagem_path and os.path.exists(imagem_path):
-            with open(imagem_path, "rb") as f:
-                img_b64 = base64.b64encode(f.read()).decode("utf-8")
-            ext = imagem_path.rsplit(".", 1)[-1].lower()
-            mime = "image/png" if ext == "png" else "image/jpeg"
-            content.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime};base64,{img_b64}"}
-            })
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": content}]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"[Erro na IA: {e}]"
+    else:
+        msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
+    return (msg + _fallback_response(prompt), "erro")
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
+    """
+    Tela inicial pública (modo totem). Se o usuário já estiver logado,
+    vai direto para o dashboard.
+    """
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
     return render_template("inicialtotem.html")
 
 
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    """Dashboard com KPIs, gráfico de tipo e últimas ocorrências."""
+    conn = get_db()
+    total       = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias").fetchone()["n"]
+    abertas     = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status = 'Aberta'").fetchone()["n"]
+    resolvidas  = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status IN ('Resolvida','Fechada')").fetchone()["n"]
+    alto_imp    = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE nivel_impacto = 'Alto' AND status = 'Aberta'").fetchone()["n"]
+    total_maq   = conn.execute("SELECT COUNT(*) AS n FROM maquinas").fetchone()["n"]
+
+    por_tipo = conn.execute("""
+        SELECT COALESCE(tipo_ocorrencia,'Outros') AS tipo, COUNT(*) AS n
+        FROM ocorrencias GROUP BY tipo ORDER BY n DESC
+    """).fetchall()
+
+    ultimas = conn.execute("""
+        SELECT o.id, o.nome_operador, o.tipo_ocorrencia, o.nivel_impacto,
+               o.descricao, o.status, o.data_registro, o.ia_status,
+               m.nome AS maquina_nome
+        FROM ocorrencias o
+        LEFT JOIN maquinas m ON o.maquina_id = m.id
+        ORDER BY o.data_registro DESC LIMIT 5
+    """).fetchall()
+    conn.close()
+
+    kpis = {
+        "total": total, "abertas": abertas, "resolvidas": resolvidas,
+        "alto_impacto": alto_imp, "maquinas": total_maq,
+    }
+    return render_template("telaInicial.html", kpis=kpis, por_tipo=por_tipo, ultimas=ultimas)
+
+
+# Compat: rota antiga /telaInicial -> redireciona para o dashboard.
 @app.route("/telaInicial")
 @login_required
 def telaInicial():
-    return render_template("telaInicial.html")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/historico")
@@ -298,7 +535,7 @@ def historico():
         conn.close()
         return render_template("historico.html", ocorrencias=ocorrencias)
     except Exception as e:
-        print(f"Erro histórico: {e}")
+        logger.exception(f"Erro ao listar histórico: {e}")
         return render_template("historico.html", ocorrencias=[])
 
 
@@ -320,27 +557,45 @@ def CadastroOcorrencia():
 @app.route("/registrar_ocorrencia", methods=["POST"])
 @login_required
 def registrar_ocorrencia():
+    """
+    Registra uma ocorrência, gera diagnóstico via IA e renderiza solucao.html.
+    Em caso de erro, retorna JSON (se for fetch) ou re-renderiza o formulário
+    com mensagem clara — nunca silencia falhas.
+    """
+    # ── Validação dos campos ─────────────────────────────────────────────────
+    obrigatorios = ["nome_operador", "setor_area", "descricao",
+                    "tipo_ocorrencia", "nivel_impacto", "problema_recorrente",
+                    "detalhamento_tecnico"]
+    faltando = [c for c in obrigatorios if not (request.form.get(c) or "").strip()]
+    if faltando:
+        msg = f"Campos obrigatórios não preenchidos: {', '.join(faltando)}."
+        logger.warning(f"[ocorrencia] {msg}")
+        flash(msg, "danger")
+        return redirect(url_for("CadastroOcorrencia"))
+
+    maquina_id           = request.form.get("maquina_id") or None
+    data_ocorrencia      = normalizar_data(request.form.get("data_ocorrencia", ""))
+    nome_operador        = request.form.get("nome_operador", "").strip()
+    setor_area           = request.form.get("setor_area", "").strip()
+    descricao            = request.form.get("descricao", "").strip()
+    tipo_ocorrencia      = request.form.get("tipo_ocorrencia", "").strip()
+    nivel_impacto        = request.form.get("nivel_impacto", "").strip()
+    problema_recorrente  = request.form.get("problema_recorrente", "").strip()
+    detalhamento_tecnico = request.form.get("detalhamento_tecnico", "").strip()
+
+    # ── Contexto da máquina ──────────────────────────────────────────────────
+    maquina_info = ""
+    diagrama_path = None
+    maquina_nome = ""
+    diagrama_url = None
+
     try:
-        maquina_id = request.form.get("maquina_id") or None
-        data_ocorrencia = request.form.get("data_ocorrencia")
-        nome_operador = request.form.get("nome_operador")
-        setor_area = request.form.get("setor_area")
-        descricao = request.form.get("descricao")
-        tipo_ocorrencia = request.form.get("tipo_ocorrencia")
-        nivel_impacto = request.form.get("nivel_impacto")
-        problema_recorrente = request.form.get("problema_recorrente")
-        detalhamento_tecnico = request.form.get("detalhamento_tecnico")
-
-        maquina_info = ""
-        diagrama_path = None
-        maquina_nome = ""
-        diagrama_url = None
-
         if maquina_id:
             conn = get_db()
             maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
             diagrama = conn.execute(
-                "SELECT * FROM diagramas WHERE maquina_id = ? AND tipo != 'PDF' LIMIT 1", (maquina_id,)
+                "SELECT * FROM diagramas WHERE maquina_id = ? AND tipo != 'PDF' LIMIT 1",
+                (maquina_id,),
             ).fetchone()
             historico_maquina = conn.execute(
                 "SELECT descricao, resposta_ia FROM ocorrencias "
@@ -352,9 +607,9 @@ def registrar_ocorrencia():
             if maquina:
                 maquina_nome = maquina["nome"]
                 maquina_info = (
-                    f"Máquina: {maquina['nome']} | Modelo: {maquina['modelo']} | "
-                    f"Fabricante: {maquina['fabricante']} | Ano: {maquina['ano']}\n"
-                    f"Setor: {maquina['setor']}\n"
+                    f"Máquina: {maquina['nome']} | Modelo: {maquina['modelo'] or '—'} | "
+                    f"Fabricante: {maquina['fabricante'] or '—'} | Ano: {maquina['ano'] or '—'}\n"
+                    f"Setor: {maquina['setor'] or '—'}\n"
                 )
             if diagrama:
                 diagrama_path = diagrama["caminho"]
@@ -362,9 +617,14 @@ def registrar_ocorrencia():
             if historico_maquina:
                 maquina_info += "\nÚltimas ocorrências desta máquina:\n"
                 for h in historico_maquina:
-                    maquina_info += f"- {h['descricao'][:80]}\n"
+                    desc = (h["descricao"] or "")[:80]
+                    maquina_info += f"- {desc}\n"
+    except Exception:
+        logger.exception("Erro ao carregar contexto da máquina")
+        # Continua mesmo sem contexto da máquina — não é fatal.
 
-        prompt = f"""Você é um engenheiro sênior de manutenção industrial.
+    # ── Prompt para a IA ─────────────────────────────────────────────────────
+    prompt = f"""Você é um engenheiro sênior de manutenção industrial.
 
 {maquina_info}
 Ocorrência registrada por {nome_operador} em {data_ocorrencia}.
@@ -372,46 +632,59 @@ Setor: {setor_area} | Tipo: {tipo_ocorrencia} | Impacto: {nivel_impacto} | Recor
 Detalhamento técnico: {detalhamento_tecnico}
 Descrição: {descricao}
 
-{"Analise o diagrama técnico da máquina anexado e " if diagrama_path else ""}Gere um diagnóstico técnico com:
-1. Causa provável
-2. Componentes a verificar {"(referencie as cotas do diagrama)" if diagrama_path else ""}
-3. Procedimento de inspeção passo a passo
-4. Quando escalar para o fabricante
+{"Analise o diagrama técnico da máquina anexado e " if diagrama_path else ""}Gere um diagnóstico técnico estruturado em 4 seções claras, separadas por linha em branco:
 
-Seja objetivo. Foque em ações práticas imediatas."""
+1. **Causa provável**
+2. **Componentes a verificar**{" (referencie cotas do diagrama quando relevante)" if diagrama_path else ""}
+3. **Procedimento de inspeção passo a passo**
+4. **Quando escalar para o fabricante**
 
-        resposta_ia = get_ai_response(prompt, diagrama_path)
+Use linguagem técnica objetiva, em português. Foque em ações práticas imediatas."""
 
+    resposta_ia, ia_status = get_ai_response(prompt, diagrama_path)
+    logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}")
+
+    # ── Persistência ─────────────────────────────────────────────────────────
+    try:
         conn = get_db()
-        conn.execute(
+        cursor = conn.execute(
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, diagrama_url, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+                detalhamento_tecnico, resposta_ia, ia_status, diagrama_url, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
             (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
              tipo_ocorrencia, nivel_impacto, problema_recorrente,
-             detalhamento_tecnico, resposta_ia, diagrama_url),
+             detalhamento_tecnico, resposta_ia, ia_status, diagrama_url),
         )
+        ocorrencia_id = cursor.lastrowid
         conn.commit()
         conn.close()
-
-        dados = {
-            "maquina_nome": maquina_nome,
-            "data_ocorrencia": data_ocorrencia,
-            "nome_operador": nome_operador,
-            "setor_area": setor_area,
-            "descricao": descricao,
-            "tipo_ocorrencia": tipo_ocorrencia,
-            "nivel_impacto": nivel_impacto,
-            "problema_recorrente": problema_recorrente,
-            "detalhamento_tecnico": detalhamento_tecnico,
-        }
-        return render_template("solucao.html", dados=dados,
-                               resposta_ia=resposta_ia, diagrama_url=diagrama_url)
+        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={ia_status}")
     except Exception as e:
-        print(f"Erro ao registrar: {e}")
+        logger.exception("Falha ao persistir a ocorrência")
+        flash(f"Erro ao salvar a ocorrência: {e}", "danger")
         return redirect(url_for("CadastroOcorrencia"))
+
+    dados = {
+        "id": ocorrencia_id,
+        "maquina_nome": maquina_nome,
+        "data_ocorrencia": data_ocorrencia,
+        "nome_operador": nome_operador,
+        "setor_area": setor_area,
+        "descricao": descricao,
+        "tipo_ocorrencia": tipo_ocorrencia,
+        "nivel_impacto": nivel_impacto,
+        "problema_recorrente": problema_recorrente,
+        "detalhamento_tecnico": detalhamento_tecnico,
+    }
+    return render_template(
+        "solucao.html",
+        dados=dados,
+        resposta_ia=resposta_ia,
+        ia_status=ia_status,
+        diagrama_url=diagrama_url,
+    )
 
 
 # ── Máquinas ──────────────────────────────────────────────────────────────────
@@ -429,36 +702,45 @@ def maquinas():
 @login_required
 def cadastro_maquina():
     if request.method == "POST":
-        nome = request.form.get("nome")
-        modelo = request.form.get("modelo")
-        fabricante = request.form.get("fabricante")
-        ano = request.form.get("ano")
-        setor = request.form.get("setor")
-        descricao = request.form.get("descricao")
+        nome       = request.form.get("nome", "").strip()
+        modelo     = request.form.get("modelo", "").strip()
+        fabricante = request.form.get("fabricante", "").strip()
+        ano        = request.form.get("ano", "").strip()
+        setor      = request.form.get("setor", "").strip()
+        descricao  = request.form.get("descricao", "").strip()
 
-        conn = get_db()
-        cursor = conn.execute(
-            "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao) VALUES (?,?,?,?,?,?)",
-            (nome, modelo, fabricante, ano, setor, descricao),
-        )
-        maquina_id = cursor.lastrowid
-        conn.commit()
+        if not nome:
+            flash("O nome da máquina é obrigatório.", "danger")
+            return redirect(url_for("cadastro_maquina"))
 
-        arquivos = request.files.getlist("diagramas")
-        pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
-        os.makedirs(pasta, exist_ok=True)
-        for arquivo in arquivos:
-            if arquivo and allowed_file(arquivo.filename):
-                nome_arquivo = secure_filename(arquivo.filename)
-                caminho = os.path.join(pasta, nome_arquivo)
-                arquivo.save(caminho)
-                tipo = nome_arquivo.rsplit(".", 1)[-1].upper()
-                conn.execute(
-                    "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
-                    (maquina_id, nome_arquivo, caminho, tipo),
-                )
-        conn.commit()
-        conn.close()
+        try:
+            conn = get_db()
+            cursor = conn.execute(
+                "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao) VALUES (?,?,?,?,?,?)",
+                (nome, modelo, fabricante, ano, setor, descricao),
+            )
+            maquina_id = cursor.lastrowid
+            conn.commit()
+
+            arquivos = request.files.getlist("diagramas")
+            pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
+            os.makedirs(pasta, exist_ok=True)
+            for arquivo in arquivos:
+                if arquivo and allowed_file(arquivo.filename):
+                    nome_arquivo = secure_filename(arquivo.filename)
+                    caminho = os.path.join(pasta, nome_arquivo)
+                    arquivo.save(caminho)
+                    tipo = nome_arquivo.rsplit(".", 1)[-1].upper()
+                    conn.execute(
+                        "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
+                        (maquina_id, nome_arquivo, caminho, tipo),
+                    )
+            conn.commit()
+            conn.close()
+            flash(f"Máquina '{nome}' cadastrada com sucesso.", "success")
+        except Exception as e:
+            logger.exception("Erro ao cadastrar máquina")
+            flash(f"Erro ao cadastrar máquina: {e}", "danger")
         return redirect(url_for("maquinas"))
 
     return render_template("cadastro_maquina.html")
@@ -467,11 +749,11 @@ def cadastro_maquina():
 @app.route("/enviar", methods=["POST"])
 @login_required
 def enviar():
-    nome = request.form["nome"]
-    setor = request.form["setor"]
-    prioridade = request.form["prioridade"]
-    motivo = request.form["motivo"]
-    setores = {"1": "RH", "2": "TI", "3": "Financeiro", "Qualidade": "Qualidade"}
+    nome       = request.form.get("nome", "").strip()
+    setor      = request.form.get("setor", "").strip()
+    prioridade = request.form.get("prioridade", "").strip()
+    motivo     = request.form.get("motivo", "").strip()
+    setores     = {"1": "RH", "2": "TI", "3": "Financeiro", "Qualidade": "Qualidade"}
     prioridades = {"0": "Baixa", "1": "Média", "2": "Alta"}
     corpo_msg = (
         f"📌 Nexar - Solicitação de Suporte\n"
@@ -480,12 +762,19 @@ def enviar():
         f"⚠️ Prioridade: {prioridades.get(prioridade, prioridade)}\n"
         f"📝 Motivo: {motivo}"
     )
+    if not twilio_client:
+        return render_template(
+            "sucesso.html",
+            mensagem="⚠️ Twilio não configurado — verifique TWILIO_* no .env. "
+                     "Solicitação registrada localmente:\n\n" + corpo_msg,
+        )
     try:
         msg = twilio_client.messages.create(
             body=corpo_msg, from_=TWILIO_WHATSAPP_NUMBER, to=TWILIO_DESTINATARIO
         )
         return render_template("sucesso.html", mensagem=f"Suporte solicitado! SID: {msg.sid}")
     except Exception as e:
+        logger.exception("Erro ao enviar solicitação via Twilio")
         return render_template("sucesso.html", mensagem=f"Erro: {e}")
 
 
