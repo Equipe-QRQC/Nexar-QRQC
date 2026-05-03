@@ -2,6 +2,7 @@ import os
 import io
 import json
 import logging
+import re
 import sqlite3
 from datetime import datetime
 from typing import Literal
@@ -45,6 +46,16 @@ _DEFAULT_CHAIN = [
 _user_model = os.getenv("GEMINI_MODEL", "").strip()
 GEMINI_MODELS = [_user_model] if _user_model else _DEFAULT_CHAIN
 GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
+
+# Cadeia ESPECÍFICA para detecção de bounding boxes (visão espacial precisa).
+# gemini-2.5-pro é melhor para coordenadas, mas tem free tier menor (50 req/dia)
+# Se Pro estourar quota, cai pro Flash que ainda funciona razoavelmente.
+_BBOX_MODELS = [
+    "gemini-2.5-pro",          # melhor visão espacial
+    "gemini-2.5-flash",        # fallback rápido
+    "gemini-2.0-flash",
+    "gemini-2.5-flash-lite",
+]
 
 SYSTEM_INSTRUCTION = (
     "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC) "
@@ -455,6 +466,54 @@ def _fallback_response(prompt: str) -> str:
     )
 
 
+# Componentes industriais comuns (lista priorizada — primeiros têm mais peso)
+_COMPONENTES_CONHECIDOS = [
+    # Acionamento / hidráulica
+    "BOMBA", "MOTOR", "REDUTOR", "ACOPLAMENTO", "EIXO", "TURBINA",
+    # Vedações / mecânica
+    "VEDAÇÃO", "VEDACAO", "VEDAÇÕES", "VEDACOES", "ROLAMENTO", "MANCAL", "GAXETA",
+    # Fluidos
+    "VÁLVULA", "VALVULA", "FILTRO", "RESERVATÓRIO", "RESERVATORIO", "TANQUE",
+    "CILINDRO", "PISTÃO", "PISTAO", "MANGUEIRA", "TROCADOR",
+    # Elétrica / controle
+    "ESTATOR", "ROTOR", "SENSOR", "MANÔMETRO", "MANOMETRO", "TERMÔMETRO", "TERMOMETRO",
+    "INVERSOR", "CLP", "CONTATOR", "RELÉ", "RELE", "DISJUNTOR", "ATUADOR",
+    # Estruturais
+    "ENGRENAGEM", "CORREIA", "POLIA", "VENTILADOR", "CARCAÇA", "CARCACA",
+    # Solda / robótica
+    "ROBÔ", "ROBO", "BICO", "ELETRODO", "ARAME",
+]
+
+
+def _extrair_componente_primario(diagnostico: str) -> str | None:
+    """
+    Extrai o componente primário citado na seção '1. Causa provável'.
+    Retorna o nome em UPPERCASE (formato típico de rótulos em diagramas).
+    """
+    if not diagnostico:
+        return None
+
+    # Tenta isolar a seção 1 (entre '1. Causa provável' e '2. ...')
+    match = re.search(
+        r"\*?\*?1\.\s*Causa.*?\*?\*?\s*\n+(.+?)(?=\n\s*\*?\*?2\.|\Z)",
+        diagnostico,
+        re.DOTALL | re.IGNORECASE,
+    )
+    secao = match.group(1) if match else diagnostico[:600]
+    secao_upper = secao.upper()
+
+    # Procura componentes em ordem de prioridade
+    for componente in _COMPONENTES_CONHECIDOS:
+        if componente in secao_upper:
+            # Normaliza acentos para uppercase ASCII (compatível com diagramas)
+            return (
+                componente
+                .replace("Ç", "C").replace("Ã", "A").replace("Õ", "O")
+                .replace("Ô", "O").replace("Â", "A").replace("Ê", "E").replace("É", "E")
+            )
+    return None
+
+
 def _bbox_para_overlay(bbox: list[int]) -> dict:
     """
     Converte bounding box do Gemini [ymin, xmin, ymax, xmax] em 0-1000
@@ -478,27 +537,46 @@ def _detectar_componentes(
     img_obj,
     diagnostico_texto: str,
     modelos: list[str],
+    componente_primario: str | None = None,
 ) -> list[dict]:
     """
     Segunda chamada à IA: usa visão computacional para localizar componentes
     mencionados no diagnóstico, retornando bounding boxes precisos.
-    Retorna lista de anotações no formato {x, y, raio, tipo, titulo, descricao}.
+
+    Args:
+        img_obj: imagem PIL do diagrama
+        diagnostico_texto: texto markdown do diagnóstico (1ª call)
+        modelos: cadeia de modelos a tentar (Pro primeiro)
+        componente_primario: nome do componente primário extraído da seção 1
+                              (ex: "BOMBA", "MOTOR") — força inclusão obrigatória
     """
     if not gemini_client or img_obj is None:
         return []
 
+    hint_primario = ""
+    if componente_primario:
+        hint_primario = (
+            f"\n\n⚠️ COMPONENTE PRIMÁRIO IDENTIFICADO PELO DIAGNÓSTICO: '{componente_primario}'\n"
+            f"Este componente é a CAUSA PROVÁVEL e DEVE OBRIGATORIAMENTE estar na sua resposta com tipo='critico'.\n"
+            f"Procure por esse rótulo no diagrama (pode estar escrito '{componente_primario}' ou variações)."
+        )
+
     prompt_bbox = (
         "Analise o diagrama técnico industrial em anexo.\n\n"
         "DIAGNÓSTICO PRÉVIO DE UM ENGENHEIRO:\n"
-        f"{diagnostico_texto[:2000]}\n\n"
-        "TAREFA: Localize no diagrama os componentes relevantes para o diagnóstico acima.\n\n"
+        f"{diagnostico_texto[:2000]}"
+        f"{hint_primario}\n\n"
+        "TAREFA: Localize no diagrama os componentes relevantes para o diagnóstico acima "
+        "e devolva bounding boxes PRECISOS.\n\n"
         "REGRAS OBRIGATÓRIAS:\n"
-        "1. SEMPRE inclua o COMPONENTE PRIMÁRIO mencionado na seção 'Causa provável' do diagnóstico "
-        "(ex: se o diagnóstico diz 'falha na BOMBA', a bomba DEVE estar como tipo='critico').\n"
-        "2. Inclua de 3 a 6 componentes total, distribuídos como: 1-2 'critico', 2-3 'atencao', "
-        "0-1 'info'.\n"
-        "3. Cada bbox deve cobrir EXATAMENTE o desenho/rótulo do componente real — nunca áreas vazias.\n"
-        "4. Use o NOME EXATO do rótulo como aparece no diagrama (ex: 'BOMBA', 'FILTRO', 'VEDACOES').\n\n"
+        "1. O COMPONENTE PRIMÁRIO (citado na seção 1 do diagnóstico) DEVE estar na lista "
+        "como tipo='critico'. Não pule este componente sob nenhuma circunstância.\n"
+        "2. Inclua de 3 a 6 componentes total, distribuídos como: 1-2 'critico', 2-3 'atencao', 0-1 'info'.\n"
+        "3. Cada bbox deve cobrir EXATAMENTE o desenho/rótulo do componente real no diagrama — "
+        "NUNCA áreas vazias. Se não tem certeza onde está o componente, OMITA-O em vez de inventar coordenadas.\n"
+        "4. Use o NOME EXATO do rótulo como aparece no diagrama (ex: 'BOMBA', 'FILTRO', 'VEDACOES').\n"
+        "5. Verifique cada bbox: a região [ymin, xmin, ymax, xmax] deve conter PIXELS do componente, "
+        "não fundo branco.\n\n"
         "FORMATO DE CADA COMPONENTE:\n"
         "- box_2d: [ymin, xmin, ymax, xmax] em 0-1000\n"
         "- label: nome curto do componente como aparece no diagrama\n"
@@ -538,6 +616,16 @@ def _detectar_componentes(
                 })
 
             if anotacoes:
+                # Verifica se o componente primário foi incluído (quando informado)
+                if componente_primario:
+                    nomes_marcados = " ".join(a["titulo"].upper() for a in anotacoes)
+                    if componente_primario.upper() not in nomes_marcados:
+                        logger.warning(
+                            f"[bbox/{modelo}] componente primário '{componente_primario}' "
+                            f"NÃO encontrado nas anotações ({nomes_marcados}) — tentando próximo modelo"
+                        )
+                        continue  # tenta próximo modelo
+
                 logger.info(f"[bbox] {len(anotacoes)} componente(s) localizado(s) por {modelo}")
                 return anotacoes
             logger.warning(f"[bbox/{modelo}] retornou 0 componentes válidos")
@@ -590,15 +678,18 @@ def get_ai_response(
 
     # Tenta abrir a imagem (se houver)
     img_obj = None
-    if imagem_path and os.path.exists(imagem_path):
+    if imagem_path:
+        # Resolve o path relativo à raiz do app independente do CWD
+        abs_path = os.path.join(app.root_path, imagem_path) if not os.path.isabs(imagem_path) else imagem_path
+    if imagem_path and os.path.exists(abs_path):
         ext = imagem_path.rsplit(".", 1)[-1].lower()
         if ext in ("png", "jpg", "jpeg"):
             try:
-                img_obj = Image.open(imagem_path)
+                img_obj = Image.open(abs_path)
                 if img_obj.mode in ("RGBA", "P"):
                     img_obj = img_obj.convert("RGB")
             except Exception as e:
-                logger.warning(f"Não foi possível abrir imagem {imagem_path}: {e}")
+                logger.warning(f"Não foi possível abrir imagem {abs_path}: {e}")
 
     has_image = img_obj is not None
     partes: list = [prompt] + ([img_obj] if has_image else [])
@@ -652,9 +743,21 @@ def get_ai_response(
     # ── 2ª chamada: detecção de componentes (bounding boxes) ──────────────────
     anotacoes: list[dict] = []
     if has_image:
-        # Reordena a cadeia de modelos: começa com o que funcionou na 1ª chamada
-        modelos_bbox = [modelo_usado] + [m for m in GEMINI_MODELS if m != modelo_usado]
-        anotacoes = _detectar_componentes(img_obj, texto_diagnostico, modelos_bbox)
+        # Extrai o componente primário da seção 1 do diagnóstico (heurística regex)
+        componente_primario = _extrair_componente_primario(texto_diagnostico)
+        if componente_primario:
+            logger.info(f"[bbox] componente primário detectado: {componente_primario}")
+
+        # Cadeia bbox: começa com gemini-2.5-pro (melhor visão espacial)
+        # Se Pro estourar quota, cai pro Flash. Remove duplicatas mantendo ordem.
+        modelos_bbox = list(dict.fromkeys(_BBOX_MODELS + GEMINI_MODELS))
+
+        anotacoes = _detectar_componentes(
+            img_obj,
+            texto_diagnostico,
+            modelos_bbox,
+            componente_primario=componente_primario,
+        )
 
     return (texto_diagnostico, anotacoes, "ok")
 
