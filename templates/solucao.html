@@ -157,7 +157,7 @@
                  alt="Diagrama técnico da máquina"
                  style="max-width:100%; max-height:520px; object-fit:contain; display:block; margin:0 auto; padding:16px;" />
             {% if anotacoes %}
-            <div id="annotationLayer" style="position:absolute; inset:16px; pointer-events:none;">
+            <div id="annotationLayer" style="position:absolute; pointer-events:none;">
               {% for a in anotacoes %}
               {% set cor = '#EF4444' if a.tipo == 'critico' else '#F59E0B' if a.tipo == 'atencao' else '#3B82F6' %}
               <div class="annotation-marker"
@@ -325,6 +325,55 @@
       setTimeout(() => { btn.innerHTML = txt; }, 1800);
     });
   }
+
+  // ── Posicionamento correto da camada de anotações (corrige letterbox) ──
+  function ajustarCamadaAnotacoes() {
+    const img   = document.getElementById('diagramImg');
+    const layer = document.getElementById('annotationLayer');
+    if (!img || !layer || !img.naturalWidth) return;
+
+    const pad = 16; // padding definido no CSS da imagem
+
+    // Área de conteúdo do elemento img (excluindo padding)
+    const cw = img.clientWidth  - pad * 2;
+    const ch = img.clientHeight - pad * 2;
+    if (cw <= 0 || ch <= 0) return;
+
+    // Proporção natural da imagem
+    const nr = img.naturalWidth / img.naturalHeight;
+    const cr = cw / ch;
+
+    let rw, rh, ox, oy;
+    if (nr > cr) {
+      // Imagem mais larga que o container → letterbox vertical (topo/baixo)
+      rw = cw;
+      rh = cw / nr;
+      ox = pad;
+      oy = pad + (ch - rh) / 2;
+    } else {
+      // Imagem mais alta que o container → pillarbox horizontal (esq/dir)
+      rh = ch;
+      rw = ch * nr;
+      ox = pad + (cw - rw) / 2;
+      oy = pad;
+    }
+
+    layer.style.left   = ox + 'px';
+    layer.style.top    = oy + 'px';
+    layer.style.width  = rw + 'px';
+    layer.style.height = rh + 'px';
+  }
+
+  (function () {
+    const img = document.getElementById('diagramImg');
+    if (!img) return;
+    if (img.complete && img.naturalWidth) {
+      ajustarCamadaAnotacoes();
+    } else {
+      img.addEventListener('load', ajustarCamadaAnotacoes);
+    }
+    window.addEventListener('resize', ajustarCamadaAnotacoes);
+  })();
 
   // ── Anotações no diagrama ───────────────────────────────────────────────
   let anotacoesVisiveis = true;
