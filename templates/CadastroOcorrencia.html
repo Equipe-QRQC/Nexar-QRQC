@@ -89,7 +89,7 @@
 
           <div class="form-group">
             <label class="form-label">{{ t.impacto }}</label>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:4px;" id="impactoGroup">
+            <div class="impact-grid" id="impactoGroup">
               <div class="impact-btn" data-value="Baixo" data-level="baixo" onclick="selImpacto(this)" style="
                 text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
                 border:2px solid var(--border); font-size:12px; font-weight:600;
@@ -141,7 +141,7 @@
     </div>
 
     <!-- Ações -->
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
+    <div class="actions-row">
       <a href="{{ url_for('telaInicial') }}" class="btn btn-outline">
         <i class="fas fa-arrow-left"></i> {{ t.cancelar }}
       </a>

@@ -26,7 +26,7 @@
   </div>
 
   <!-- ── KPIs ─────────────────────────────────────────────────────────────── -->
-  <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:22px;">
+  <div class="kpi-grid">
 
     {% set cards = [
       ('Total',      kpis.total,        'fa-clipboard-list', 'var(--primary)'),
@@ -54,7 +54,7 @@
   </div>
 
   <!-- ── Distribuição por tipo + ações rápidas ────────────────────────────── -->
-  <div style="display:grid; grid-template-columns:1.2fr 1fr; gap:16px; margin-bottom:22px;">
+  <div class="dash-two-col">
 
     <!-- Distribuição -->
     <div class="card">
@@ -98,7 +98,7 @@
         <span class="card-title"><i class="fas fa-bolt"></i> Ações rápidas</span>
       </div>
       <div class="card-body">
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="grid-2" style="gap:10px;">
           <a href="{{ url_for('CadastroOcorrencia') }}" class="quick-action" style="background:var(--primary-light); color:var(--primary);">
             <i class="fas fa-plus-circle"></i>
             <div>
@@ -143,6 +143,7 @@
     </div>
     <div class="card-body" style="padding:0;">
       {% if ultimas %}
+      <div class="table-wrapper">
       <table class="table" style="margin:0;">
         <thead>
           <tr>
@@ -190,6 +191,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
       {% else %}
       <div style="text-align:center; padding:48px 24px; color:var(--text-muted);">
         <i class="fas fa-inbox" style="font-size:36px; opacity:.3; display:block; margin-bottom:12px;"></i>
@@ -212,8 +214,18 @@
     transition: var(--transition);
   }
   .quick-action:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-  .quick-action i { font-size: 20px; }
+  .quick-action i { font-size: 20px; flex-shrink: 0; }
   .quick-action strong { display:block; font-size: 13px; font-weight: 600; }
   .quick-action small { display:block; font-size: 11px; opacity: .7; margin-top:1px; }
+
+  @media (max-width: 767px) {
+    .quick-action { padding: 10px 12px; gap: 10px; }
+    .quick-action i { font-size: 17px; }
+    .quick-action strong { font-size: 12px; }
+    .quick-action small { font-size: 10px; }
+    /* KPI cards: menores no mobile */
+    .kpi-grid .card { padding: 12px !important; }
+    .kpi-grid .card > div:last-child { font-size: 22px !important; }
+  }
 </style>
 {% endblock %}

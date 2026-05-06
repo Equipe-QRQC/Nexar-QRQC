@@ -11,6 +11,9 @@
 <body>
 <div class="app-wrapper">
 
+  <!-- Overlay para fechar drawer no mobile -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
   <!-- ── Sidebar ── -->
   <aside class="sidebar" id="sidebar">
 
@@ -86,9 +89,14 @@
 
   </aside>
 
-  <!-- Toggle -->
+  <!-- Toggle desktop (collapse/expand) -->
   <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()">
     <i class="fas fa-chevron-left"></i>
+  </button>
+
+  <!-- Hamburger mobile (fixo no canto) -->
+  <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleSidebar()" aria-label="Menu">
+    <i class="fas fa-bars"></i>
   </button>
 
   <!-- ── Main ── -->
@@ -151,12 +159,46 @@
 
 <script src="/static/js/chat.js"></script>
 <script>
+  const MOBILE_BP = 768;
+
+  function isMobile() { return window.innerWidth < MOBILE_BP; }
+
   function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const main = document.getElementById('mainContent');
-    sidebar.classList.toggle('collapsed');
-    main.classList.toggle('expanded');
+    if (isMobile()) {
+      openMobileSidebar();
+    } else {
+      const sidebar = document.getElementById('sidebar');
+      const main    = document.getElementById('mainContent');
+      sidebar.classList.toggle('collapsed');
+      main.classList.toggle('expanded');
+    }
   }
+
+  function openMobileSidebar() {
+    document.getElementById('sidebar').classList.add('mobile-open');
+    document.getElementById('sidebarOverlay').classList.add('show');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMobileSidebar() {
+    document.getElementById('sidebar').classList.remove('mobile-open');
+    document.getElementById('sidebarOverlay').classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  /* Fechar drawer ao clicar em link do menu no mobile */
+  document.querySelectorAll('.sidebar .nav-item').forEach(function(el) {
+    el.addEventListener('click', function() {
+      if (isMobile()) closeMobileSidebar();
+    });
+  });
+
+  /* Ao redimensionar para desktop, limpar estado mobile */
+  window.addEventListener('resize', function() {
+    if (!isMobile()) {
+      closeMobileSidebar();
+    }
+  });
 </script>
 
 {% block scripts %}{% endblock %}

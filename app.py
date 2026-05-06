@@ -13,21 +13,34 @@ from google.genai import types as genai_types
 from PIL import Image
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
-from twilio.rest import Client
+import smtplib
+import secrets
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.application import MIMEApplication
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "f_err.log")
+
+# Handler para arquivo (sempre ativo) + stderr (default do basicConfig)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    format=_LOG_FORMAT,
+    handlers=[
+        logging.FileHandler(_LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger("nexar.qrqc")
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
 # Modelo: gemini-2.0-flash (free tier: 15 req/min, 1500 req/dia)
@@ -130,17 +143,15 @@ if GEMINI_KEY:
 else:
     logger.warning("GEMINI_API_KEY não configurada — respostas da IA usarão fallback offline.")
 
-# ── Twilio ────────────────────────────────────────────────────────────────────
-ACCOUNT_SID            = os.getenv("TWILIO_ACCOUNT_SID")
-AUTH_TOKEN             = os.getenv("TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.getenv("TWILIO_WHATSAPP_NUMBER")
-TWILIO_DESTINATARIO    = os.getenv("TWILIO_DESTINATARIO")
-twilio_client = None
-if ACCOUNT_SID and AUTH_TOKEN:
-    try:
-        twilio_client = Client(ACCOUNT_SID, AUTH_TOKEN)
-    except Exception as e:
-        logger.warning(f"Twilio não inicializado: {e}")
+# ── SMTP / Email de suporte ───────────────────────────────────────────────────
+SMTP_HOST     = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER     = os.getenv("SMTP_USER", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+SUPORTE_EMAIL_DESTINO = os.getenv("SUPORTE_EMAIL_DESTINO", "")
+SUPORTE_EMAIL_FROM    = os.getenv("SUPORTE_EMAIL_FROM", SMTP_USER)
+SUPORTE_FOLDER = os.path.join("static", "uploads", "suporte")
+os.makedirs(SUPORTE_FOLDER, exist_ok=True)
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -241,6 +252,76 @@ def normalizar_data(raw: str) -> str:
         return raw[:16]  # corta no minuto se o parse falhar
 
 
+# ── Envio de email de suporte ─────────────────────────────────────────────────
+def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) -> bool:
+    """
+    Envia notificação de novo ticket de suporte por SMTP.
+    Retorna True se enviou com sucesso, False caso contrário (best-effort).
+    """
+    if not (SMTP_USER and SMTP_PASSWORD and SUPORTE_EMAIL_DESTINO):
+        logger.warning("[suporte] SMTP não configurado — pulando envio de email")
+        return False
+
+    cor_pri = {
+        "Baixa": "#10B981", "Média": "#F59E0B",
+        "Alta": "#EF4444", "Crítica": "#A855F7",
+    }.get(ticket.get("prioridade", ""), "#6B7280")
+
+    body_html = f"""
+    <div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#111;">
+      <div style="background:#0EA5E9;color:#fff;padding:18px 24px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;font-size:18px;">🎫 Novo Ticket de Suporte — Nexar QRQC</h2>
+        <p style="margin:4px 0 0;font-size:13px;opacity:.9;">Protocolo: <strong>{ticket['protocolo']}</strong></p>
+      </div>
+      <div style="border:1px solid #E5E7EB;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px;">
+        <p style="margin:0 0 8px;"><strong>Tipo:</strong> {ticket['tipo']}
+          &nbsp;·&nbsp; <strong>Prioridade:</strong>
+          <span style="color:{cor_pri};font-weight:700;">{ticket['prioridade']}</span></p>
+        <p style="margin:0 0 16px;"><strong>Setor:</strong> {ticket['setor']}</p>
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:14px 0;">
+        <p style="margin:0 0 6px;"><strong>Solicitante:</strong> {ticket['nome']}</p>
+        <p style="margin:0 0 6px;"><strong>Email:</strong> <a href="mailto:{ticket['email']}">{ticket['email']}</a></p>
+        {f"<p style='margin:0 0 6px;'><strong>Telefone:</strong> {ticket['telefone']}</p>" if ticket.get('telefone') else ''}
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin:14px 0;">
+        <p style="margin:0 0 4px;"><strong>Assunto:</strong></p>
+        <p style="margin:0 0 14px;font-size:15px;">{ticket['assunto']}</p>
+        <p style="margin:0 0 4px;"><strong>Detalhamento:</strong></p>
+        <div style="background:#F9FAFB;border-left:3px solid #0EA5E9;padding:12px 14px;border-radius:4px;white-space:pre-wrap;font-size:14px;line-height:1.6;">{ticket['motivo']}</div>
+        <p style="margin-top:18px;font-size:12px;color:#6B7280;">
+          Para responder, use o <em>Reply-To</em> deste email — vai direto para o solicitante.
+        </p>
+      </div>
+    </div>
+    """
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"]     = SUPORTE_EMAIL_FROM
+        msg["To"]       = SUPORTE_EMAIL_DESTINO
+        msg["Reply-To"] = ticket["email"]
+        msg["Subject"]  = f"[{ticket['prioridade']}] {ticket['protocolo']} — {ticket['assunto']}"
+        msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+        for path in (anexos_paths or []):
+            if not os.path.exists(path):
+                continue
+            with open(path, "rb") as f:
+                part = MIMEApplication(f.read(), Name=os.path.basename(path))
+            part["Content-Disposition"] = f'attachment; filename="{os.path.basename(path)}"'
+            msg.attach(part)
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+
+        logger.info(f"[suporte] email enviado — protocolo={ticket['protocolo']}")
+        return True
+    except Exception:
+        logger.exception(f"[suporte] falha no envio de email — protocolo={ticket.get('protocolo')}")
+        return False
+
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
@@ -290,6 +371,25 @@ def init_db():
             data_registro DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (maquina_id) REFERENCES maquinas(id)
         );
+        CREATE TABLE IF NOT EXISTS tickets_suporte (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            protocolo TEXT UNIQUE NOT NULL,
+            usuario_id INTEGER,
+            nome TEXT NOT NULL,
+            email TEXT NOT NULL,
+            telefone TEXT,
+            setor TEXT NOT NULL,
+            tipo TEXT NOT NULL,
+            prioridade TEXT NOT NULL,
+            assunto TEXT NOT NULL,
+            motivo TEXT NOT NULL,
+            anexos_json TEXT,
+            status TEXT DEFAULT 'Aberto',
+            email_enviado INTEGER DEFAULT 0,
+            data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+            data_atualizacao DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        );
     """)
     # Migração leve: adiciona colunas que possam estar ausentes em DBs antigos.
     cols = [r["name"] for r in c.execute("PRAGMA table_info(ocorrencias)").fetchall()]
@@ -307,6 +407,11 @@ def init_db():
         "nome_operador":       "ALTER TABLE ocorrencias ADD COLUMN nome_operador TEXT",
         "data_ocorrencia":     "ALTER TABLE ocorrencias ADD COLUMN data_ocorrencia TEXT",
         "maquina_id":          "ALTER TABLE ocorrencias ADD COLUMN maquina_id INTEGER",
+        # Resolução de ocorrência
+        "solucao_aplicada":    "ALTER TABLE ocorrencias ADD COLUMN solucao_aplicada TEXT",
+        "componente_real":     "ALTER TABLE ocorrencias ADD COLUMN componente_real TEXT",
+        "data_resolucao":      "ALTER TABLE ocorrencias ADD COLUMN data_resolucao DATETIME",
+        "resolvido_por_id":    "ALTER TABLE ocorrencias ADD COLUMN resolvido_por_id INTEGER",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -553,6 +658,10 @@ def _detectar_componentes(
     if not gemini_client or img_obj is None:
         return []
 
+    # Guarda o melhor resultado caso nenhum modelo passe na validação rígida
+    melhor_resultado: list[dict] = []
+    melhor_modelo: str = ""
+
     hint_primario = ""
     if componente_primario:
         hint_primario = (
@@ -624,6 +733,10 @@ def _detectar_componentes(
                             f"[bbox/{modelo}] componente primário '{componente_primario}' "
                             f"NÃO encontrado nas anotações ({nomes_marcados}) — tentando próximo modelo"
                         )
+                        # Guarda como fallback caso todos os modelos falhem na validação
+                        if len(anotacoes) > len(melhor_resultado):
+                            melhor_resultado = anotacoes
+                            melhor_modelo = modelo
                         continue  # tenta próximo modelo
 
                 logger.info(f"[bbox] {len(anotacoes)} componente(s) localizado(s) por {modelo}")
@@ -635,6 +748,15 @@ def _detectar_componentes(
                 continue
             logger.exception(f"[bbox/{modelo}] erro definitivo, abortando detecção")
             break
+
+    # Fallback: nenhum modelo passou na validação do componente primário,
+    # mas algum retornou anotações válidas — usa o melhor resultado.
+    if melhor_resultado:
+        logger.info(
+            f"[bbox] usando fallback de {melhor_modelo} com {len(melhor_resultado)} "
+            f"componente(s) (componente primário '{componente_primario}' não foi marcado)"
+        )
+        return melhor_resultado
     return []
 
 
@@ -821,8 +943,10 @@ def historico():
     try:
         conn = get_db()
         ocorrencias = conn.execute(
-            "SELECT o.*, m.nome as maquina_nome FROM ocorrencias o "
+            "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome "
+            "FROM ocorrencias o "
             "LEFT JOIN maquinas m ON o.maquina_id = m.id "
+            "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
             "ORDER BY o.data_registro DESC"
         ).fetchall()
         conn.close()
@@ -830,6 +954,60 @@ def historico():
     except Exception as e:
         logger.exception(f"Erro ao listar histórico: {e}")
         return render_template("historico.html", ocorrencias=[])
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/resolver", methods=["POST"])
+@login_required
+def resolver_ocorrencia(ocorrencia_id: int):
+    """
+    Marca uma ocorrência como Resolvida.
+    Não exige descrição — basta a confirmação do operador.
+    """
+    try:
+        conn = get_db()
+        oc = conn.execute(
+            "SELECT id, status FROM ocorrencias WHERE id = ?", (ocorrencia_id,)
+        ).fetchone()
+        if not oc:
+            conn.close()
+            return jsonify({"ok": False, "erro": "Ocorrência não encontrada."}), 404
+        if oc["status"] in ("Resolvida", "Fechada"):
+            conn.close()
+            return jsonify({
+                "ok": False,
+                "erro": f"Ocorrência já está {oc['status']}.",
+            }), 409
+
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            """UPDATE ocorrencias
+               SET status='Resolvida',
+                   data_resolucao=?, resolvido_por_id=?
+               WHERE id = ?""",
+            (agora, current_user.id, ocorrencia_id),
+        )
+        conn.commit()
+
+        # Busca dados atualizados pra resposta (UI atualiza inline)
+        row = conn.execute(
+            "SELECT o.status, o.data_resolucao, u.nome AS resolvido_por_nome "
+            "FROM ocorrencias o "
+            "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
+            "WHERE o.id = ?",
+            (ocorrencia_id,),
+        ).fetchone()
+        conn.close()
+
+        logger.info(f"[ocorrencia] resolvida id={ocorrencia_id} por user_id={current_user.id}")
+        return jsonify({
+            "ok": True,
+            "status": row["status"],
+            "data_resolucao": row["data_resolucao"],
+            "resolvido_por_nome": row["resolvido_por_nome"],
+        })
+    except Exception as e:
+        logger.exception("[ocorrencia] falha ao resolver")
+        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
 
 
 @app.route("/suporte")
@@ -1052,33 +1230,92 @@ def cadastro_maquina():
 @app.route("/enviar", methods=["POST"])
 @login_required
 def enviar():
+    """
+    Cria um ticket de suporte: salva no DB e dispara email (best-effort).
+    Retorna JSON com {ok, protocolo, email_enviado}.
+    """
     nome       = request.form.get("nome", "").strip()
+    email      = request.form.get("email", "").strip()
+    telefone   = request.form.get("telefone", "").strip()
     setor      = request.form.get("setor", "").strip()
+    tipo       = request.form.get("tipo", "").strip()
     prioridade = request.form.get("prioridade", "").strip()
+    assunto    = request.form.get("assunto", "").strip()
     motivo     = request.form.get("motivo", "").strip()
-    setores     = {"1": "RH", "2": "TI", "3": "Financeiro", "Qualidade": "Qualidade"}
-    prioridades = {"0": "Baixa", "1": "Média", "2": "Alta"}
-    corpo_msg = (
-        f"📌 Nexar - Solicitação de Suporte\n"
-        f"👤 Nome: {nome}\n"
-        f"🏢 Setor: {setores.get(setor, setor)}\n"
-        f"⚠️ Prioridade: {prioridades.get(prioridade, prioridade)}\n"
-        f"📝 Motivo: {motivo}"
-    )
-    if not twilio_client:
-        return render_template(
-            "sucesso.html",
-            mensagem="⚠️ Twilio não configurado — verifique TWILIO_* no .env. "
-                     "Solicitação registrada localmente:\n\n" + corpo_msg,
-        )
+
+    obrigatorios = [nome, email, setor, tipo, prioridade, assunto, motivo]
+    if not all(obrigatorios):
+        return jsonify({"ok": False, "erro": "Campos obrigatórios faltando."}), 400
+
+    # Protocolo único: NXR + 6 hex chars (~16M combinações)
+    protocolo = f"NXR-{secrets.token_hex(3).upper()}"
+
+    # Anexos (opcional): salva em static/uploads/suporte/<protocolo>/
+    anexos_paths: list[str] = []
+    anexos_meta: list[dict] = []
+    arquivos = request.files.getlist("anexos")
+    if arquivos:
+        ticket_dir = os.path.join(SUPORTE_FOLDER, protocolo)
+        os.makedirs(ticket_dir, exist_ok=True)
+        for f in arquivos:
+            if not f or not f.filename:
+                continue
+            fname = secure_filename(f.filename)
+            if not fname:
+                continue
+            path = os.path.join(ticket_dir, fname)
+            f.save(path)
+            anexos_paths.append(path)
+            anexos_meta.append({
+                "nome": fname,
+                "tamanho": os.path.getsize(path),
+                "url": "/" + path.replace("\\", "/"),
+            })
+
+    anexos_json = json.dumps(anexos_meta, ensure_ascii=False) if anexos_meta else None
+    ticket = {
+        "protocolo": protocolo, "nome": nome, "email": email, "telefone": telefone,
+        "setor": setor, "tipo": tipo, "prioridade": prioridade,
+        "assunto": assunto, "motivo": motivo,
+    }
+
+    # Persistência: o ticket é salvo SEMPRE, mesmo se o email falhar
     try:
-        msg = twilio_client.messages.create(
-            body=corpo_msg, from_=TWILIO_WHATSAPP_NUMBER, to=TWILIO_DESTINATARIO
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO tickets_suporte (
+                protocolo, usuario_id, nome, email, telefone, setor, tipo,
+                prioridade, assunto, motivo, anexos_json
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (protocolo, current_user.id, nome, email, telefone, setor, tipo,
+             prioridade, assunto, motivo, anexos_json),
         )
-        return render_template("sucesso.html", mensagem=f"Suporte solicitado! SID: {msg.sid}")
+        conn.commit()
+        conn.close()
+        logger.info(f"[suporte] ticket criado — protocolo={protocolo} prioridade={prioridade}")
     except Exception as e:
-        logger.exception("Erro ao enviar solicitação via Twilio")
-        return render_template("sucesso.html", mensagem=f"Erro: {e}")
+        logger.exception("[suporte] falha ao persistir ticket")
+        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
+
+    # Notificação por email (best-effort — não bloqueia o sucesso)
+    email_ok = enviar_email_suporte(ticket, anexos_paths)
+    if email_ok:
+        try:
+            conn = get_db()
+            conn.execute(
+                "UPDATE tickets_suporte SET email_enviado = 1 WHERE protocolo = ?",
+                (protocolo,),
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            logger.exception("[suporte] falha ao atualizar flag email_enviado")
+
+    return jsonify({
+        "ok": True,
+        "protocolo": protocolo,
+        "email_enviado": email_ok,
+    })
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@
           {% endif %}
         </div>
         <div class="card-body">
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="grid-2" style="gap:12px;">
             <div>
               <div class="label-mini">Operador</div>
               <div class="value-mini">{{ dados.nome_operador }}</div>
@@ -137,7 +137,7 @@
     <!-- Coluna 2 — Diagrama -->
     <div>
       {% if diagrama_url %}
-      <div class="card" style="position:sticky; top:76px;">
+      <div class="card diagram-sticky">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
           <div style="display:flex; gap:6px;">
@@ -244,7 +244,7 @@
       </div>
 
       {% else %}
-      <div class="card" style="position:sticky; top:76px;">
+      <div class="card diagram-sticky">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
         </div>
@@ -263,6 +263,12 @@
 </div>
 
 <style>
+  .diagram-sticky { position: sticky; top: 76px; }
+
+  @media (max-width: 767px) {
+    .diagram-sticky { position: static; }
+  }
+
   .label-mini {
     font-size:11px; color:var(--text-muted); font-weight:600;
     text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px;
