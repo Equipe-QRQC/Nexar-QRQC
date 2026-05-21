@@ -462,18 +462,38 @@ function renderChips() {
   });
 }
 
-/* submit */
-document.getElementById('form').addEventListener('submit', function(e) {
+/* submit — POST real para /enviar */
+document.getElementById('form').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const btn = document.getElementById('btnEnviar');
+  const form = e.currentTarget;
+  const btn  = document.getElementById('btnEnviar');
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando…';
-  setTimeout(() => {
-    const num = 'NXR-' + Math.floor(10000 + Math.random() * 90000);
-    document.getElementById('proto').textContent = num;
-    document.getElementById('form').style.display = 'none';
+
+  try {
+    const fd  = new FormData(form);
+    const res = await fetch(form.action, { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data.erro || `HTTP ${res.status}`);
+    }
+
+    // Sucesso: mostra protocolo real do servidor
+    document.getElementById('proto').textContent = data.protocolo;
+    if (!data.email_enviado) {
+      const aviso = document.createElement('p');
+      aviso.style.cssText = 'font-size:12px;color:var(--warning);margin-top:6px;';
+      aviso.innerHTML = '<i class="fas fa-info-circle"></i> Notificação por email não foi enviada (SMTP indisponível). O ticket está salvo e visível na lista.';
+      document.querySelector('.sucesso .sc-proto').after(aviso);
+    }
+    form.style.display = 'none';
     document.getElementById('sucesso').classList.add('show');
-  }, 1200);
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar Solicitação';
+    alert('Erro ao enviar solicitação: ' + err.message);
+  }
 });
 </script>
 {% endblock %}
