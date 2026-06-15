@@ -10,6 +10,7 @@
 
 <div class="page-body">
   <form action="{{ url_for('registrar_ocorrencia') }}" method="POST" id="formOcorrencia">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <div class="grid-2">
 
       <!-- Coluna 1 — Identificação -->
@@ -25,9 +26,9 @@
               {{ t.maquina }}
             </label>
             <select name="maquina_id" class="form-select">
-              <option value="">— Selecione a máquina —</option>
+              <option value="">{{ t.selecione_maquina }}</option>
               {% for m in maquinas %}
-              <option value="{{ m.id }}">{{ m.nome }} {% if m.setor %}({{ m.setor }}){% endif %}</option>
+              <option value="{{ m.id }}" {% if preselect_maquina == m.id %}selected{% endif %}>{{ m.nome }} {% if m.setor %}({{ m.setor }}){% endif %}</option>
               {% endfor %}
             </select>
           </div>
@@ -35,7 +36,7 @@
           <div class="form-group">
             <label class="form-label">
               <i class="fas fa-calendar" style="color:var(--primary); margin-right:5px;"></i>
-              Data e Hora
+              {{ t.data_hora }}
             </label>
             <input type="datetime-local" name="data_ocorrencia" class="form-control" required />
           </div>
@@ -80,10 +81,10 @@
           <div class="form-group">
             <label class="form-label">{{ t.tipo }}</label>
             <select name="tipo_ocorrencia" class="form-select" required>
-              <option value="Qualidade">🔵 Qualidade</option>
-              <option value="Segurança">🔴 Segurança</option>
-              <option value="Produção">🟡 Produção</option>
-              <option value="Manutenção">🟢 Manutenção</option>
+              <option value="Qualidade">🔵 {{ t.qualidade }}</option>
+              <option value="Segurança">🔴 {{ t.seguranca }}</option>
+              <option value="Produção">🟡 {{ t.producao }}</option>
+              <option value="Manutenção">🟢 {{ t.manutencao }}</option>
             </select>
           </div>
 
@@ -94,17 +95,17 @@
                 text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
                 border:2px solid var(--border); font-size:12px; font-weight:600;
                 color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">🟢 Baixo</div>
+              ">🟢 {{ t.baixo }}</div>
               <div class="impact-btn" data-value="Médio" data-level="medio" onclick="selImpacto(this)" style="
                 text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
                 border:2px solid var(--border); font-size:12px; font-weight:600;
                 color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">🟡 Médio</div>
+              ">🟡 {{ t.medio }}</div>
               <div class="impact-btn" data-value="Alto" data-level="alto" onclick="selImpacto(this)" style="
                 text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
                 border:2px solid var(--border); font-size:12px; font-weight:600;
                 color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">🔴 Alto</div>
+              ">🔴 {{ t.alto }}</div>
             </div>
             <input type="hidden" name="nivel_impacto" id="nivelImpactoVal" value="" />
             <small id="impactoErro" style="color:var(--danger); display:none; font-size:12px;">⚠ Selecione o nível de impacto</small>
@@ -158,8 +159,34 @@
 
 <!-- Loading overlay -->
 <div class="loading-overlay" id="loadingOverlay">
-  <div class="spinner"></div>
-  <p class="loading-text">Analisando com IA...</p>
+  <div class="loading-card">
+    <div class="loading-icon">
+      <i class="fas fa-robot"></i>
+    </div>
+    <p class="loading-title">Nexar IA processando</p>
+    <p class="loading-subtitle">Aguarde enquanto geramos o diagnóstico técnico</p>
+
+    <div class="loading-steps">
+      <div class="loading-step" id="step1">
+        <div class="step-icon"><i class="fas fa-check"></i></div>
+        <span>Dados da ocorrência validados</span>
+      </div>
+      <div class="loading-step" id="step2">
+        <div class="step-icon"><i class="fas fa-circle-notch fa-spin"></i></div>
+        <span>Consultando Nexar IA...</span>
+      </div>
+      <div class="loading-step" id="step3">
+        <div class="step-icon">3</div>
+        <span>Gerando diagnóstico técnico</span>
+      </div>
+      <div class="loading-step" id="step4">
+        <div class="step-icon">4</div>
+        <span>Localizando componentes no diagrama</span>
+      </div>
+    </div>
+
+    <span class="loading-timer" id="loadingTimer">0s</span>
+  </div>
 </div>
 
 {% endblock %}
@@ -223,7 +250,46 @@
       return;
     }
 
+    // Mostra overlay e anima os passos
     document.getElementById('loadingOverlay').classList.add('show');
+
+    const steps = [
+      { id: 'step1', delay: 0 },
+      { id: 'step2', delay: 300 },
+      { id: 'step3', delay: 3500 },
+      { id: 'step4', delay: 7000 },
+    ];
+
+    function ativarPasso(idx) {
+      // Marca anterior como done
+      if (idx > 0) {
+        const prev = document.getElementById(steps[idx - 1].id);
+        prev.classList.remove('active');
+        prev.classList.add('done');
+        prev.querySelector('.step-icon').innerHTML = '<i class="fas fa-check"></i>';
+      }
+      // Ativa atual
+      if (idx < steps.length) {
+        const cur = document.getElementById(steps[idx].id);
+        cur.classList.add('active');
+        if (idx > 0) {
+          cur.querySelector('.step-icon').innerHTML =
+            '<i class="fas fa-circle-notch fa-spin"></i>';
+        }
+        if (idx + 1 < steps.length) {
+          setTimeout(() => ativarPasso(idx + 1), steps[idx + 1].delay - steps[idx].delay);
+        }
+      }
+    }
+
+    // Cronômetro
+    let seg = 0;
+    const timer = setInterval(() => {
+      seg++;
+      document.getElementById('loadingTimer').textContent = seg + 's';
+    }, 1000);
+
+    setTimeout(() => ativarPasso(0), steps[0].delay);
   });
 </script>
 {% endblock %}

@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Nexar QRQC{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
   <link rel="stylesheet" href="/static/css/design-system.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   {% block head %}{% endblock %}
@@ -50,6 +51,12 @@
          class="nav-item {% if 'maquina' in request.endpoint %}active{% endif %}">
         <i class="fas fa-cogs"></i>
         <span>{{ t.maquinas }}</span>
+      </a>
+
+      <a href="{{ url_for('analise') }}"
+         class="nav-item {% if request.endpoint == 'analise' %}active{% endif %}">
+        <i class="fas fa-chart-bar"></i>
+        <span>Análise</span>
       </a>
 
       <span class="nav-label" style="margin-top:8px">Suporte</span>
@@ -141,7 +148,7 @@
       <div class="chat-avatar"><i class="fas fa-robot"></i></div>
       <div>
         <h6>{{ t.assistente }}</h6>
-        <p>Nexar QRQC · Gemini 2.0 Flash</p>
+        <p>Nexar QRQC · Nexar IA</p>
       </div>
     </div>
     <button class="chat-close" onclick="toggleChat()"><i class="fas fa-times"></i></button>

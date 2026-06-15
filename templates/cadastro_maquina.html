@@ -1,21 +1,24 @@
 {% extends 'menu.html' %}
-{% block title %}Cadastrar Máquina — Nexar QRQC{% endblock %}
+{% block title %}{% if maquina %}{{ t.editar_maquina }}{% else %}{{ t.cadastrar_maquina }}{% endif %} — Nexar QRQC{% endblock %}
 
 {% block content %}
 <div class="topbar">
   <div class="topbar-title">
-    <i class="fas fa-plus-circle"></i> {{ t.cadastrar_maquina }}
+    <i class="fas fa-{% if maquina %}edit{% else %}plus-circle{% endif %}"></i>
+    {% if maquina %}{{ t.editar_maquina }}{% else %}{{ t.cadastrar_maquina }}{% endif %}
   </div>
   <div class="topbar-actions">
     <a href="{{ url_for('maquinas') }}" class="btn btn-outline btn-sm">
-      <i class="fas fa-arrow-left"></i> Voltar
+      <i class="fas fa-arrow-left"></i> {{ t.voltar }}
     </a>
   </div>
 </div>
 
 <div class="page-body">
   <div style="max-width:760px; margin:0 auto;">
-    <form action="{{ url_for('cadastro_maquina') }}" method="POST" enctype="multipart/form-data">
+    <form action="{% if maquina %}{{ url_for('editar_maquina', maquina_id=maquina.id) }}{% else %}{{ url_for('cadastro_maquina') }}{% endif %}"
+          method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
       <div class="card" style="margin-bottom:16px;">
         <div class="card-header">
@@ -26,32 +29,37 @@
             <div class="form-group">
               <label class="form-label">{{ t.nome }} *</label>
               <input type="text" name="nome" class="form-control"
-                     placeholder="Ex: Torno CNC 01" required />
+                     placeholder="Ex: Torno CNC 01" required
+                     value="{{ maquina.nome if maquina else '' }}" />
             </div>
             <div class="form-group">
               <label class="form-label">{{ t.setor }}</label>
               <input type="text" name="setor" class="form-control"
-                     placeholder="Ex: Linha de Produção 3" />
+                     placeholder="Ex: Linha de Produção 3"
+                     value="{{ maquina.setor if maquina else '' }}" />
             </div>
             <div class="form-group">
               <label class="form-label">{{ t.fabricante }}</label>
               <input type="text" name="fabricante" class="form-control"
-                     placeholder="Ex: Romi, Siemens..." />
+                     placeholder="Ex: Romi, Siemens..."
+                     value="{{ maquina.fabricante if maquina else '' }}" />
             </div>
             <div class="form-group">
               <label class="form-label">{{ t.modelo }}</label>
               <input type="text" name="modelo" class="form-control"
-                     placeholder="Ex: GL 240M" />
+                     placeholder="Ex: GL 240M"
+                     value="{{ maquina.modelo if maquina else '' }}" />
             </div>
             <div class="form-group">
               <label class="form-label">{{ t.ano }}</label>
-              <input type="text" name="ano" class="form-control" placeholder="Ex: 2018" />
+              <input type="text" name="ano" class="form-control" placeholder="Ex: 2018"
+                     value="{{ maquina.ano if maquina else '' }}" />
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Descrição / Observações</label>
             <textarea name="descricao" class="form-control" rows="3"
-                      placeholder="Informações adicionais sobre a máquina, capacidade, localização, etc."></textarea>
+                      placeholder="Informações adicionais sobre a máquina, capacidade, localização, etc.">{{ maquina.descricao if maquina else '' }}</textarea>
           </div>
         </div>
       </div>
@@ -59,6 +67,9 @@
       <div class="card" style="margin-bottom:20px;">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagramas }}</span>
+          {% if maquina %}
+          <span style="font-size:12px; color:var(--text-muted);">Adicionar novos diagramas</span>
+          {% endif %}
         </div>
         <div class="card-body">
           <div id="dropZone" style="
@@ -96,7 +107,8 @@
           <i class="fas fa-times"></i> {{ t.cancelar }}
         </a>
         <button type="submit" class="btn btn-primary btn-lg">
-          <i class="fas fa-save"></i> Salvar Máquina
+          <i class="fas fa-save"></i>
+          {% if maquina %}{{ t.salvar_alt }}{% else %}{{ t.salvar_maquina }}{% endif %}
         </button>
       </div>
 
@@ -117,7 +129,7 @@
         background:var(--bg-page); border-radius:var(--radius-sm);
         border:1px solid var(--border); font-size:13px;
       `;
-      const icon = f.type.includes('pdf') ? 'fa-file-pdf' : 'fa-file-image';
+      const icon  = f.type.includes('pdf') ? 'fa-file-pdf' : 'fa-file-image';
       const color = f.type.includes('pdf') ? 'var(--danger)' : 'var(--primary)';
       item.innerHTML = `
         <i class="fas ${icon}" style="color:${color}; font-size:16px;"></i>

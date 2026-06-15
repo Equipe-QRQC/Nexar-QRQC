@@ -6,8 +6,11 @@ import re
 import sqlite3
 from datetime import datetime
 from typing import Literal
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from google import genai
 from google.genai import types as genai_types
 from PIL import Image
@@ -41,6 +44,13 @@ logger = logging.getLogger("nexar.qrqc")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+csrf = CSRFProtect(app)
+limiter = Limiter(
+    key_func=lambda: str(current_user.id) if current_user.is_authenticated else get_remote_address(),
+    app=app,
+    default_limits=[],
+    storage_uri="memory://",
+)
 
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
 # Modelo: gemini-2.0-flash (free tier: 15 req/min, 1500 req/dia)
@@ -64,10 +74,10 @@ GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
 # gemini-2.5-pro é melhor para coordenadas, mas tem free tier menor (50 req/dia)
 # Se Pro estourar quota, cai pro Flash que ainda funciona razoavelmente.
 _BBOX_MODELS = [
-    "gemini-2.5-pro",          # melhor visão espacial
-    "gemini-2.5-flash",        # fallback rápido
+    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-2.5-flash-lite",
+    "gemini-2.0-flash-lite",
 ]
 
 SYSTEM_INSTRUCTION = (
@@ -171,8 +181,8 @@ TRANSLATIONS = {
         "classificacao": "Classificação", "registrar": "Registrar",
         "cancelar": "Cancelar", "limpar": "Limpar",
         "maquina": "Máquina", "operador": "Operador", "setor": "Setor",
-        "descricao": "Descrição do problema", "tipo": "Tipo de Ocorrência",
-        "impacto": "Nível de Impacto", "recorrente": "Problema Recorrente?",
+        "descricao": "Descrição do problema", "descricao_col": "Descrição",
+        "tipo": "Tipo", "impacto": "Nível de Impacto", "recorrente": "Problema Recorrente?",
         "detalhamento": "Detalhamento Técnico", "solucao": "Solução Gerada pela IA",
         "diagnostico": "Diagnóstico Técnico", "diagrama": "Diagrama da Máquina",
         "historico_titulo": "Histórico de Ocorrências", "pesquisar": "Pesquisar...",
@@ -181,6 +191,39 @@ TRANSLATIONS = {
         "nova_maquina": "Nova Máquina", "cadastrar_maquina": "Cadastrar Máquina",
         "nome": "Nome", "modelo": "Modelo", "fabricante": "Fabricante",
         "ano": "Ano", "diagramas": "Diagramas Técnicos",
+        # Ações gerais
+        "fechar": "Fechar", "editar": "Editar", "salvar_alt": "Salvar Alterações",
+        "salvar_maquina": "Salvar Máquina", "editar_maquina": "Editar Máquina",
+        "ver_detalhes": "Ver detalhes", "exportar_excel": "Exportar Excel",
+        "marcar_resolvida": "Marcar como Resolvida", "voltar": "Voltar",
+        # Filtros / status
+        "data": "Data", "todos": "Todos", "status": "Status",
+        "aberta": "Aberta", "resolvida": "Resolvida",
+        "fechada": "Fechada", "em_andamento": "Em andamento",
+        # Máquinas
+        "ocorrencia": "Ocorrência", "sem_ocorrencias": "Sem ocorrências",
+        "nenhuma_maquina": "Nenhuma máquina cadastrada",
+        "nenhuma_maquina_sub": "Cadastre as máquinas para habilitar o diagnóstico técnico com IA.",
+        # Formulário de ocorrência
+        "data_hora": "Data e Hora", "selecione_maquina": "— Selecione a máquina —",
+        "qualidade": "Qualidade", "seguranca": "Segurança",
+        "producao": "Produção", "manutencao": "Manutenção",
+        "alto": "Alto", "medio": "Médio", "baixo": "Baixo",
+        # Análise
+        "analise_titulo": "Análise de Falhas",
+        "sem_dados": "Sem dados ainda",
+        "sem_dados_sub": "Registre ocorrências para visualizar a análise de falhas.",
+        "total_kpi": "Total", "abertas_kpi": "Abertas", "resolvidas_kpi": "Resolvidas",
+        "taxa_resolucao": "Taxa de Resolução", "alto_impacto_kpi": "Alto Impacto",
+        "ocorrencias_label": "ocorrências", "pendentes_label": "pendentes",
+        "concluidas_label": "concluídas", "do_total": "do total",
+        "criticas_abertas": "abertas críticas",
+        "por_maquina_titulo": "Ocorrências por Máquina",
+        "por_tipo_titulo": "Por Tipo", "por_impacto_titulo": "Por Impacto",
+        "acumulado_pct": "% Acumulado",
+        # Modal histórico
+        "diag_ia": "Diagnóstico Nexar IA", "marcacoes_ia": "marcação(ões) IA",
+        "sem_registros": "Nenhuma ocorrência registrada ainda.",
     },
     "en": {
         "nova_ocorrencia": "New Occurrence", "historico": "History",
@@ -191,8 +234,8 @@ TRANSLATIONS = {
         "classificacao": "Classification", "registrar": "Register",
         "cancelar": "Cancel", "limpar": "Clear",
         "maquina": "Machine", "operador": "Operator", "setor": "Sector",
-        "descricao": "Problem description", "tipo": "Occurrence Type",
-        "impacto": "Impact Level", "recorrente": "Recurring Problem?",
+        "descricao": "Problem description", "descricao_col": "Description",
+        "tipo": "Type", "impacto": "Impact Level", "recorrente": "Recurring Problem?",
         "detalhamento": "Technical Detail", "solucao": "AI Generated Solution",
         "diagnostico": "Technical Diagnosis", "diagrama": "Machine Diagram",
         "historico_titulo": "Occurrence History", "pesquisar": "Search...",
@@ -201,6 +244,33 @@ TRANSLATIONS = {
         "nova_maquina": "New Machine", "cadastrar_maquina": "Register Machine",
         "nome": "Name", "modelo": "Model", "fabricante": "Manufacturer",
         "ano": "Year", "diagramas": "Technical Diagrams",
+        "fechar": "Close", "editar": "Edit", "salvar_alt": "Save Changes",
+        "salvar_maquina": "Save Machine", "editar_maquina": "Edit Machine",
+        "ver_detalhes": "View details", "exportar_excel": "Export Excel",
+        "marcar_resolvida": "Mark as Resolved", "voltar": "Back",
+        "data": "Date", "todos": "All", "status": "Status",
+        "aberta": "Open", "resolvida": "Resolved",
+        "fechada": "Closed", "em_andamento": "In progress",
+        "ocorrencia": "Occurrence", "sem_ocorrencias": "No occurrences",
+        "nenhuma_maquina": "No machines registered",
+        "nenhuma_maquina_sub": "Register machines to enable AI technical diagnosis.",
+        "data_hora": "Date and Time", "selecione_maquina": "— Select machine —",
+        "qualidade": "Quality", "seguranca": "Safety",
+        "producao": "Production", "manutencao": "Maintenance",
+        "alto": "High", "medio": "Medium", "baixo": "Low",
+        "analise_titulo": "Failure Analysis",
+        "sem_dados": "No data yet",
+        "sem_dados_sub": "Register occurrences to view failure analysis.",
+        "total_kpi": "Total", "abertas_kpi": "Open", "resolvidas_kpi": "Resolved",
+        "taxa_resolucao": "Resolution Rate", "alto_impacto_kpi": "High Impact",
+        "ocorrencias_label": "occurrences", "pendentes_label": "pending",
+        "concluidas_label": "completed", "do_total": "of total",
+        "criticas_abertas": "open critical",
+        "por_maquina_titulo": "Occurrences by Machine",
+        "por_tipo_titulo": "By Type", "por_impacto_titulo": "By Impact",
+        "acumulado_pct": "Cumulative %",
+        "diag_ia": "Nexar IA Diagnosis", "marcacoes_ia": "IA marking(s)",
+        "sem_registros": "No occurrences registered yet.",
     },
     "es": {
         "nova_ocorrencia": "Nueva Ocurrencia", "historico": "Historial",
@@ -211,8 +281,8 @@ TRANSLATIONS = {
         "classificacao": "Clasificación", "registrar": "Registrar",
         "cancelar": "Cancelar", "limpar": "Limpiar",
         "maquina": "Máquina", "operador": "Operador", "setor": "Sector",
-        "descricao": "Descripción del problema", "tipo": "Tipo de Ocurrencia",
-        "impacto": "Nivel de Impacto", "recorrente": "¿Problema recurrente?",
+        "descricao": "Descripción del problema", "descricao_col": "Descripción",
+        "tipo": "Tipo", "impacto": "Nivel de Impacto", "recorrente": "¿Problema recurrente?",
         "detalhamento": "Detalle Técnico", "solucao": "Solución Generada por IA",
         "diagnostico": "Diagnóstico Técnico", "diagrama": "Diagrama de la Máquina",
         "historico_titulo": "Historial de Ocurrencias", "pesquisar": "Buscar...",
@@ -221,6 +291,33 @@ TRANSLATIONS = {
         "nova_maquina": "Nueva Máquina", "cadastrar_maquina": "Registrar Máquina",
         "nome": "Nombre", "modelo": "Modelo", "fabricante": "Fabricante",
         "ano": "Año", "diagramas": "Diagramas Técnicos",
+        "fechar": "Cerrar", "editar": "Editar", "salvar_alt": "Guardar Cambios",
+        "salvar_maquina": "Guardar Máquina", "editar_maquina": "Editar Máquina",
+        "ver_detalhes": "Ver detalles", "exportar_excel": "Exportar Excel",
+        "marcar_resolvida": "Marcar como Resuelta", "voltar": "Volver",
+        "data": "Fecha", "todos": "Todos", "status": "Estado",
+        "aberta": "Abierta", "resolvida": "Resuelta",
+        "fechada": "Cerrada", "em_andamento": "En curso",
+        "ocorrencia": "Ocurrencia", "sem_ocorrencias": "Sin ocurrencias",
+        "nenhuma_maquina": "No hay máquinas registradas",
+        "nenhuma_maquina_sub": "Registre las máquinas para habilitar el diagnóstico técnico con IA.",
+        "data_hora": "Fecha y Hora", "selecione_maquina": "— Seleccione la máquina —",
+        "qualidade": "Calidad", "seguranca": "Seguridad",
+        "producao": "Producción", "manutencao": "Mantenimiento",
+        "alto": "Alto", "medio": "Medio", "baixo": "Bajo",
+        "analise_titulo": "Análisis de Fallos",
+        "sem_dados": "Sin datos aún",
+        "sem_dados_sub": "Registre ocurrencias para visualizar el análisis de fallos.",
+        "total_kpi": "Total", "abertas_kpi": "Abiertas", "resolvidas_kpi": "Resueltas",
+        "taxa_resolucao": "Tasa de Resolución", "alto_impacto_kpi": "Alto Impacto",
+        "ocorrencias_label": "ocurrencias", "pendentes_label": "pendientes",
+        "concluidas_label": "completadas", "do_total": "del total",
+        "criticas_abertas": "críticas abiertas",
+        "por_maquina_titulo": "Ocurrencias por Máquina",
+        "por_tipo_titulo": "Por Tipo", "por_impacto_titulo": "Por Impacto",
+        "acumulado_pct": "% Acumulado",
+        "diag_ia": "Diagnóstico Nexar IA", "marcacoes_ia": "marcación(es) IA",
+        "sem_registros": "Sin ocurrencias registradas aún.",
     },
 }
 
@@ -229,6 +326,24 @@ TRANSLATIONS = {
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# Magic bytes para validação de conteúdo real (evita extensão falsificada)
+_MAGIC = {
+    "png":  b"\x89PNG\r\n\x1a\n",
+    "jpg":  b"\xff\xd8\xff",
+    "jpeg": b"\xff\xd8\xff",
+    "pdf":  b"%PDF-",
+}
+
+def content_is_valid(stream, ext: str) -> bool:
+    """Verifica se o conteúdo do arquivo bate com a extensão declarada."""
+    magic = _MAGIC.get(ext.lower())
+    if not magic:
+        return False
+    header = stream.read(len(magic))
+    stream.seek(0)
+    return header == magic
 
 
 def get_db():
@@ -324,6 +439,7 @@ def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) ->
 
 def init_db():
     conn = get_db()
+    conn.execute("PRAGMA journal_mode=WAL")
     c = conn.cursor()
     c.executescript("""
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -513,6 +629,7 @@ def _historico_para_gemini(historico: list[dict]) -> list[dict]:
 
 @app.route("/chat", methods=["POST"])
 @login_required
+@limiter.limit("15 per minute")
 def chat():
     if not gemini_client:
         return jsonify({"resposta": "⚠️ IA offline — configure GEMINI_API_KEY no .env."}), 503
@@ -703,10 +820,17 @@ def _detectar_componentes(
             parsed: DeteccaoComponentes | None = response.parsed
             if not parsed:
                 try:
-                    raw = json.loads(response.text or "{}")
+                    texto = response.text or ""
+                    # Modelos lite às vezes envolvem o JSON em ```json ... ```
+                    bloco = re.search(r"```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```", texto)
+                    json_str = bloco.group(1) if bloco else texto.strip()
+                    raw = json.loads(json_str)
+                    # Aceita tanto {"componentes": [...]} quanto [...] direto
+                    if isinstance(raw, list):
+                        raw = {"componentes": raw}
                     parsed = DeteccaoComponentes(**raw)
                 except Exception:
-                    logger.warning(f"[bbox/{modelo}] resposta sem JSON parseável")
+                    logger.warning(f"[bbox/{modelo}] resposta sem JSON parseável: {(response.text or '')[:120]!r}")
                     continue
 
             anotacoes: list[dict] = []
@@ -798,10 +922,10 @@ def get_ai_response(
     if not gemini_client:
         return (_fallback_response(prompt), [], "fallback")
 
-    # Tenta abrir a imagem (se houver)
+    # Tenta abrir o diagrama (imagem ou PDF)
     img_obj = None
+    pdf_part = None
     if imagem_path:
-        # Resolve o path relativo à raiz do app independente do CWD
         abs_path = os.path.join(app.root_path, imagem_path) if not os.path.isabs(imagem_path) else imagem_path
     if imagem_path and os.path.exists(abs_path):
         ext = imagem_path.rsplit(".", 1)[-1].lower()
@@ -812,9 +936,19 @@ def get_ai_response(
                     img_obj = img_obj.convert("RGB")
             except Exception as e:
                 logger.warning(f"Não foi possível abrir imagem {abs_path}: {e}")
+        elif ext == "pdf":
+            try:
+                with open(abs_path, "rb") as f:
+                    pdf_part = genai_types.Part.from_bytes(data=f.read(), mime_type="application/pdf")
+            except Exception as e:
+                logger.warning(f"Não foi possível ler PDF {abs_path}: {e}")
 
     has_image = img_obj is not None
-    partes: list = [prompt] + ([img_obj] if has_image else [])
+    partes: list = [prompt]
+    if has_image:
+        partes.append(img_obj)
+    elif pdf_part is not None:
+        partes.append(pdf_part)
 
     ultimo_erro: Exception | None = None
     modelo_usado: str | None = None
@@ -870,9 +1004,10 @@ def get_ai_response(
         if componente_primario:
             logger.info(f"[bbox] componente primário detectado: {componente_primario}")
 
-        # Cadeia bbox: começa com gemini-2.5-pro (melhor visão espacial)
-        # Se Pro estourar quota, cai pro Flash. Remove duplicatas mantendo ordem.
-        modelos_bbox = list(dict.fromkeys(_BBOX_MODELS + GEMINI_MODELS))
+        # Começa pelo modelo que já funcionou no diagnóstico (evita trocar de modelo
+        # sem motivo). Adiciona o restante da cadeia como fallback, sem duplicatas.
+        cabeca = [modelo_usado] if modelo_usado else []
+        modelos_bbox = list(dict.fromkeys(cabeca + _BBOX_MODELS))
 
         anotacoes = _detectar_componentes(
             img_obj,
@@ -937,6 +1072,60 @@ def telaInicial():
     return redirect(url_for("dashboard"))
 
 
+@app.route("/analise")
+@login_required
+def analise():
+    conn = get_db()
+
+    kpis = conn.execute("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as abertas,
+            SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as resolvidas,
+            SUM(CASE WHEN nivel_impacto = 'Alto'
+                     AND status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as alto_aberto
+        FROM ocorrencias
+    """).fetchone()
+
+    por_maquina = conn.execute("""
+        SELECT COALESCE(m.nome, 'Sem máquina') as maquina,
+               COUNT(*) as total,
+               SUM(CASE WHEN o.status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as abertas,
+               SUM(CASE WHEN o.status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as resolvidas
+        FROM ocorrencias o
+        LEFT JOIN maquinas m ON m.id = o.maquina_id
+        GROUP BY o.maquina_id
+        ORDER BY total DESC
+    """).fetchall()
+
+    por_tipo = conn.execute("""
+        SELECT COALESCE(tipo_ocorrencia, 'Outros') as tipo, COUNT(*) as total
+        FROM ocorrencias
+        GROUP BY tipo_ocorrencia
+        ORDER BY total DESC
+    """).fetchall()
+
+    por_impacto = conn.execute("""
+        SELECT COALESCE(nivel_impacto, 'Não definido') as impacto, COUNT(*) as total
+        FROM ocorrencias
+        GROUP BY nivel_impacto
+        ORDER BY CASE nivel_impacto WHEN 'Alto' THEN 1 WHEN 'Médio' THEN 2 ELSE 3 END
+    """).fetchall()
+
+    conn.close()
+
+    total = kpis["total"] or 1
+    taxa  = round((kpis["resolvidas"] / total) * 100) if total else 0
+
+    return render_template(
+        "analise.html",
+        kpis=dict(kpis) | {"taxa": taxa},
+        por_maquina=[dict(r) for r in por_maquina],
+        por_tipo=[dict(r) for r in por_tipo],
+        por_impacto=[dict(r) for r in por_impacto],
+    )
+
+
 @app.route("/historico")
 @login_required
 def historico():
@@ -954,6 +1143,522 @@ def historico():
     except Exception as e:
         logger.exception(f"Erro ao listar histórico: {e}")
         return render_template("historico.html", ocorrencias=[])
+
+
+@app.route("/historico/export")
+@login_required
+def historico_export():
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
+    from openpyxl.drawing.image import Image as XLImage
+    from io import BytesIO
+    import datetime
+
+    # Filtros via query params (mesma lógica do JS)
+    busca   = request.args.get("search", "").lower()
+    data_f  = request.args.get("data",   "")
+    tipo_f  = request.args.get("tipo",   "")
+    imp_f   = request.args.get("impacto","")
+    status_f= request.args.get("status", "")
+
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT o.id, COALESCE(m.nome,'—') AS maquina_nome, o.nome_operador,
+               o.tipo_ocorrencia, o.nivel_impacto, o.descricao,
+               o.data_ocorrencia, o.status
+        FROM ocorrencias o
+        LEFT JOIN maquinas m ON m.id = o.maquina_id
+        ORDER BY o.data_registro DESC
+    """).fetchall()
+    conn.close()
+
+    def row_matches(r):
+        text = " ".join(str(r[k] or "") for k in
+                        ["maquina_nome","nome_operador","descricao",
+                         "tipo_ocorrencia","nivel_impacto","status"]).lower()
+        data_r  = (r["data_ocorrencia"] or "")[:10]
+        st      = r["status"] or "Aberta"
+        return (
+            (not busca    or busca    in text) and
+            (not data_f   or data_f   == data_r) and
+            (not tipo_f   or tipo_f   == r["tipo_ocorrencia"]) and
+            (not imp_f    or imp_f    == r["nivel_impacto"]) and
+            (not status_f or status_f == st)
+        )
+
+    filtradas = [r for r in rows if row_matches(r)]
+
+    # ── Cores ────────────────────────────────────────────────────────────────
+    C_NEXAR  = "1E3A8A"  # azul escuro Nexar
+    C_HEADER = "1D4ED8"  # azul colunas
+    C_LINHA  = "DBEAFE"  # azul claro separador
+    C_VERDE  = "D1FAE5"; C_VERDE_T  = "065F46"
+    C_VERM   = "FEE2E2"; C_VERM_T   = "991B1B"
+    C_AMAR   = "FEF3C7"; C_AMAR_T   = "92400E"
+    C_ZEBRA  = "F8FAFC"
+    BRANCO   = "FFFFFF"
+
+    def fill(hex_):  return PatternFill("solid", fgColor=hex_)
+    def font_(size=10, bold=False, color="1F2937", italic=False):
+        return Font(name="Calibri", size=size, bold=bold, color=color, italic=italic)
+    thin    = Side(style="thin", color="E5E7EB")
+    borda   = Border(left=thin, right=thin, top=thin, bottom=thin)
+    c_mid   = Alignment(horizontal="center", vertical="center")
+    c_left  = Alignment(horizontal="left",   vertical="center", wrap_text=True)
+    c_leftn = Alignment(horizontal="left",   vertical="center", wrap_text=False)
+
+    # ── Workbook ─────────────────────────────────────────────────────────────
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Ocorrências"
+    ws.sheet_view.showGridLines = False
+
+    # Larguras
+    widths = {"A":6,"B":30,"C":22,"D":14,"E":12,"F":48,"G":16,"H":14}
+    for col, w in widths.items():
+        ws.column_dimensions[col].width = w
+
+    # ── Linha 1 — Identidade Nexar ──────────────────────────────────────────
+    ws.row_dimensions[1].height = 52
+    ws.merge_cells("A1:H1")
+    c1 = ws["A1"]
+    c1.value     = "NEXAR QRQC"
+    c1.font      = Font(name="Calibri", bold=True, size=20, color=BRANCO)
+    c1.fill      = fill(C_NEXAR)
+    c1.alignment = c_mid
+
+    # Logo (se existir)
+    logo_path = os.path.join(app.root_path, "static", "assets", "img", "nexar_logo_clean.png")
+    if os.path.exists(logo_path):
+        try:
+            img = XLImage(logo_path)
+            img.height, img.width = 36, 36
+            ws.add_image(img, "A1")
+        except Exception:
+            pass
+
+    # ── Linha 2 — Subtítulo ─────────────────────────────────────────────────
+    ws.row_dimensions[2].height = 24
+    ws.merge_cells("A2:H2")
+    c2 = ws["A2"]
+    c2.value     = "Relatório de Ocorrências"
+    c2.font      = Font(name="Calibri", size=12, color="BFDBFE")
+    c2.fill      = fill(C_NEXAR)
+    c2.alignment = c_mid
+
+    # ── Linha 3 — Metadados ─────────────────────────────────────────────────
+    ws.row_dimensions[3].height = 18
+    ws.merge_cells("A3:H3")
+    now  = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M")
+    tags = []
+    if data_f:   tags.append(f"Data: {data_f}")
+    if tipo_f:   tags.append(f"Tipo: {tipo_f}")
+    if imp_f:    tags.append(f"Impacto: {imp_f}")
+    if status_f: tags.append(f"Status: {status_f}")
+    filtro_str = "  ·  Filtros: " + "  |  ".join(tags) if tags else ""
+    c3 = ws["A3"]
+    c3.value     = f"Exportado em {now}  ·  {len(filtradas)} registro(s){filtro_str}"
+    c3.font      = Font(name="Calibri", size=9, color="93C5FD", italic=True)
+    c3.fill      = fill(C_NEXAR)
+    c3.alignment = c_mid
+
+    # ── Linha 4 — Faixa separadora ──────────────────────────────────────────
+    ws.row_dimensions[4].height = 6
+    ws.merge_cells("A4:H4")
+    ws["A4"].fill = fill(C_LINHA)
+
+    # ── Linha 5 — Cabeçalho das colunas ─────────────────────────────────────
+    ws.row_dimensions[5].height = 28
+    headers = ["#", "Máquina", "Operador", "Tipo", "Impacto", "Descrição", "Data", "Status"]
+    for col_idx, (col, header) in enumerate(zip("ABCDEFGH", headers), 1):
+        c = ws[f"{col}5"]
+        c.value     = header
+        c.font      = Font(name="Calibri", bold=True, size=10, color=BRANCO)
+        c.fill      = fill(C_HEADER)
+        c.alignment = c_mid
+        c.border    = borda
+
+    ws.freeze_panes = "A6"
+
+    # ── Dados ────────────────────────────────────────────────────────────────
+    IMP_STYLE = {
+        "Alto":  (fill(C_VERM),  font_(color=C_VERM_T)),
+        "Médio": (fill(C_AMAR),  font_(color=C_AMAR_T)),
+        "Baixo": (fill(C_VERDE), font_(color=C_VERDE_T)),
+    }
+    ST_STYLE = {
+        "Resolvida": (fill(C_VERDE), font_(color=C_VERDE_T, bold=True)),
+        "Fechada":   (fill(C_VERDE), font_(color=C_VERDE_T, bold=True)),
+        "Aberta":    (fill(C_VERM),  font_(color=C_VERM_T,  bold=True)),
+    }
+
+    for i, r in enumerate(filtradas):
+        rn      = i + 6
+        ws.row_dimensions[rn].height = 20
+        zebra   = fill(C_ZEBRA) if i % 2 else None
+        st      = r["status"] or "Aberta"
+
+        data_fmt = ""
+        if r["data_ocorrencia"]:
+            d = r["data_ocorrencia"][:10].split("-")
+            data_fmt = f"{d[2]}/{d[1]}/{d[0]}"
+
+        valores = [r["id"], r["maquina_nome"], r["nome_operador"],
+                   r["tipo_ocorrencia"] or "—", r["nivel_impacto"] or "—",
+                   r["descricao"] or "—", data_fmt, st]
+
+        for col, valor in zip("ABCDEFGH", valores):
+            cell           = ws[f"{col}{rn}"]
+            cell.value     = valor
+            cell.font      = font_()
+            cell.border    = borda
+            cell.alignment = c_mid if col == "A" else (c_left if col == "F" else c_leftn)
+            if zebra:
+                cell.fill = zebra
+            if col == "E" and valor in IMP_STYLE:
+                cell.fill, cell.font = IMP_STYLE[valor]
+            elif col == "H" and st in ST_STYLE:
+                cell.fill, cell.font = ST_STYLE[st]
+
+    # ── Enviar ───────────────────────────────────────────────────────────────
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"nexar_qrqc_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=fname,
+    )
+
+
+@app.route("/ocorrencia/<int:oc_id>/pdf")
+@login_required
+def ocorrencia_pdf(oc_id: int):
+    """Gera e retorna um PDF estilizado da ocorrência."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        HRFlowable, KeepTogether, Image as RLImage,
+    )
+    from reportlab.platypus.flowables import Flowable
+    from io import BytesIO
+    import json as _json
+    import datetime as dt_mod
+
+    # ── Busca dados ──────────────────────────────────────────────────────────
+    conn = get_db()
+    row = conn.execute(
+        "SELECT o.*, COALESCE(m.nome,'—') AS maquina_nome "
+        "FROM ocorrencias o LEFT JOIN maquinas m ON m.id = o.maquina_id "
+        "WHERE o.id = ?", (oc_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return "Ocorrência não encontrada.", 404
+
+    # ── Constantes de cor ────────────────────────────────────────────────────
+    NAVY    = colors.HexColor("#1E3A8A")
+    BLUE    = colors.HexColor("#1D4ED8")
+    LBLUE   = colors.HexColor("#DBEAFE")
+    XLBLUE  = colors.HexColor("#EFF6FF")
+    C_RED   = colors.HexColor("#EF4444")
+    C_REDBG = colors.HexColor("#FEE2E2")
+    C_AMB   = colors.HexColor("#F59E0B")
+    C_AMBBG = colors.HexColor("#FEF3C7")
+    C_GRN   = colors.HexColor("#10B981")
+    C_GRNBG = colors.HexColor("#D1FAE5")
+    C_GRAY  = colors.HexColor("#6B7280")
+    C_DARK  = colors.HexColor("#111827")
+    C_BG    = colors.HexColor("#F8FAFC")
+    WHITE   = colors.white
+
+    imp = row["nivel_impacto"] or "Baixo"
+    imp_color = C_RED if imp == "Alto" else (C_AMB if imp == "Médio" else C_GRN)
+    imp_bg    = C_REDBG if imp == "Alto" else (C_AMBBG if imp == "Médio" else C_GRNBG)
+    imp_icon  = "🔴" if imp == "Alto" else ("🟡" if imp == "Médio" else "🟢")
+
+    # ── Estilos ──────────────────────────────────────────────────────────────
+    base = getSampleStyleSheet()
+
+    def sty(name, parent="Normal", **kw):
+        return ParagraphStyle(name, parent=base[parent], **kw)
+
+    s_title   = sty("t", fontName="Helvetica-Bold", fontSize=22,
+                    textColor=WHITE, alignment=TA_LEFT, spaceAfter=0)
+    s_sub     = sty("s", fontName="Helvetica", fontSize=10,
+                    textColor=colors.HexColor("#93C5FD"), alignment=TA_LEFT)
+    s_label   = sty("lb", fontName="Helvetica-Bold", fontSize=8,
+                    textColor=C_GRAY, spaceAfter=2)
+    s_value   = sty("vl", fontName="Helvetica", fontSize=11,
+                    textColor=C_DARK, spaceAfter=0)
+    s_sect    = sty("sc", fontName="Helvetica-Bold", fontSize=9,
+                    textColor=BLUE, spaceBefore=14, spaceAfter=6)
+    s_body    = sty("bd", fontName="Helvetica", fontSize=10,
+                    textColor=C_DARK, leading=16, spaceAfter=0)
+    s_diag    = sty("dg", fontName="Helvetica", fontSize=10,
+                    textColor=C_DARK, leading=17, spaceAfter=0)
+    s_ann_t   = sty("at", fontName="Helvetica-Bold", fontSize=9,
+                    textColor=C_DARK, spaceAfter=1)
+    s_ann_d   = sty("ad", fontName="Helvetica", fontSize=9,
+                    textColor=C_GRAY, leading=13, spaceAfter=0)
+    s_footer  = sty("ft", fontName="Helvetica", fontSize=8,
+                    textColor=C_GRAY, alignment=TA_CENTER)
+
+    # Estilos de caixas de texto que podem quebrar entre páginas
+    # (Paragraph com backColor pode ser dividido pelo reportlab — Table não)
+    def box_style(name, bg, border, font_size=10, leading=16):
+        return sty(name, fontName="Helvetica", fontSize=font_size,
+                   textColor=C_DARK, leading=leading,
+                   backColor=bg,
+                   borderPadding=(10, 14, 10, 14),
+                   borderColor=border, borderWidth=0.5,
+                   spaceAfter=8)
+
+    # ── Helpers de data ──────────────────────────────────────────────────────
+    def fmt_data(s):
+        if not s: return "—"
+        try:
+            return dt_mod.datetime.fromisoformat(s[:16]).strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            return s[:16]
+
+    # ── Flowable de cabeçalho (gradiente) ───────────────────────────────────
+    class HeaderBlock(Flowable):
+        def __init__(self, oc_id, data_str, w):
+            Flowable.__init__(self)
+            self.oc_id = oc_id
+            self.data_str = data_str
+            self.width = w
+            self.height = 72
+
+        def wrap(self, availWidth, availHeight):
+            return (self.width, self.height)
+
+        def draw(self):
+            c = self.canv
+            # Fundo degradê manual (2 retângulos sobrepostos)
+            c.setFillColor(NAVY)
+            c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
+            # Faixa inferior mais clara
+            c.setFillColor(BLUE)
+            c.rect(0, 0, self.width, 22, fill=1, stroke=0)
+            # Texto principal
+            c.setFillColor(WHITE)
+            c.setFont("Helvetica-Bold", 22)
+            c.drawString(20, 42, "NEXAR QRQC")
+            c.setFont("Helvetica", 10)
+            c.setFillColor(colors.HexColor("#93C5FD"))
+            c.drawString(20, 28, "Relatório de Ocorrência")
+            # ID + data (direita)
+            c.setFillColor(WHITE)
+            c.setFont("Helvetica-Bold", 13)
+            c.drawRightString(self.width - 20, 46, f"#  {self.oc_id}")
+            c.setFont("Helvetica", 9)
+            c.setFillColor(colors.HexColor("#BFDBFE"))
+            c.drawRightString(self.width - 20, 31, self.data_str)
+            # Faixa acento impacto
+            c.setFillColor(imp_color)
+            c.rect(0, self.height - 4, self.width, 4, fill=1, stroke=0)
+
+    # ── Linha separadora com título ──────────────────────────────────────────
+    def section_header(texto, icon=""):
+        return KeepTogether([
+            HRFlowable(width="100%", thickness=1, color=LBLUE, spaceAfter=4),
+            Paragraph(f"<b>{texto}</b>",
+                      sty("sh", parent="Normal", fontName="Helvetica-Bold", fontSize=10,
+                          textColor=BLUE, spaceBefore=0, spaceAfter=6)),
+        ])
+
+    # ── Info grid ────────────────────────────────────────────────────────────
+    def info_cell(label, value, color=None):
+        val_color = color if color else C_DARK
+        return [
+            Paragraph(label.upper(), s_label),
+            Paragraph(f"<font color='#{val_color.hexval()[2:]}'><b>{value}</b></font>", s_value)
+        ]
+
+    data_fmt = fmt_data(row["data_ocorrencia"])
+    status   = row["status"] or "Aberta"
+    st_color = C_GRN if status in ("Resolvida", "Fechada") else (C_AMB if status == "Em andamento" else BLUE)
+
+    info_data = [
+        [info_cell("Máquina",   row["maquina_nome"]),     info_cell("Operador",    row["nome_operador"] or "—")],
+        [info_cell("Setor",     row["setor_area"] or "—"),info_cell("Data",         data_fmt)],
+        [info_cell("Tipo",      row["tipo_ocorrencia"] or "—"),
+         info_cell("Recorrente",row["problema_recorrente"] or "—")],
+        [info_cell("Impacto",   f"{imp_icon} {imp}", imp_color),
+         info_cell("Status",    status, st_color)],
+    ]
+
+    col_w = (A4[0] - 40*mm) / 2
+    info_table = Table(
+        [[cell for pair in row_pair for cell in pair] for row_pair in info_data],
+        colWidths=[col_w * 0.38, col_w * 0.62, col_w * 0.38, col_w * 0.62],
+        hAlign="LEFT",
+    )
+    info_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), C_BG),
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, C_BG]),
+        ("TOPPADDING",    (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+        ("LINEBELOW",     (0, 0), (-1, -2), 0.5, LBLUE),
+        ("ROUNDEDCORNERS",(0, 0), (-1, -1), 4),
+    ]))
+
+    # ── Texto limpo (remove marcações básicas) ───────────────────────────────
+    def limpar(texto):
+        import re
+        t = texto or ""
+        t = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', t)
+        t = re.sub(r'\*(.+?)\*', r'<i>\1</i>', t)
+        return t
+
+    # ── Monta documento ──────────────────────────────────────────────────────
+    buf = BytesIO()
+    pw, ph = A4
+    margin = 20 * mm
+
+    def build_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(NAVY)
+        canvas.rect(0, 0, pw, 14*mm, fill=1, stroke=0)
+        canvas.setFillColor(WHITE)
+        canvas.setFont("Helvetica", 8)
+        now_str = dt_mod.datetime.now().strftime("%d/%m/%Y %H:%M")
+        canvas.drawString(margin, 5*mm, f"Nexar QRQC  ·  Gerado em {now_str}")
+        canvas.drawRightString(pw - margin, 5*mm, f"Página {doc.page}")
+        canvas.setFillColor(imp_color)
+        canvas.rect(0, 13.5*mm, pw, 1.5*mm, fill=1, stroke=0)
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=margin, rightMargin=margin,
+        topMargin=margin, bottomMargin=18*mm,
+        title=f"Ocorrência #{oc_id} — Nexar QRQC",
+        author="Nexar QRQC",
+    )
+
+    story = []
+
+    # Cabeçalho
+    story.append(HeaderBlock(oc_id, data_fmt, pw - 2 * margin))
+    story.append(Spacer(1, 10))
+
+    # Info grid
+    story.append(info_table)
+    story.append(Spacer(1, 10))
+
+    # Descrição
+    if row["descricao"]:
+        story.append(section_header("Descrição do Problema", ""))
+        story.append(Paragraph(limpar(row["descricao"]),
+                               box_style("desc_box", XLBLUE, BLUE)))
+
+    # Detalhamento técnico
+    if row["detalhamento_tecnico"]:
+        story.append(section_header("Detalhamento Técnico", ""))
+        story.append(Paragraph(limpar(row["detalhamento_tecnico"]),
+                               box_style("det_box", C_BG, C_GRAY)))
+
+    # Diagnóstico IA
+    if row["resposta_ia"]:
+        story.append(section_header("Diagnóstico Nexar IA", ""))
+        story.append(Paragraph(limpar(row["resposta_ia"]),
+                               box_style("diag_box", colors.HexColor("#F0F9FF"),
+                                         BLUE, leading=17)))
+        story.append(Spacer(1, 4))
+
+    # Diagrama
+    diag_path = (row["diagrama_url"] or "").lstrip("/")
+    if diag_path:
+        abs_diag = os.path.join(app.root_path, diag_path)
+        ext_diag = os.path.splitext(diag_path)[1].lower()
+        if os.path.exists(abs_diag) and ext_diag in (".png", ".jpg", ".jpeg"):
+            story.append(section_header("Diagrama Técnico", ""))
+            max_w = pw - 2 * margin - 8
+            max_h = 180 * mm
+            try:
+                from PIL import Image as PILImg
+                with PILImg.open(abs_diag) as pil:
+                    iw, ih = pil.size
+                ratio = iw / ih
+                diag_w = min(max_w, max_h * ratio)
+                diag_h = diag_w / ratio
+                diag_img = RLImage(abs_diag, width=diag_w, height=diag_h)
+                story.append(Table(
+                    [[diag_img]],
+                    colWidths=[pw - 2 * margin],
+                    style=[("ALIGN",  (0,0),(-1,-1),"CENTER"),
+                           ("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#0D1117")),
+                           ("TOPPADDING",(0,0),(-1,-1),8),
+                           ("BOTTOMPADDING",(0,0),(-1,-1),8),
+                           ("ROUNDEDCORNERS",(0,0),(-1,-1),4)],
+                ))
+                story.append(Spacer(1, 8))
+            except Exception as _img_err:
+                logger.warning(f"[pdf] falha ao embeddar diagrama {abs_diag}: {_img_err}")
+
+    # Anotações IA
+    anotacoes_raw = row["anotacoes_ia"] or "[]"
+    try:
+        anots = _json.loads(anotacoes_raw)
+    except Exception:
+        anots = []
+    if anots:
+        story.append(section_header(f"Marcações da IA  ({len(anots)} ponto(s))", ""))
+        ann_rows = []
+        for i, a in enumerate(anots):
+            cor_hex = "#EF4444" if a.get("tipo") == "critico" \
+                      else ("#F59E0B" if a.get("tipo") == "atencao" else "#3B82F6")
+            cor = colors.HexColor(cor_hex)
+            badge = Table(
+                [[Paragraph(f"<font color='white'><b>{i+1}</b></font>",
+                            sty("b", fontName="Helvetica-Bold", fontSize=9,
+                                textColor=WHITE, alignment=TA_CENTER))]],
+                colWidths=[18], rowHeights=[18],
+                style=[("BACKGROUND",(0,0),(-1,-1),cor),
+                       ("ALIGN",(0,0),(-1,-1),"CENTER"),
+                       ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+                       ("ROUNDEDCORNERS",(0,0),(-1,-1),9)],
+            )
+            txt = Table(
+                [[Paragraph(f"<b>{a.get('titulo','')}</b>", s_ann_t)],
+                 [Paragraph(a.get('descricao',''), s_ann_d)]],
+                colWidths=[pw - 2 * margin - 40],
+                style=[("TOPPADDING",(0,0),(-1,-1),0),
+                       ("BOTTOMPADDING",(0,0),(-1,-1),0),
+                       ("LEFTPADDING",(0,0),(-1,-1),0),
+                       ("RIGHTPADDING",(0,0),(-1,-1),0)],
+            )
+            ann_rows.append(Table(
+                [[badge, txt]],
+                colWidths=[26, pw - 2 * margin - 36],
+                style=[("BACKGROUND",(0,0),(-1,-1),C_BG),
+                       ("VALIGN",(0,0),(-1,-1),"TOP"),
+                       ("LEFTPADDING",(0,0),(-1,-1),8),
+                       ("RIGHTPADDING",(0,0),(-1,-1),8),
+                       ("TOPPADDING",(0,0),(-1,-1),8),
+                       ("BOTTOMPADDING",(0,0),(-1,-1),8),
+                       ("LINEAFTER",(0,0),(0,-1),3,cor),
+                       ("LINEBELOW",(0,0),(-1,-2),0.5,LBLUE),
+                       ("ROUNDEDCORNERS",(0,0),(-1,-1),4)],
+            ))
+            ann_rows.append(Spacer(1, 4))
+        story.extend(ann_rows)
+
+    doc.build(story, onFirstPage=build_footer, onLaterPages=build_footer)
+    buf.seek(0)
+    fname = f"ocorrencia_{oc_id}_{dt_mod.datetime.now().strftime('%Y%m%d')}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
 
 @app.route("/ocorrencias/<int:ocorrencia_id>/resolver", methods=["POST"])
@@ -1022,7 +1727,8 @@ def CadastroOcorrencia():
     conn = get_db()
     maquinas = conn.execute("SELECT id, nome, setor FROM maquinas ORDER BY nome").fetchall()
     conn.close()
-    return render_template("CadastroOcorrencia.html", maquinas=maquinas)
+    preselect = request.args.get("maquina", type=int)
+    return render_template("CadastroOcorrencia.html", maquinas=maquinas, preselect_maquina=preselect)
 
 
 @app.route("/registrar_ocorrencia", methods=["POST"])
@@ -1065,7 +1771,8 @@ def registrar_ocorrencia():
             conn = get_db()
             maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
             diagrama = conn.execute(
-                "SELECT * FROM diagramas WHERE maquina_id = ? AND tipo != 'PDF' LIMIT 1",
+                "SELECT * FROM diagramas WHERE maquina_id = ? "
+                "ORDER BY CASE tipo WHEN 'PDF' THEN 1 ELSE 0 END LIMIT 1",
                 (maquina_id,),
             ).fetchone()
             historico_maquina = conn.execute(
@@ -1175,8 +1882,17 @@ Use linguagem técnica em português. Foque em ações práticas imediatas. Seja
 def maquinas():
     conn = get_db()
     lista = conn.execute("SELECT * FROM maquinas ORDER BY nome").fetchall()
+    rows = conn.execute("""
+        SELECT maquina_id,
+               COUNT(*) AS total,
+               SUM(CASE WHEN status = 'Aberta' THEN 1 ELSE 0 END) AS abertas,
+               MAX(data_registro) AS ultima
+        FROM ocorrencias WHERE maquina_id IS NOT NULL
+        GROUP BY maquina_id
+    """).fetchall()
     conn.close()
-    return render_template("maquinas.html", maquinas=lista)
+    stats = {r["maquina_id"]: r for r in rows}
+    return render_template("maquinas.html", maquinas=lista, stats=stats)
 
 
 @app.route("/maquinas/cadastro", methods=["GET", "POST"])
@@ -1207,15 +1923,21 @@ def cadastro_maquina():
             pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
             os.makedirs(pasta, exist_ok=True)
             for arquivo in arquivos:
-                if arquivo and allowed_file(arquivo.filename):
-                    nome_arquivo = secure_filename(arquivo.filename)
-                    caminho = os.path.join(pasta, nome_arquivo)
-                    arquivo.save(caminho)
-                    tipo = nome_arquivo.rsplit(".", 1)[-1].upper()
-                    conn.execute(
-                        "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
-                        (maquina_id, nome_arquivo, caminho, tipo),
-                    )
+                if not arquivo or not allowed_file(arquivo.filename):
+                    continue
+                ext = arquivo.filename.rsplit(".", 1)[-1].lower()
+                if not content_is_valid(arquivo.stream, ext):
+                    logger.warning(f"[upload] conteúdo inválido para extensão .{ext}: {arquivo.filename}")
+                    flash(f"Arquivo '{arquivo.filename}' rejeitado: conteúdo não corresponde à extensão.", "danger")
+                    continue
+                nome_arquivo = secure_filename(arquivo.filename)
+                caminho = os.path.join(pasta, nome_arquivo)
+                arquivo.save(caminho)
+                tipo = ext.upper()
+                conn.execute(
+                    "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
+                    (maquina_id, nome_arquivo, caminho, tipo),
+                )
             conn.commit()
             conn.close()
             flash(f"Máquina '{nome}' cadastrada com sucesso.", "success")
@@ -1225,6 +1947,63 @@ def cadastro_maquina():
         return redirect(url_for("maquinas"))
 
     return render_template("cadastro_maquina.html")
+
+
+@app.route("/maquinas/<int:maquina_id>/editar", methods=["GET", "POST"])
+@login_required
+def editar_maquina(maquina_id: int):
+    conn = get_db()
+    maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    if not maquina:
+        conn.close()
+        flash("Máquina não encontrada.", "danger")
+        return redirect(url_for("maquinas"))
+
+    if request.method == "POST":
+        nome       = request.form.get("nome", "").strip()
+        modelo     = request.form.get("modelo", "").strip()
+        fabricante = request.form.get("fabricante", "").strip()
+        ano        = request.form.get("ano", "").strip()
+        setor      = request.form.get("setor", "").strip()
+        descricao  = request.form.get("descricao", "").strip()
+
+        if not nome:
+            flash("O nome da máquina é obrigatório.", "danger")
+            conn.close()
+            return redirect(url_for("editar_maquina", maquina_id=maquina_id))
+
+        try:
+            conn.execute(
+                "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=? WHERE id=?",
+                (nome, modelo, fabricante, ano, setor, descricao, maquina_id),
+            )
+            arquivos = request.files.getlist("diagramas")
+            pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
+            os.makedirs(pasta, exist_ok=True)
+            for arquivo in arquivos:
+                if not arquivo or not allowed_file(arquivo.filename):
+                    continue
+                ext = arquivo.filename.rsplit(".", 1)[-1].lower()
+                if not content_is_valid(arquivo.stream, ext):
+                    flash(f"Arquivo '{arquivo.filename}' rejeitado: conteúdo inválido.", "danger")
+                    continue
+                nome_arquivo = secure_filename(arquivo.filename)
+                caminho = os.path.join(pasta, nome_arquivo)
+                arquivo.save(caminho)
+                conn.execute(
+                    "INSERT OR IGNORE INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
+                    (maquina_id, nome_arquivo, caminho, ext.upper()),
+                )
+            conn.commit()
+            flash(f"Máquina '{nome}' atualizada com sucesso.", "success")
+        except Exception as e:
+            logger.exception("Erro ao editar máquina")
+            flash(f"Erro ao atualizar: {e}", "danger")
+        conn.close()
+        return redirect(url_for("maquinas"))
+
+    conn.close()
+    return render_template("cadastro_maquina.html", maquina=maquina)
 
 
 @app.route("/enviar", methods=["POST"])
@@ -1259,6 +2038,13 @@ def enviar():
         os.makedirs(ticket_dir, exist_ok=True)
         for f in arquivos:
             if not f or not f.filename:
+                continue
+            if not allowed_file(f.filename):
+                logger.warning(f"[suporte] extensão não permitida: {f.filename}")
+                continue
+            ext = f.filename.rsplit(".", 1)[-1].lower()
+            if not content_is_valid(f.stream, ext):
+                logger.warning(f"[suporte] conteúdo inválido para extensão .{ext}: {f.filename}")
                 continue
             fname = secure_filename(f.filename)
             if not fname:

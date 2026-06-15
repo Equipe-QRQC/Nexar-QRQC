@@ -493,17 +493,81 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(10,22,40,.75);
-  backdrop-filter: blur(4px);
+  background: rgba(10,22,40,.82);
+  backdrop-filter: blur(6px);
   z-index: 9999;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 0;
 }
 
 .loading-overlay.show { display: flex; }
 
+/* card central */
+.loading-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 36px 40px;
+  width: min(420px, 90vw);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* ícone animado */
+.loading-icon {
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: var(--primary-light);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 18px;
+}
+.loading-icon i { font-size: 24px; color: var(--primary); }
+
+.loading-title {
+  font-size: 16px; font-weight: 700;
+  color: var(--text); margin-bottom: 4px; text-align: center;
+}
+.loading-subtitle {
+  font-size: 12px; color: var(--text-muted);
+  margin-bottom: 28px; text-align: center;
+}
+
+/* passos */
+.loading-steps {
+  width: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 24px;
+}
+.loading-step {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 13px; color: var(--text-muted);
+  transition: color .3s;
+}
+.loading-step.done   { color: var(--success); }
+.loading-step.active { color: var(--text); font-weight: 600; }
+
+.step-icon {
+  width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  background: var(--bg-page);
+  border: 2px solid var(--border);
+  transition: all .3s;
+}
+.loading-step.done   .step-icon { background: var(--success); border-color: var(--success); color: #fff; }
+.loading-step.active .step-icon { border-color: var(--primary); color: var(--primary); }
+
+/* cronômetro */
+.loading-timer {
+  font-size: 12px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* spinner mantido para compatibilidade */
 .spinner {
   width: 48px; height: 48px;
   border: 4px solid rgba(255,255,255,.2);

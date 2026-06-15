@@ -7,9 +7,12 @@
     <i class="fas fa-history"></i> {{ t.historico_titulo }}
   </div>
   <div class="topbar-actions">
-    <span style="font-size:13px; color:var(--text-muted);">
+    <span style="font-size:13px; color:var(--text-muted);" id="contadorRegistros">
       {{ ocorrencias|length }} registro(s)
     </span>
+    <button onclick="exportarExcel()" class="btn btn-outline btn-sm">
+      <i class="fas fa-file-excel"></i> {{ t.exportar_excel }}
+    </button>
   </div>
 </div>
 
@@ -18,36 +21,45 @@
   <!-- Filtros -->
   <div class="card" style="margin-bottom:16px;">
     <div class="card-body" style="padding:16px;">
-      <div class="filter-grid">
+      <div class="filter-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
         <div>
-          <label class="form-label" style="font-size:12px;">Pesquisar</label>
+          <label class="form-label" style="font-size:12px;">{{ t.pesquisar }}</label>
           <div style="position:relative;">
             <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-light); font-size:13px;"></i>
             <input id="searchInput" type="text" class="form-control" placeholder="{{ t.pesquisar }}"
-                   style="padding-left:36px;" oninput="filterTable()" />
+                   style="padding-left:36px;" oninput="filtrar()" />
           </div>
         </div>
         <div>
-          <label class="form-label" style="font-size:12px;">Data</label>
-          <input id="dateInput" type="date" class="form-control" onchange="filterTable()" />
+          <label class="form-label" style="font-size:12px;">{{ t.data }}</label>
+          <input id="dateInput" type="date" class="form-control" onchange="filtrar()" />
         </div>
         <div>
-          <label class="form-label" style="font-size:12px;">Tipo</label>
-          <select id="tipoSelect" class="form-select" onchange="filterTable()">
-            <option value="">Todos</option>
-            <option value="Qualidade">Qualidade</option>
-            <option value="Segurança">Segurança</option>
-            <option value="Produção">Produção</option>
-            <option value="Manutenção">Manutenção</option>
+          <label class="form-label" style="font-size:12px;">{{ t.tipo }}</label>
+          <select id="tipoSelect" class="form-select" onchange="filtrar()">
+            <option value="">{{ t.todos }}</option>
+            <option value="Qualidade">{{ t.qualidade }}</option>
+            <option value="Segurança">{{ t.seguranca }}</option>
+            <option value="Produção">{{ t.producao }}</option>
+            <option value="Manutenção">{{ t.manutencao }}</option>
           </select>
         </div>
         <div>
-          <label class="form-label" style="font-size:12px;">Impacto</label>
-          <select id="impactoSelect" class="form-select" onchange="filterTable()">
-            <option value="">Todos</option>
-            <option value="Alto">Alto</option>
-            <option value="Médio">Médio</option>
-            <option value="Baixo">Baixo</option>
+          <label class="form-label" style="font-size:12px;">{{ t.impacto }}</label>
+          <select id="impactoSelect" class="form-select" onchange="filtrar()">
+            <option value="">{{ t.todos }}</option>
+            <option value="Alto">{{ t.alto }}</option>
+            <option value="Médio">{{ t.medio }}</option>
+            <option value="Baixo">{{ t.baixo }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" style="font-size:12px;">{{ t.status }}</label>
+          <select id="statusSelect" class="form-select" onchange="filtrar()">
+            <option value="">{{ t.todos }}</option>
+            <option value="Aberta">{{ t.aberta }}</option>
+            <option value="Resolvida">{{ t.resolvida }}</option>
+            <option value="Fechada">{{ t.fechada }}</option>
           </select>
         </div>
       </div>
@@ -61,25 +73,25 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Máquina</th>
-            <th>Operador</th>
-            <th>Tipo</th>
-            <th>Impacto</th>
-            <th>Descrição</th>
-            <th>Data</th>
-            <th>Status</th>
+            <th>{{ t.maquina }}</th>
+            <th>{{ t.operador }}</th>
+            <th>{{ t.tipo }}</th>
+            <th>{{ t.impacto }}</th>
+            <th>{{ t.descricao_col }}</th>
+            <th>{{ t.data }}</th>
+            <th>{{ t.status }}</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="tableBody">
           {% for o in ocorrencias %}
-          <tr data-tipo="{{ o.tipo_ocorrencia }}"
+          <tr data-id="{{ o.id }}"
+              data-tipo="{{ o.tipo_ocorrencia }}"
               data-impacto="{{ o.nivel_impacto }}"
+              data-status="{{ o.status or 'Aberta' }}"
               data-data="{{ o.data_ocorrencia[:10] if o.data_ocorrencia else '' }}">
             <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
-            <td>
-              <span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span>
-            </td>
+            <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
             <td style="font-size:13px;">{{ o.nome_operador }}</td>
             <td>
               {% if o.tipo_ocorrencia == 'Qualidade' %}
@@ -109,8 +121,8 @@
                 {{ o.data_ocorrencia[:10].split('-')|reverse|join('/') }}
               {% endif %}
             </td>
-            <td>
-              {% if o.status == 'Resolvida' or o.status == 'Fechada' %}
+            <td class="status-cell">
+              {% if o.status in ('Resolvida', 'Fechada') %}
                 <span class="badge badge-success">{{ o.status }}</span>
               {% elif o.status == 'Em andamento' %}
                 <span class="badge badge-warning">{{ o.status }}</span>
@@ -125,112 +137,243 @@
                       data-operador="{{ o.nome_operador | e }}"
                       data-tipo="{{ o.tipo_ocorrencia | e }}"
                       data-impacto="{{ o.nivel_impacto | e }}"
+                      data-status="{{ o.status or 'Aberta' }}"
                       data-data="{{ o.data_ocorrencia | e }}"
                       data-descricao="{{ (o.descricao or '') | e }}"
                       data-resposta="{{ (o.resposta_ia or '') | e }}"
                       data-diagrama="{{ (o.diagrama_url or '') | e }}"
                       data-anotacoes="{{ (o.anotacoes_ia or '') | e }}"
-                      title="Ver detalhes">
+                      title="{{ t.ver_detalhes }}">
                 <i class="fas fa-eye" style="color:var(--primary);"></i>
               </button>
             </td>
           </tr>
           {% else %}
-          <tr>
+          <tr id="linhaVazia">
             <td colspan="9" style="text-align:center; padding:48px; color:var(--text-muted);">
               <i class="fas fa-inbox" style="font-size:32px; opacity:.3; display:block; margin-bottom:12px;"></i>
-              Nenhuma ocorrência registrada ainda.
+              {{ t.sem_registros }}
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+
+    <!-- Paginação -->
+    <div id="paginacaoWrap" style="
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; border-top:1px solid var(--border);
+      font-size:13px; color:var(--text-muted);
+    ">
+      <span id="paginacaoInfo"></span>
+      <div id="paginacaoBtns" style="display:flex; gap:4px;"></div>
+    </div>
   </div>
 
 </div>
 
-<!-- Modal de Detalhes -->
+<!-- ── Modal de Detalhes ──────────────────────────────────────────── -->
 <div id="modalOverlay" style="
   display:none; position:fixed; inset:0;
-  background:rgba(0,0,0,.5); backdrop-filter:blur(4px);
-  z-index:500; align-items:center; justify-content:center; padding:12px;
+  background:rgba(0,0,0,.55); backdrop-filter:blur(4px);
+  z-index:500; align-items:center; justify-content:center; padding:16px;
 ">
-  <div style="
-    background:var(--bg-card); border-radius:var(--radius-lg);
-    width:100%; max-width:780px; max-height:92vh;
-    overflow:hidden; display:flex; flex-direction:column;
-    box-shadow:var(--shadow-lg);
-  ">
-    <div style="
-      padding:18px 24px; border-bottom:1px solid var(--border);
-      display:flex; align-items:center; justify-content:space-between;
-      background:var(--sidebar-bg);
-    ">
-      <h5 style="color:#fff; font-size:15px; font-weight:600; margin:0;">
-        <i class="fas fa-file-medical-alt" style="color:var(--primary); margin-right:8px;"></i>
-        Detalhes da Ocorrência #<span id="modalId"></span>
-      </h5>
-      <button onclick="closeModal()" style="background:none; border:none; color:rgba(255,255,255,.5); cursor:pointer; font-size:18px;">
+  <div class="modal-box">
+
+    <!-- Accent bar (cor dinâmica por impacto) -->
+    <div id="modalAccentBar" style="height:3px; flex-shrink:0;"></div>
+
+    <!-- Cabeçalho -->
+    <div class="modal-hdr">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+          <span style="font-size:12px; color:var(--text-muted); font-weight:500;">Ocorrência</span>
+          <strong style="font-size:16px; color:var(--text);">#<span id="modalId"></span></strong>
+          <span id="modalStatusBadge"></span>
+        </div>
+        <div id="modalChipsRow" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;"></div>
+      </div>
+      <button onclick="closeModal()" class="modal-close-btn" title="Fechar">
         <i class="fas fa-times"></i>
       </button>
     </div>
 
-    <div class="modal-scroll-body" style="overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:16px;">
+    <!-- Corpo: duas colunas -->
+    <div class="modal-body-2col">
 
-      <div class="modal-info-grid">
-        <div style="background:var(--bg-page); padding:12px; border-radius:var(--radius-sm);">
-          <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-bottom:3px;">MÁQUINA</div>
-          <div style="font-size:14px; font-weight:600;" id="modalMaquina"></div>
+      <!-- Esquerda: descrição + diagrama -->
+      <div class="modal-col modal-col-left">
+
+        <div>
+          <div class="modal-section-label">
+            <i class="fas fa-comment-dots"></i> {{ t.descricao_col }}
+          </div>
+          <div id="modalDescricao" class="modal-text-block"></div>
         </div>
-        <div style="background:var(--bg-page); padding:12px; border-radius:var(--radius-sm);">
-          <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-bottom:3px;">OPERADOR</div>
-          <div style="font-size:14px; font-weight:600;" id="modalOperador"></div>
+
+        <div id="modalDiagramaWrap" style="display:none;">
+          <div class="modal-section-label" style="justify-content:space-between;">
+            <span><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
+            <span id="modalAnotacoesCount" style="display:none; font-size:11px; color:var(--primary); font-weight:600; align-items:center; gap:4px;">
+              <i class="fas fa-map-marker-alt"></i> <span id="modalAnotacoesNum">0</span> {{ t.marcacoes_ia }}
+            </span>
+          </div>
+          <div id="modalDiagWrap" style="position:relative; display:inline-block; max-width:100%;
+               background:#1a1a2e; border-radius:var(--radius-sm); padding:8px; margin-bottom:10px;">
+            <img id="modalDiagrama" src="" alt="Diagrama"
+                 style="max-width:100%; max-height:280px; object-fit:contain; display:block; border-radius:var(--radius-sm);" />
+            <div id="modalAnnotationLayer" style="position:absolute; inset:8px; pointer-events:none;"></div>
+          </div>
+          <div id="modalAnotacoesList" style="display:none; flex-direction:column; gap:4px;"></div>
         </div>
-        <div style="background:var(--bg-page); padding:12px; border-radius:var(--radius-sm);">
-          <div style="font-size:11px; color:var(--text-muted); font-weight:600; margin-bottom:3px;">DATA</div>
-          <div style="font-size:14px; font-weight:600;" id="modalData"></div>
-        </div>
+
       </div>
 
-      <div>
-        <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">Descrição</div>
-        <div id="modalDescricao" style="background:var(--bg-page); padding:14px; border-radius:var(--radius-sm); font-size:14px; line-height:1.6;"></div>
-      </div>
-
-      <div>
-        <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">
-          Diagnóstico da IA
+      <!-- Direita: diagnóstico IA -->
+      <div class="modal-col modal-col-right">
+        <div class="modal-section-label">
+          <i class="fas fa-robot"></i> {{ t.diag_ia }}
         </div>
-        <div id="modalResposta" style="
-          background:var(--bg-page); padding:14px; border-radius:var(--radius-sm);
-          font-size:13px; line-height:1.7; max-height:320px; overflow-y:auto;
-          border-left:3px solid var(--primary);
-          white-space:pre-wrap; word-wrap:break-word;
-        "></div>
-      </div>
-
-      <div id="modalDiagramaWrap" style="display:none;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <div style="font-size:12px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.5px;">Diagrama</div>
-          <span id="modalAnotacoesCount" style="display:none; font-size:11px; color:var(--primary); font-weight:600;">
-            <i class="fas fa-map-marker-alt"></i> <span id="modalAnotacoesNum">0</span> anotação(ões) IA
-          </span>
-        </div>
-        <div id="modalDiagWrap" style="position:relative; display:inline-block; max-width:100%; background:#1a1a2e; border-radius:var(--radius-sm); padding:8px;">
-          <img id="modalDiagrama" src="" alt="Diagrama" style="max-width:100%; max-height:380px; object-fit:contain; display:block; border-radius:var(--radius-sm);" />
-          <div id="modalAnnotationLayer" style="position:absolute; inset:8px; pointer-events:none;"></div>
-        </div>
-        <div id="modalAnotacoesList" style="margin-top:8px; display:none; flex-direction:column; gap:4px;"></div>
+        <div id="modalResposta" class="modal-diagnosis"></div>
       </div>
 
     </div>
+
+    <!-- Rodapé -->
+    <div class="modal-ftr">
+      <button onclick="closeModal()" class="btn btn-outline btn-sm">{{ t.fechar }}</button>
+      <a id="modalPdfBtn" href="#" target="_blank"
+         class="btn btn-outline btn-sm" style="color:#EF4444; border-color:#FECACA;">
+        <i class="fas fa-file-pdf"></i> Baixar PDF
+      </a>
+      <button id="modalResolverBtn" class="btn btn-sm" onclick="resolverOcorrencia()"
+              style="background:var(--success); color:#fff; border:none; display:none;">
+        <i class="fas fa-check-circle"></i> {{ t.marcar_resolvida }}
+      </button>
+    </div>
+
   </div>
 </div>
 
 <style>
-  @media (max-width: 767px) {
-    .modal-scroll-body { padding: 14px !important; gap: 12px !important; }
+  /* ── Modal ────────────────────────────────────────────────── */
+  .modal-box {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 880px;
+    max-height: 92vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0,0,0,.3);
+  }
+
+  .modal-hdr {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .modal-close-btn {
+    width: 30px; height: 30px;
+    background: none; border: none;
+    color: var(--text-muted);
+    cursor: pointer; font-size: 14px;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .modal-close-btn:hover { background: var(--bg-page); color: var(--text); }
+
+  /* Info chips no cabeçalho */
+  .modal-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: var(--radius-full);
+    font-size: 12px; font-weight: 500;
+    background: var(--bg-page); color: var(--text);
+    border: 1px solid var(--border);
+    white-space: nowrap; max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .modal-chip i { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+
+  /* Corpo duas colunas */
+  .modal-body-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .modal-col {
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .modal-col-left { border-right: 1px solid var(--border); }
+
+  .modal-section-label {
+    font-size: 11px; font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .6px;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .modal-text-block {
+    background: var(--bg-page);
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13.5px; line-height: 1.75;
+    color: var(--text);
+  }
+
+  .modal-diagnosis {
+    background: var(--bg-page);
+    padding: 18px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px; line-height: 2;
+    border-left: 3px solid var(--primary);
+    word-wrap: break-word;
+    white-space: pre-wrap;
+  }
+  .modal-diagnosis p, .modal-diagnosis strong { margin-bottom: 6px; }
+
+  /* Rodapé com fundo diferenciado */
+  .modal-ftr {
+    padding: 14px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-page);
+    display: flex; justify-content: flex-end; gap: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Paginação */
+  .page-btn {
+    min-width: 32px; height: 32px; padding: 0 8px;
+    border: 1px solid var(--border); background: var(--bg-card);
+    border-radius: var(--radius-sm); font-size: 13px; cursor: pointer;
+    color: var(--text); transition: var(--transition);
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .page-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .page-btn:disabled { opacity: .4; cursor: default; }
+
+  /* Mobile */
+  @media (max-width: 640px) {
+    .modal-body-2col { grid-template-columns: 1fr; overflow-y: auto; }
+    .modal-col-left { border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
+    .modal-col-right { overflow-y: visible; }
   }
 </style>
 
@@ -238,102 +381,208 @@
 
 {% block scripts %}
 <script>
-  function filterTable() {
-    const search  = document.getElementById('searchInput').value.toLowerCase();
-    const date    = document.getElementById('dateInput').value;
+  const I18N = {
+    marcar_resolvida: "{{ t.marcar_resolvida }}",
+    fechar:           "{{ t.fechar }}",
+    sem_registros:    "{{ t.sem_registros }}",
+  };
+
+  const POR_PAGINA = 10;
+  let paginaAtual = 1;
+  let linhasFiltradas = [];
+
+  const todasLinhas = Array.from(document.querySelectorAll('#tableBody tr[data-id]'));
+
+  // ── Filtro ────────────────────────────────────────────────────────────────
+  function filtrar() {
+    const busca   = document.getElementById('searchInput').value.toLowerCase();
+    const data    = document.getElementById('dateInput').value;
     const tipo    = document.getElementById('tipoSelect').value;
     const impacto = document.getElementById('impactoSelect').value;
+    const status  = document.getElementById('statusSelect').value;
 
-    document.querySelectorAll('#tableBody tr[data-tipo]').forEach(row => {
-      const text    = row.textContent.toLowerCase();
-      const rowData = row.dataset.data || '';
-      const rowTipo = row.dataset.tipo || '';
-      const rowImp  = row.dataset.impacto || '';
-
-      const ok = (!search  || text.includes(search))
-              && (!date    || rowData === date)
-              && (!tipo    || rowTipo === tipo)
-              && (!impacto || rowImp  === impacto);
-
-      row.style.display = ok ? '' : 'none';
+    linhasFiltradas = todasLinhas.filter(row => {
+      const texto = row.textContent.toLowerCase();
+      return (!busca   || texto.includes(busca))
+          && (!data    || row.dataset.data    === data)
+          && (!tipo    || row.dataset.tipo    === tipo)
+          && (!impacto || row.dataset.impacto === impacto)
+          && (!status  || row.dataset.status  === status);
     });
+
+    paginaAtual = 1;
+    renderPagina();
   }
 
+  // ── Paginação ─────────────────────────────────────────────────────────────
+  function renderPagina() {
+    const lista = linhasFiltradas.length ? linhasFiltradas : todasLinhas;
+    const total = lista.length;
+    const totalPags = Math.max(1, Math.ceil(total / POR_PAGINA));
+    paginaAtual = Math.min(paginaAtual, totalPags);
+    const inicio = (paginaAtual - 1) * POR_PAGINA;
+    const fim    = inicio + POR_PAGINA;
+
+    todasLinhas.forEach(r => r.style.display = 'none');
+    lista.slice(inicio, fim).forEach(r => r.style.display = '');
+
+    const vazia = document.getElementById('linhaVazia');
+    if (vazia) vazia.style.display = total === 0 ? '' : 'none';
+
+    document.getElementById('contadorRegistros').textContent = total + ' registro(s)';
+
+    const de  = total === 0 ? 0 : inicio + 1;
+    const ate = Math.min(fim, total);
+    document.getElementById('paginacaoInfo').textContent =
+      total === 0 ? 'Nenhum resultado' : `${de}–${ate} de ${total}`;
+
+    const wrap = document.getElementById('paginacaoBtns');
+    wrap.innerHTML = '';
+    if (totalPags <= 1) {
+      document.getElementById('paginacaoWrap').style.display = total ? 'flex' : 'none';
+      return;
+    }
+    document.getElementById('paginacaoWrap').style.display = 'flex';
+
+    const addBtn = (label, pg, disabled, active) => {
+      const b = document.createElement('button');
+      b.className = 'page-btn' + (active ? ' active' : '');
+      b.innerHTML = label;
+      b.disabled  = disabled;
+      b.onclick   = () => { paginaAtual = pg; renderPagina(); };
+      wrap.appendChild(b);
+    };
+
+    addBtn('&larr;', paginaAtual - 1, paginaAtual === 1, false);
+    let pgMin = Math.max(1, paginaAtual - 2);
+    let pgMax = Math.min(totalPags, pgMin + 4);
+    pgMin = Math.max(1, pgMax - 4);
+    for (let p = pgMin; p <= pgMax; p++) addBtn(p, p, false, p === paginaAtual);
+    addBtn('&rarr;', paginaAtual + 1, paginaAtual === totalPags, false);
+  }
+
+  // ── Abre modal ────────────────────────────────────────────────────────────
   document.querySelectorAll('.btn-abrir-modal').forEach(btn => {
-    btn.addEventListener('click', function() {
-      document.getElementById('modalId').textContent      = this.dataset.id;
-      document.getElementById('modalMaquina').textContent = this.dataset.maquina;
-      document.getElementById('modalOperador').textContent= this.dataset.operador;
-      document.getElementById('modalData').textContent    = this.dataset.data;
+    btn.addEventListener('click', function () {
+      const st      = this.dataset.status  || 'Aberta';
+      const impacto = this.dataset.impacto || '';
+      const tipo    = this.dataset.tipo    || '';
+      const maquina = this.dataset.maquina || '—';
+      const operador= this.dataset.operador|| '—';
+      const dataRaw = this.dataset.data    || '';
+
+      // ID + link PDF
+      const ocId = this.dataset.id;
+      document.getElementById('modalId').textContent = ocId;
+      document.getElementById('modalPdfBtn').href = `/ocorrencia/${ocId}/pdf`;
+
+      // Accent bar por nível de impacto
+      const accentCor = impacto === 'Alto'  ? 'var(--danger)'
+                      : impacto === 'Médio' ? 'var(--warning)'
+                      : impacto === 'Baixo' ? 'var(--success)'
+                      : 'var(--border)';
+      document.getElementById('modalAccentBar').style.background = accentCor;
+
+      // Status badge
+      const corSt = (st === 'Resolvida' || st === 'Fechada') ? 'badge-success'
+                  : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
+      document.getElementById('modalStatusBadge').innerHTML =
+        `<span class="badge ${corSt}">${st}</span>`;
+
+      // Chips de identificação
+      const dataFmt = dataRaw
+        ? dataRaw.replace(/T.+/, '').split('-').reverse().join('/')
+        : '—';
+      const tipoCls = {
+        Qualidade: 'badge-primary', Segurança: 'badge-danger',
+        Produção: 'badge-warning',  Manutenção: 'badge-info'
+      }[tipo] || 'badge-info';
+      const impCls  = impacto === 'Alto' ? 'badge-danger'
+                    : impacto === 'Médio' ? 'badge-warning' : 'badge-success';
+      const impIcon = impacto === 'Alto' ? '🔴' : impacto === 'Médio' ? '🟡' : '🟢';
+
+      document.getElementById('modalChipsRow').innerHTML = [
+        `<span class="modal-chip"><i class="fas fa-cogs"></i> ${maquina}</span>`,
+        `<span class="modal-chip"><i class="fas fa-user"></i> ${operador}</span>`,
+        `<span class="modal-chip"><i class="fas fa-calendar-alt"></i> ${dataFmt}</span>`,
+        `<span class="badge ${tipoCls}" style="font-size:12px; padding:4px 10px;">${tipo}</span>`,
+        `<span class="badge ${impCls}"  style="font-size:12px; padding:4px 10px;">${impIcon} ${impacto}</span>`,
+      ].join('');
+
+      // Botão resolver
+      const resolverBtn = document.getElementById('modalResolverBtn');
+      resolverBtn.style.display = (st === 'Aberta' || st === 'Em andamento') ? '' : 'none';
+      resolverBtn.disabled = false;
+      resolverBtn.innerHTML = `<i class="fas fa-check-circle"></i> ${I18N.marcar_resolvida}`;
+
+      // Descrição
       document.getElementById('modalDescricao').textContent = this.dataset.descricao || '—';
-      // textContent preserva newlines + white-space:pre-wrap renderiza-os
-      const respostaRaw = this.dataset.resposta || 'Sem diagnóstico registrado.';
+
+      // Diagnóstico com formatação inline
       const target = document.getElementById('modalResposta');
-      target.textContent = respostaRaw;
-      // Realça **bold** e numeração 1./2./3.
+      target.textContent = this.dataset.resposta || 'Sem diagnóstico registrado.';
       target.innerHTML = target.innerHTML
         .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--primary);">$1</strong>')
         .replace(/(^|\n)\s*(\d{1,2})\.\s+/g,
-          '$1<span style="display:inline-block;min-width:22px;height:22px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:12px;font-weight:700;margin-right:6px;">$2</span>');
+          '$1<span style="display:inline-block;min-width:22px;height:22px;background:var(--primary);' +
+          'color:#fff;border-radius:50%;text-align:center;line-height:22px;font-size:12px;' +
+          'font-weight:700;margin-right:6px;">$2</span>');
 
+      // Diagrama + anotações
       const diagrama = this.dataset.diagrama;
-      const wrap = document.getElementById('modalDiagramaWrap');
-      const layer = document.getElementById('modalAnnotationLayer');
-      const countWrap = document.getElementById('modalAnotacoesCount');
+      const wrap     = document.getElementById('modalDiagramaWrap');
+      const layer    = document.getElementById('modalAnnotationLayer');
       const listWrap = document.getElementById('modalAnotacoesList');
-      layer.innerHTML = ''; listWrap.innerHTML = ''; listWrap.style.display = 'none';
-      countWrap.style.display = 'none';
+      const cntWrap  = document.getElementById('modalAnotacoesCount');
+      layer.innerHTML = ''; listWrap.innerHTML = '';
+      listWrap.style.display = 'none'; cntWrap.style.display = 'none';
 
       if (diagrama) {
         document.getElementById('modalDiagrama').src = diagrama;
-        wrap.style.display = 'block';
-
-        // Renderiza anotações se existirem
+        wrap.style.display = '';
         try {
-          const raw = this.dataset.anotacoes;
-          if (raw) {
-            const anots = JSON.parse(raw);
-            if (Array.isArray(anots) && anots.length > 0) {
-              countWrap.style.display = 'inline-flex';
-              document.getElementById('modalAnotacoesNum').textContent = anots.length;
-              listWrap.style.display = 'flex';
+          const anots = JSON.parse(this.dataset.anotacoes || '[]');
+          if (Array.isArray(anots) && anots.length) {
+            cntWrap.style.display = 'inline-flex';
+            document.getElementById('modalAnotacoesNum').textContent = anots.length;
+            listWrap.style.display = 'flex';
+            anots.forEach((a, i) => {
+              const cor = a.tipo === 'critico' ? '#EF4444'
+                        : a.tipo === 'atencao' ? '#F59E0B' : '#3B82F6';
+              const marker = document.createElement('div');
+              marker.style.cssText = `
+                position:absolute; left:${a.x}%; top:${a.y}%;
+                width:${a.raio*2}%; aspect-ratio:1/1;
+                transform:translate(-50%,-50%);
+                border:3px solid ${cor}; border-radius:50%;
+                background:${cor}33;
+                box-shadow:0 0 0 2px rgba(255,255,255,.6),0 0 12px ${cor};
+                pointer-events:auto; cursor:pointer;
+                display:flex; align-items:center; justify-content:center;
+                font-size:12px; font-weight:700; color:#fff;
+                text-shadow:0 1px 2px rgba(0,0,0,.6);`;
+              marker.textContent = i + 1;
+              marker.title = `${a.titulo} — ${a.descricao}`;
+              layer.appendChild(marker);
 
-              anots.forEach((a, i) => {
-                const num = i + 1;
-                const cor = a.tipo === 'critico' ? '#EF4444' : a.tipo === 'atencao' ? '#F59E0B' : '#3B82F6';
-                // Marcador no diagrama
-                const m = document.createElement('div');
-                m.style.cssText = `
-                  position:absolute; left:${a.x}%; top:${a.y}%;
-                  width:${a.raio * 2}%; aspect-ratio:1/1;
-                  transform:translate(-50%,-50%);
-                  border:3px solid ${cor}; border-radius:50%;
-                  background:${cor}33;
-                  box-shadow:0 0 0 2px rgba(255,255,255,.6), 0 0 12px ${cor};
-                  pointer-events:auto; cursor:pointer;
-                  display:flex; align-items:center; justify-content:center;
-                  font-size:12px; font-weight:700; color:#fff;
-                  text-shadow:0 1px 2px rgba(0,0,0,.6);
-                `;
-                m.textContent = num;
-                m.title = a.titulo + ' — ' + a.descricao;
-                layer.appendChild(m);
-
-                // Item na lista
-                const item = document.createElement('div');
-                item.style.cssText = `display:flex; gap:8px; align-items:flex-start; padding:6px 8px; background:#fff; border-radius:6px; border-left:3px solid ${cor}; font-size:12px;`;
-                item.innerHTML = `
-                  <div style="width:18px; height:18px; border-radius:50%; background:${cor}; color:#fff; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0;">${num}</div>
-                  <div style="flex:1;">
-                    <strong style="color:${cor}; font-size:12px;">${a.titulo}</strong>
-                    <div style="color:var(--text-muted); margin-top:1px; line-height:1.4;">${a.descricao}</div>
-                  </div>
-                `;
-                listWrap.appendChild(item);
-              });
-            }
+              const item = document.createElement('div');
+              item.style.cssText = `
+                display:flex; gap:8px; align-items:flex-start;
+                padding:8px 10px; background:var(--bg-page);
+                border-radius:var(--radius-sm);
+                border-left:3px solid ${cor}; font-size:12px;`;
+              item.innerHTML = `
+                <div style="width:18px;height:18px;border-radius:50%;background:${cor};
+                  color:#fff;display:flex;align-items:center;justify-content:center;
+                  font-size:10px;font-weight:700;flex-shrink:0;">${i+1}</div>
+                <div style="flex:1;">
+                  <strong style="color:${cor};font-size:12px;">${a.titulo}</strong>
+                  <div style="color:var(--text-muted);margin-top:2px;line-height:1.4;">${a.descricao}</div>
+                </div>`;
+              listWrap.appendChild(item);
+            });
           }
-        } catch (e) { console.warn('Anotações inválidas no JSON:', e); }
+        } catch (e) { console.warn('Anotações inválidas:', e); }
       } else {
         wrap.style.display = 'none';
       }
@@ -342,12 +591,65 @@
     });
   });
 
+  // ── Resolver ocorrência ───────────────────────────────────────────────────
+  async function resolverOcorrencia() {
+    const id  = document.getElementById('modalId').textContent;
+    const btn = document.getElementById('modalResolverBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+
+    try {
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const res  = await fetch(`/ocorrencias/${id}/resolver`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.erro || 'Erro desconhecido');
+
+      document.getElementById('modalStatusBadge').innerHTML =
+        '<span class="badge badge-success">Resolvida</span>';
+      btn.style.display = 'none';
+
+      const row = document.querySelector(`tr[data-id="${id}"]`);
+      if (row) {
+        row.dataset.status = 'Resolvida';
+        row.querySelector('.status-cell').innerHTML =
+          '<span class="badge badge-success">Resolvida</span>';
+        const eyeBtn = row.querySelector('.btn-abrir-modal');
+        if (eyeBtn) eyeBtn.dataset.status = 'Resolvida';
+      }
+
+      if (document.getElementById('statusSelect').value === 'Aberta') filtrar();
+
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-check-circle"></i> Marcar como Resolvida';
+      alert('Erro ao resolver: ' + err.message);
+    }
+  }
+
+  // ── Fecha modal ───────────────────────────────────────────────────────────
   function closeModal() {
     document.getElementById('modalOverlay').style.display = 'none';
   }
-
-  document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  document.getElementById('modalOverlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
   });
+
+  // ── Export Excel ─────────────────────────────────────────────────────────
+  function exportarExcel() {
+    const params = new URLSearchParams({
+      search:  document.getElementById('searchInput').value,
+      data:    document.getElementById('dateInput').value,
+      tipo:    document.getElementById('tipoSelect').value,
+      impacto: document.getElementById('impactoSelect').value,
+      status:  document.getElementById('statusSelect').value,
+    });
+    window.location.href = `/historico/export?${params}`;
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  filtrar();
 </script>
 {% endblock %}

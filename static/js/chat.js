@@ -43,9 +43,10 @@ async function sendChat() {
   appendTyping();
 
   try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
     const res = await fetch('/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
       body: JSON.stringify({ mensagem, historico: chatHistorico.slice(-8) }),
     });
     const data = await res.json();

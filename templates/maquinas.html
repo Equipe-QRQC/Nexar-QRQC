@@ -16,64 +16,107 @@
 <div class="page-body">
 
   {% if maquinas %}
-  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+  <div class="maq-grid">
     {% for m in maquinas %}
-    <div class="card" style="transition:var(--transition);"
-         onmouseover="this.style.boxShadow='var(--shadow-lg)'"
-         onmouseout="this.style.boxShadow='var(--shadow-sm)'">
-      <div class="card-header">
-        <span class="card-title" style="font-size:14px;">
-          <i class="fas fa-cog"></i> {{ m.nome }}
-        </span>
+    {% set st      = stats.get(m.id) %}
+    {% set abertas = st.abertas if st else 0 %}
+    {% set total   = st.total   if st else 0 %}
+    {% set ultima  = st.ultima  if st else None %}
+    {% set cor_bar = 'var(--danger)' if abertas > 0 else ('var(--success)' if total > 0 else 'var(--border)') %}
+
+    <div class="maq-card">
+
+      <!-- Cabeçalho: nome + badge setor -->
+      <div style="padding:14px 16px 10px; flex-shrink:0;">
+        <h4 class="maq-nome" title="{{ m.nome }}">{{ m.nome }}</h4>
         {% if m.setor %}
-        <span class="badge badge-primary" style="font-size:11px;">{{ m.setor }}</span>
+        <span class="badge badge-primary maq-setor-badge">{{ m.setor }}</span>
+        {% else %}
+        <span style="display:inline-block; height:20px;"></span>
         {% endif %}
       </div>
-      <div class="card-body" style="padding:16px;">
-        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:16px;">
+
+      <!-- Área de conteúdo variável (cresce para preencher) -->
+      <div style="padding:0 16px; flex:1; display:flex; flex-direction:column; gap:6px; min-height:0;">
+
+        <!-- Meta info: só exibe linhas que existem, máx 3 -->
+        <div style="display:flex; flex-direction:column; gap:5px;">
           {% if m.fabricante %}
-          <div style="display:flex; gap:8px; align-items:center;">
-            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Fabricante</span>
-            <span style="font-size:13px;">{{ m.fabricante }}</span>
+          <div class="maq-meta-row">
+            <span class="maq-meta-label">{{ t.fabricante }}</span>
+            <span class="maq-meta-val">{{ m.fabricante }}</span>
           </div>
           {% endif %}
           {% if m.modelo %}
-          <div style="display:flex; gap:8px; align-items:center;">
-            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Modelo</span>
-            <span style="font-size:13px;">{{ m.modelo }}</span>
+          <div class="maq-meta-row">
+            <span class="maq-meta-label">{{ t.modelo }}</span>
+            <span class="maq-meta-val">{{ m.modelo }}</span>
           </div>
           {% endif %}
           {% if m.ano %}
-          <div style="display:flex; gap:8px; align-items:center;">
-            <span style="font-size:11px; color:var(--text-muted); width:72px; font-weight:600;">Ano</span>
-            <span style="font-size:13px;">{{ m.ano }}</span>
+          <div class="maq-meta-row">
+            <span class="maq-meta-label">{{ t.ano }}</span>
+            <span class="maq-meta-val">{{ m.ano }}</span>
           </div>
           {% endif %}
         </div>
-        {% if m.descricao %}
-        <p style="font-size:12.5px; color:var(--text-muted); line-height:1.5; margin-bottom:16px;">
-          {{ m.descricao[:120] }}{% if m.descricao|length > 120 %}...{% endif %}
+
+        <!-- Descrição: 2 linhas máx, espaço fixo garantido -->
+        <p class="maq-desc">
+          {{ m.descricao if m.descricao else '' }}
         </p>
-        {% endif %}
-        <div style="display:flex; gap:8px;">
-          <a href="{{ url_for('CadastroOcorrencia') }}?maquina={{ m.id }}"
-             class="btn btn-primary btn-sm" style="flex:1; justify-content:center;">
-            <i class="fas fa-exclamation-triangle"></i> Ocorrência
-          </a>
+
+      </div>
+
+      <!-- Stats: sempre na mesma posição vertical -->
+      <div style="padding:10px 16px 0; flex-shrink:0;">
+        <div class="maq-stats">
+          {% if total == 0 %}
+            <span class="maq-chip maq-chip-muted">
+              <i class="fas fa-inbox"></i> {{ t.sem_ocorrencias }}
+            </span>
+          {% else %}
+            <span class="maq-chip {% if abertas > 0 %}maq-chip-danger{% else %}maq-chip-success{% endif %}">
+              <i class="fas fa-folder-open"></i>
+              {{ abertas }} aberta{{ 's' if abertas != 1 else '' }}
+            </span>
+            <span class="maq-chip maq-chip-muted">
+              {{ total }} total
+            </span>
+            {% if ultima %}
+            <span class="maq-chip maq-chip-muted" style="margin-left:auto;">
+              <i class="fas fa-clock"></i> {{ ultima[:10].split('-')|reverse|join('/') }}
+            </span>
+            {% endif %}
+          {% endif %}
         </div>
       </div>
+
+      <!-- Separador -->
+      <div style="margin:12px 16px 0; height:1px; background:var(--border); flex-shrink:0;"></div>
+
+      <!-- Ações: sempre no rodapé -->
+      <div style="padding:12px 16px 14px; display:flex; gap:8px; flex-shrink:0;">
+        <a href="{{ url_for('CadastroOcorrencia') }}?maquina={{ m.id }}"
+           class="btn btn-primary btn-sm" style="flex:1; justify-content:center;">
+          <i class="fas fa-exclamation-triangle"></i> {{ t.ocorrencia }}
+        </a>
+        <a href="{{ url_for('editar_maquina', maquina_id=m.id) }}"
+           class="btn btn-outline btn-sm" title="{{ t.editar }}">
+          <i class="fas fa-edit"></i>
+        </a>
+      </div>
+
     </div>
     {% endfor %}
   </div>
 
   {% else %}
-  <div style="
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    min-height:400px; text-align:center; color:var(--text-muted);
-  ">
+  <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+              min-height:400px; text-align:center; color:var(--text-muted);">
     <i class="fas fa-cogs" style="font-size:52px; opacity:.2; margin-bottom:16px;"></i>
-    <h3 style="font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px;">Nenhuma máquina cadastrada</h3>
-    <p style="font-size:14px; margin-bottom:24px;">Cadastre as máquinas para habilitar o diagnóstico técnico com IA.</p>
+    <h3 style="font-size:18px; font-weight:600; color:var(--text); margin-bottom:8px;">{{ t.nenhuma_maquina }}</h3>
+    <p style="font-size:14px; margin-bottom:24px;">{{ t.nenhuma_maquina_sub }}</p>
     <a href="{{ url_for('cadastro_maquina') }}" class="btn btn-primary">
       <i class="fas fa-plus"></i> {{ t.nova_maquina }}
     </a>
@@ -81,4 +124,93 @@
   {% endif %}
 
 </div>
+
+<style>
+  .maq-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .maq-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: var(--transition);
+    overflow: hidden;
+  }
+  .maq-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+
+  /* Nome: máx 2 linhas, ellipsis */
+  .maq-nome {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.35;
+    margin: 0 0 6px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: calc(14px * 1.35 * 2); /* reserva espaço para 2 linhas */
+  }
+
+  /* Badge de setor: não deixa estourar o card */
+  .maq-setor-badge {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  /* Meta info (fabricante/modelo/ano) */
+  .maq-meta-row { display: flex; gap: 8px; align-items: center; }
+  .maq-meta-label { font-size: 11px; color: var(--text-muted); font-weight: 600; width: 68px; flex-shrink: 0; }
+  .maq-meta-val {
+    font-size: 13px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Descrição: 2 linhas máx, altura mínima reservada */
+  .maq-desc {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 4px 0 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: calc(12.5px * 1.5 * 2); /* reserva 2 linhas mesmo vazio */
+  }
+
+  /* Stats chips */
+  .maq-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+
+  .maq-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+  }
+  .maq-chip-danger  { background: var(--danger-light);  color: var(--danger); }
+  .maq-chip-success { background: var(--success-light); color: var(--success); }
+  .maq-chip-muted   { background: var(--bg-page); color: var(--text-muted); border: 1px solid var(--border); }
+</style>
 {% endblock %}

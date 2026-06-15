@@ -1,0 +1,251 @@
+{% extends 'menu.html' %}
+{% block title %}{{ t.analise_titulo }} — Nexar QRQC{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-chart-bar"></i> {{ t.analise_titulo }}
+  </div>
+</div>
+
+<div class="page-body">
+
+  {% if kpis.total == 0 %}
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+              min-height:400px;text-align:center;color:var(--text-muted);">
+    <i class="fas fa-chart-bar" style="font-size:52px;opacity:.2;margin-bottom:16px;"></i>
+    <h3 style="font-size:18px;font-weight:600;color:var(--text);margin-bottom:8px;">{{ t.sem_dados }}</h3>
+    <p style="font-size:14px;">{{ t.sem_dados_sub }}</p>
+  </div>
+
+  {% else %}
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+
+    <div class="card" style="padding:16px 20px;">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{{ t.total_kpi }}</div>
+      <div style="font-size:28px;font-weight:800;color:var(--text);">{{ kpis.total }}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ t.ocorrencias_label }}</div>
+    </div>
+
+    <div class="card" style="padding:16px 20px;border-top:3px solid var(--danger);">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{{ t.abertas_kpi }}</div>
+      <div style="font-size:28px;font-weight:800;color:var(--danger);">{{ kpis.abertas }}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ t.pendentes_label }}</div>
+    </div>
+
+    <div class="card" style="padding:16px 20px;border-top:3px solid var(--success);">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{{ t.resolvidas_kpi }}</div>
+      <div style="font-size:28px;font-weight:800;color:var(--success);">{{ kpis.resolvidas }}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ t.concluidas_label }}</div>
+    </div>
+
+    <div class="card" style="padding:16px 20px;border-top:3px solid var(--primary);">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{{ t.taxa_resolucao }}</div>
+      <div style="font-size:28px;font-weight:800;color:var(--primary);">{{ kpis.taxa }}%</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ t.do_total }}</div>
+    </div>
+
+    <div class="card" style="padding:16px 20px;border-top:3px solid var(--warning);">
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">{{ t.alto_impacto_kpi }}</div>
+      <div style="font-size:28px;font-weight:800;color:var(--warning);">{{ kpis.alto_aberto }}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">{{ t.criticas_abertas }}</div>
+    </div>
+
+  </div>
+
+  <!-- Gráficos -->
+  <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;">
+
+    <!-- Pareto por máquina -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="fas fa-cogs"></i> {{ t.por_maquina_titulo }}</span>
+      </div>
+      <div class="card-body" style="padding:20px;">
+        <canvas id="chartMaquinas" style="max-height:320px;"></canvas>
+      </div>
+    </div>
+
+    <!-- Coluna direita: tipo + impacto -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-tag"></i> {{ t.por_tipo_titulo }}</span>
+        </div>
+        <div class="card-body" style="padding:20px;">
+          <canvas id="chartTipo" style="max-height:200px;"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-exclamation-triangle"></i> {{ t.por_impacto_titulo }}</span>
+        </div>
+        <div class="card-body" style="padding:20px;">
+          <canvas id="chartImpacto" style="max-height:160px;"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+
+{% block scripts %}
+<script>
+{% if kpis.total > 0 %}
+const I18N = {
+  abertas:     "{{ t.abertas_kpi }}",
+  resolvidas:  "{{ t.resolvidas_kpi }}",
+  acumulado:   "{{ t.acumulado_pct }}",
+};
+
+// Cores base do design system (lidas do CSS)
+const cs = getComputedStyle(document.documentElement);
+const c = (v) => cs.getPropertyValue(v).trim();
+const PRIMARY = c('--primary') || '#3B82F6';
+const DANGER  = c('--danger')  || '#EF4444';
+const SUCCESS = c('--success') || '#10B981';
+const WARNING = c('--warning') || '#F59E0B';
+const INFO    = '#8B5CF6';
+const BORDER  = c('--border')  || '#E5E7EB';
+const TEXT_MUTED = c('--text-muted') || '#6B7280';
+
+Chart.defaults.font.family = cs.getPropertyValue('font-family') || 'Inter, sans-serif';
+Chart.defaults.font.size   = 12;
+Chart.defaults.color       = TEXT_MUTED;
+
+// ── Pareto por máquina (barras horizontais empilhadas) ──────────────────────
+const maqData = {{ por_maquina | tojson }};
+const maqLabels    = maqData.map(r => r.maquina);
+const maqAbertas   = maqData.map(r => r.abertas);
+const maqResolvidas= maqData.map(r => r.resolvidas);
+const maqTotais    = maqData.map(r => r.total);
+
+// Linha de % acumulado (Pareto)
+let acc = 0;
+const totalGeral = maqTotais.reduce((a, b) => a + b, 0) || 1;
+const maqCumulativo = maqTotais.map(v => { acc += v; return Math.round((acc / totalGeral) * 100); });
+
+new Chart(document.getElementById('chartMaquinas'), {
+  type: 'bar',
+  data: {
+    labels: maqLabels,
+    datasets: [
+      {
+        label: I18N.abertas,
+        data: maqAbertas,
+        backgroundColor: DANGER + 'CC',
+        borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 4, bottomRight: 4 },
+        stack: 'total',
+      },
+      {
+        label: I18N.resolvidas,
+        data: maqResolvidas,
+        backgroundColor: SUCCESS + 'CC',
+        borderRadius: { topLeft: 4, topRight: 4, bottomLeft: 0, bottomRight: 0 },
+        stack: 'total',
+      },
+      {
+        label: I18N.acumulado,
+        data: maqCumulativo,
+        type: 'line',
+        borderColor: PRIMARY,
+        backgroundColor: 'transparent',
+        pointBackgroundColor: PRIMARY,
+        pointRadius: 4,
+        borderWidth: 2,
+        yAxisID: 'yPct',
+        order: 0,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } },
+      tooltip: {
+        callbacks: {
+          afterBody: (items) => {
+            const idx = items[0]?.dataIndex;
+            return idx !== undefined ? [`${I18N.acumulado}: ${maqCumulativo[idx]}%`] : [];
+          }
+        }
+      }
+    },
+    scales: {
+      x: { stacked: true, grid: { color: BORDER } },
+      y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, grid: { color: BORDER } },
+      yPct: {
+        position: 'right',
+        min: 0, max: 100,
+        ticks: { callback: v => v + '%' },
+        grid: { drawOnChartArea: false },
+      },
+    },
+  },
+});
+
+// ── Donut por tipo ──────────────────────────────────────────────────────────
+const tipoData = {{ por_tipo | tojson }};
+const tipoCores = { Qualidade: PRIMARY, Segurança: DANGER, Produção: WARNING, Manutenção: SUCCESS };
+
+new Chart(document.getElementById('chartTipo'), {
+  type: 'doughnut',
+  data: {
+    labels: tipoData.map(r => r.tipo),
+    datasets: [{
+      data: tipoData.map(r => r.total),
+      backgroundColor: tipoData.map(r => (tipoCores[r.tipo] || INFO) + 'DD'),
+      borderWidth: 2,
+      borderColor: c('--bg-card') || '#fff',
+    }],
+  },
+  options: {
+    responsive: true,
+    cutout: '62%',
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 12 } },
+      tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${ctx.raw}` } },
+    },
+  },
+});
+
+// ── Barras por impacto ──────────────────────────────────────────────────────
+const impData = {{ por_impacto | tojson }};
+const impCores = { Alto: DANGER, Médio: WARNING, Baixo: SUCCESS };
+
+new Chart(document.getElementById('chartImpacto'), {
+  type: 'bar',
+  data: {
+    labels: impData.map(r => r.impacto),
+    datasets: [{
+      data: impData.map(r => r.total),
+      backgroundColor: impData.map(r => (impCores[r.impacto] || INFO) + 'CC'),
+      borderRadius: 4,
+      barThickness: 32,
+    }],
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: BORDER } },
+    },
+  },
+});
+
+{% endif %}
+</script>
+{% endblock %}
+{% endblock %}
