@@ -7,9 +7,26 @@ Sistema de registro e resolução de ocorrências industriais com inteligência 
 - Cadastro de ocorrências com campos de setor, tipo, nível de impacto e detalhamento técnico
 - Geração automática de diagnóstico via **Gemini 2.0 Flash** (gratuito até 1.500 req/dia)
 - Análise de diagramas técnicos (PNG/JPG) via visão multimodal
+- **Sensor Visual** — inspeção fotográfica de equipamentos com IA: detecta anomalias
+  visuais (trinca, vazamento, corrosão, desalinhamento…), desenha bounding boxes e
+  calcula o **Índice de Saúde** do ponto, sem qualquer hardware de sensoriamento
 - Histórico completo de ocorrências com filtros e modal de detalhes
 - Dashboard com KPIs, distribuição por tipo e últimas ocorrências
 - Solicitação de suporte com envio de mensagem via WhatsApp (Twilio)
+
+### Sensor Visual (percepção industrial aumentada)
+
+Transforma a câmera de um celular num **sensor virtual**. O operador fotografa o
+equipamento e a IA multimodal localiza anomalias físicas, classifica a severidade
+(`crítico` / `atenção` / `info`) e pontua o estado do ponto de 0 a 100. Cada inspeção
+confirmada pelo operador vira **dado rotulado** na tabela `percepcoes` — o dataset
+proprietário que aumenta a precisão do modelo ao longo do tempo.
+
+- Página: **Menu → Sensor Visual** (`/sensor`)
+- Taxonomia de 16 classes de defeito em `sensor_visual.py`
+- API: `POST /api/sensor/analisar` (foto → anomalias) e
+  `POST /api/sensor/<id>/confirmar` (rotulagem)
+- Testes da lógica pura: `python test_sensor_visual.py`
 
 ## Tecnologias
 

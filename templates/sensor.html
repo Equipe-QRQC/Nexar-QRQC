@@ -1,0 +1,329 @@
+{% extends 'menu.html' %}
+{% block title %}Sensor Visual — Nexar QRQC{% endblock %}
+
+{% block head %}
+<style>
+  .sv-grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; align-items:start; }
+  @media (max-width: 900px){ .sv-grid { grid-template-columns: 1fr; } }
+
+  .sv-card {
+    background: var(--bg-card); border:1px solid var(--border);
+    border-radius: var(--radius); padding:18px;
+  }
+  .sv-card h4 { font-size:15px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+  .sv-card h4 i { color: var(--primary); }
+
+  .sv-drop {
+    border:2px dashed var(--border); border-radius: var(--radius);
+    padding:28px 16px; text-align:center; cursor:pointer; transition:.15s;
+    background: var(--bg-input); color: var(--text-muted);
+  }
+  .sv-drop:hover, .sv-drop.drag { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+  .sv-drop i { font-size:34px; margin-bottom:8px; display:block; }
+
+  .sv-preview-wrap { position:relative; display:inline-block; max-width:100%; line-height:0; }
+  .sv-preview-wrap img { max-width:100%; border-radius: var(--radius-sm); }
+
+  .sv-box {
+    position:absolute; border:2px solid var(--danger);
+    border-radius:4px; box-shadow:0 0 0 1px rgba(0,0,0,.25); cursor:pointer;
+  }
+  .sv-box[data-sev="atencao"] { border-color: var(--warning); }
+  .sv-box[data-sev="info"]    { border-color: var(--primary); }
+  .sv-box-tag {
+    position:absolute; top:-20px; left:-2px; font-size:10px; font-weight:600;
+    padding:1px 6px; border-radius:4px; color:#fff; white-space:nowrap; line-height:1.6;
+    background: var(--danger);
+  }
+  .sv-box[data-sev="atencao"] .sv-box-tag { background: var(--warning); }
+  .sv-box[data-sev="info"]    .sv-box-tag { background: var(--primary); }
+
+  .sv-score { display:flex; align-items:center; gap:16px; margin-bottom:14px; }
+  .sv-gauge {
+    --val:100; width:74px; height:74px; border-radius:50%; flex-shrink:0;
+    display:grid; place-items:center; font-weight:700; font-size:20px; color: var(--text);
+    background: conic-gradient(var(--gc) calc(var(--val)*1%), var(--border) 0);
+  }
+  .sv-gauge span { background: var(--bg-card); width:56px; height:56px; border-radius:50%; display:grid; place-items:center; }
+
+  .sv-anom {
+    border:1px solid var(--border); border-left:3px solid var(--danger);
+    border-radius: var(--radius-sm); padding:11px 13px; margin-bottom:10px;
+  }
+  .sv-anom[data-sev="atencao"] { border-left-color: var(--warning); }
+  .sv-anom[data-sev="info"]    { border-left-color: var(--primary); }
+  .sv-anom-head { display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  .sv-anom-title { font-weight:600; font-size:13.5px; display:flex; align-items:center; gap:7px; }
+  .sv-anom-title i { color: var(--text-muted); }
+  .sv-conf { font-size:11px; color: var(--text-muted); font-weight:600; }
+  .sv-anom p { font-size:12.5px; color: var(--text-muted); margin-top:5px; }
+  .sv-anom .rec { color: var(--text); margin-top:4px; }
+  .sv-anom .rec b { color: var(--primary); }
+
+  .sv-empty { text-align:center; color: var(--text-muted); padding:30px 10px; }
+  .sv-empty i { font-size:40px; color: var(--success); display:block; margin-bottom:10px; }
+
+  .sv-recent { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:10px; }
+  .sv-recent-item { border:1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden; }
+  .sv-recent-item img { width:100%; height:84px; object-fit:cover; display:block; }
+  .sv-recent-meta { padding:7px 9px; font-size:11px; color: var(--text-muted); }
+  .sv-recent-meta b { color: var(--text); display:block; font-size:12px; margin-bottom:2px; }
+
+  .sv-field { margin-bottom:12px; }
+  .sv-field label { display:block; font-size:12px; font-weight:600; color: var(--text-muted); margin-bottom:5px; }
+  .sv-field input, .sv-field select {
+    width:100%; padding:9px 11px; border:1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--bg-input); font-size:13px; color: var(--text);
+  }
+  .sv-spinner { display:inline-block; width:15px; height:15px; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation:sv-spin .7s linear infinite; vertical-align:-2px; }
+  @keyframes sv-spin { to { transform: rotate(360deg); } }
+  .sv-confirm-row { display:flex; gap:8px; margin-top:12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-camera-retro"></i> Sensor Visual
+  </div>
+  <div class="topbar-actions">
+    {% if ia_online %}
+    <span class="badge badge-success"><i class="fas fa-circle" style="font-size:7px"></i> IA ativa</span>
+    {% else %}
+    <span class="badge" style="background:var(--warning-light); color:#9A6700;">
+      <i class="fas fa-triangle-exclamation"></i> IA offline
+    </span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="page-body">
+  <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px; max-width:760px;">
+    Aponte a câmera para o equipamento e deixe a IA inspecionar. Sem sensores, sem hardware:
+    o celular vira um <b>sensor virtual</b> que detecta trincas, vazamentos, corrosão,
+    desalinhamentos e calcula o <b>Índice de Saúde</b> do ponto — e cada inspeção confirmada
+    ensina o sistema a acertar mais.
+  </p>
+
+  <div class="sv-grid">
+
+    <!-- Coluna esquerda: captura -->
+    <div class="sv-card">
+      <h4><i class="fas fa-crosshairs"></i> Nova inspeção</h4>
+
+      <div class="sv-field">
+        <label>Máquina (opcional)</label>
+        <select id="svMaquina">
+          <option value="">— Não vincular —</option>
+          {% for m in maquinas %}
+          <option value="{{ m.id }}">{{ m.nome }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="sv-field">
+        <label>Contexto (opcional)</label>
+        <input id="svContexto" type="text" maxlength="300"
+               placeholder="Ex: ruído no mancal esquerdo, vibração ao ligar…" />
+      </div>
+
+      <div class="sv-drop" id="svDrop">
+        <i class="fas fa-camera"></i>
+        <div><b>Tirar foto</b> ou clicar para enviar</div>
+        <div style="font-size:11px; margin-top:4px;">PNG ou JPG · a câmera abre no celular</div>
+      </div>
+      <input id="svFile" type="file" accept="image/png,image/jpeg" capture="environment" hidden />
+
+      <button id="svAnalisar" class="btn btn-primary" style="width:100%; margin-top:14px;" disabled>
+        <i class="fas fa-wand-magic-sparkles"></i> Analisar com IA
+      </button>
+
+      {% if recentes %}
+      <h4 style="margin-top:22px;"><i class="fas fa-clock-rotate-left"></i> Inspeções recentes</h4>
+      <div class="sv-recent">
+        {% for r in recentes %}
+        <div class="sv-recent-item">
+          <img src="{{ r.imagem_url }}" alt="inspeção" loading="lazy" />
+          <div class="sv-recent-meta">
+            <b>{{ r.maquina_nome or 'Sem máquina' }}</b>
+            {% if r.num_anomalias > 0 %}
+              {{ r.num_anomalias }} anomalia(s) · saúde {{ r.score_saude }}
+            {% else %}
+              Sem anomalia
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Coluna direita: resultado -->
+    <div class="sv-card" id="svResultCard" style="display:none;">
+      <h4><i class="fas fa-magnifying-glass-chart"></i> Resultado da análise</h4>
+
+      <div class="sv-preview-wrap" id="svPreviewWrap">
+        <img id="svPreview" alt="foto analisada" />
+      </div>
+
+      <div id="svScoreRow" class="sv-score" style="margin-top:14px; display:none;">
+        <div class="sv-gauge" id="svGauge"><span id="svGaugeVal">–</span></div>
+        <div>
+          <div style="font-weight:600; font-size:14px;">Índice de Saúde do ponto</div>
+          <div id="svResumo" style="font-size:12.5px; color:var(--text-muted); margin-top:3px;"></div>
+        </div>
+      </div>
+
+      <div id="svAnomList" style="margin-top:8px;"></div>
+
+      <div class="sv-confirm-row" id="svConfirmRow" style="display:none;">
+        <button id="svConfirmar" class="btn btn-success btn-sm" style="flex:1;">
+          <i class="fas fa-check"></i> Confirmar diagnóstico
+        </button>
+      </div>
+      <p id="svConfirmMsg" style="font-size:12px; color:var(--success); margin-top:8px; display:none;">
+        <i class="fas fa-check-circle"></i> Percepção confirmada — obrigado, isso treina a IA.
+      </p>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const drop = document.getElementById('svDrop');
+  const file = document.getElementById('svFile');
+  const btn  = document.getElementById('svAnalisar');
+  const card = document.getElementById('svResultCard');
+  const preview = document.getElementById('svPreview');
+  const scoreRow = document.getElementById('svScoreRow');
+  const gauge = document.getElementById('svGauge');
+  const gaugeVal = document.getElementById('svGaugeVal');
+  const resumo = document.getElementById('svResumo');
+  const anomList = document.getElementById('svAnomList');
+  const confirmRow = document.getElementById('svConfirmRow');
+  const confirmBtn = document.getElementById('svConfirmar');
+  const confirmMsg = document.getElementById('svConfirmMsg');
+  let selectedFile = null;
+  let currentId = null;
+
+  const esc = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const sevColor = s => s==='critico' ? 'var(--danger)' : (s==='atencao' ? 'var(--warning)' : 'var(--primary)');
+
+  drop.addEventListener('click', () => file.click());
+  ['dragover','dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+  file.addEventListener('change', () => { if (file.files[0]) setFile(file.files[0]); });
+
+  function setFile(f){
+    if (!/^image\/(png|jpe?g)$/.test(f.type)) { alert('Envie uma imagem PNG ou JPG.'); return; }
+    selectedFile = f;
+    btn.disabled = false;
+    drop.querySelector('div b').textContent = f.name.length > 28 ? f.name.slice(0,25)+'…' : f.name;
+  }
+
+  btn.addEventListener('click', analisar);
+
+  async function analisar(){
+    if (!selectedFile) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="sv-spinner"></span> Analisando…';
+    confirmMsg.style.display = 'none';
+
+    const fd = new FormData();
+    fd.append('foto', selectedFile);
+    fd.append('contexto', document.getElementById('svContexto').value || '');
+    fd.append('maquina_id', document.getElementById('svMaquina').value || '');
+
+    try {
+      const res = await fetch('/api/sensor/analisar', { method:'POST', headers:{'X-CSRFToken':csrf}, body:fd });
+      const data = await res.json();
+      if (!res.ok) { alert(data.erro || 'Falha na análise.'); return; }
+      render(data);
+    } catch(e){
+      alert('Erro de rede: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Analisar com IA';
+    }
+  }
+
+  function render(data){
+    currentId = data.id;
+    card.style.display = 'block';
+    preview.src = data.imagem_url;
+    card.scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+    // Overlays das anomalias (posicionados após a imagem carregar)
+    preview.onload = () => drawBoxes(data.anomalias);
+    if (preview.complete) drawBoxes(data.anomalias);
+
+    // Índice de saúde
+    if (data.score !== null && data.score !== undefined){
+      scoreRow.style.display = 'flex';
+      const gc = data.score >= 75 ? 'var(--success)' : (data.score >= 45 ? 'var(--warning)' : 'var(--danger)');
+      gauge.style.setProperty('--val', data.score);
+      gauge.style.setProperty('--gc', gc);
+      gaugeVal.textContent = data.score;
+    } else {
+      scoreRow.style.display = 'none';
+    }
+    resumo.textContent = data.resumo || '';
+
+    // Lista de anomalias
+    if (!data.anomalias.length){
+      anomList.innerHTML = '<div class="sv-empty"><i class="fas fa-circle-check"></i>' +
+        'Nenhuma anomalia visível detectada.<br>Ponto em condição aparentemente normal.</div>';
+    } else {
+      anomList.innerHTML = data.anomalias.map((a,i) =>
+        '<div class="sv-anom" data-sev="'+a.severidade+'">' +
+          '<div class="sv-anom-head">' +
+            '<span class="sv-anom-title"><i class="fas '+a.icone+'"></i>'+(i+1)+'. '+esc(a.rotulo)+
+              ' <span style="color:'+sevColor(a.severidade)+'; font-size:11px;">('+a.severidade+')</span></span>' +
+            '<span class="sv-conf">'+Math.round(a.confianca*100)+'%</span>' +
+          '</div>' +
+          '<p><b>'+esc(a.componente)+':</b> '+esc(a.descricao)+'</p>' +
+          '<p class="rec"><b>Ação:</b> '+esc(a.recomendacao)+'</p>' +
+        '</div>'
+      ).join('');
+    }
+    confirmRow.style.display = 'flex';
+  }
+
+  function drawBoxes(anomalias){
+    document.querySelectorAll('.sv-box').forEach(b => b.remove());
+    const wrap = document.getElementById('svPreviewWrap');
+    anomalias.forEach((a,i) => {
+      const box = document.createElement('div');
+      box.className = 'sv-box';
+      box.dataset.sev = a.severidade;
+      box.style.left = a.left + '%';
+      box.style.top = a.top + '%';
+      box.style.width = a.width + '%';
+      box.style.height = a.height + '%';
+      box.innerHTML = '<span class="sv-box-tag">'+(i+1)+' '+esc(a.rotulo)+'</span>';
+      wrap.appendChild(box);
+    });
+  }
+
+  confirmBtn.addEventListener('click', async () => {
+    if (!currentId) return;
+    confirmBtn.disabled = true;
+    try {
+      const res = await fetch('/api/sensor/'+currentId+'/confirmar', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+        body: JSON.stringify({ rotulo_confirmado: '' })
+      });
+      if (res.ok){ confirmRow.style.display='none'; confirmMsg.style.display='block'; }
+      else { alert('Não foi possível confirmar.'); confirmBtn.disabled=false; }
+    } catch(e){ alert('Erro: '+e.message); confirmBtn.disabled=false; }
+  });
+})();
+</script>
+{% endblock %}

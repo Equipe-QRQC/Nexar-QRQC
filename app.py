@@ -24,6 +24,8 @@ from email.mime.application import MIMEApplication
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+import sensor_visual
+
 load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -506,6 +508,27 @@ def init_db():
             data_atualizacao DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         );
+        -- Sensor Visual: cada inspeção fotográfica com IA vira uma "percepção".
+        -- Confirmada pelo operador, é dado rotulado — o dataset proprietário.
+        CREATE TABLE IF NOT EXISTS percepcoes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            maquina_id INTEGER,
+            imagem_url TEXT NOT NULL,
+            contexto TEXT,
+            modelo_ia TEXT,
+            anomalias_json TEXT,
+            num_anomalias INTEGER DEFAULT 0,
+            severidade_max TEXT,
+            score_saude INTEGER,
+            confirmado INTEGER DEFAULT 0,
+            rotulo_confirmado TEXT,
+            criado_por_id INTEGER,
+            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (maquina_id) REFERENCES maquinas(id),
+            FOREIGN KEY (criado_por_id) REFERENCES usuarios(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_percepcoes_maquina
+            ON percepcoes(maquina_id, criado_em);
     """)
     # Migração leve: adiciona colunas que possam estar ausentes em DBs antigos.
     cols = [r["name"] for r in c.execute("PRAGMA table_info(ocorrencias)").fetchall()]
@@ -1873,6 +1896,145 @@ Use linguagem técnica em português. Foque em ações práticas imediatas. Seja
         diagrama_url=diagrama_url,
         anotacoes=anotacoes,
     )
+
+
+# ── Sensor Visual (percepção industrial aumentada) ────────────────────────────
+
+SENSOR_FOLDER = os.path.join("static", "uploads", "sensor")
+os.makedirs(SENSOR_FOLDER, exist_ok=True)
+_SENSOR_EXT = {"png", "jpg", "jpeg"}
+
+
+@app.route("/sensor")
+@login_required
+def sensor():
+    """Página do Sensor Visual: captura de foto e análise de anomalias por IA."""
+    conn = get_db()
+    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    recentes = conn.execute("""
+        SELECT p.id, p.imagem_url, p.num_anomalias, p.severidade_max,
+               p.score_saude, p.confirmado, p.criado_em, m.nome AS maquina_nome
+        FROM percepcoes p
+        LEFT JOIN maquinas m ON p.maquina_id = m.id
+        ORDER BY p.criado_em DESC LIMIT 8
+    """).fetchall()
+    conn.close()
+    return render_template(
+        "sensor.html",
+        maquinas=maquinas_lista,
+        recentes=recentes,
+        taxonomia=sensor_visual.TAXONOMIA_DEFEITOS,
+        ia_online=gemini_client is not None,
+    )
+
+
+@app.route("/api/sensor/analisar", methods=["POST"])
+@login_required
+@limiter.limit("20 per minute")
+def sensor_analisar():
+    """Recebe uma foto, roda a detecção de anomalias e registra a percepção."""
+    if not gemini_client:
+        return jsonify({"erro": "IA offline — configure GEMINI_API_KEY no .env."}), 503
+
+    arquivo = request.files.get("foto")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"erro": "Nenhuma foto enviada."}), 400
+
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
+    if ext not in _SENSOR_EXT:
+        return jsonify({"erro": "Formato inválido. Envie PNG ou JPG."}), 400
+    if not content_is_valid(arquivo.stream, ext):
+        return jsonify({"erro": "Conteúdo do arquivo não corresponde à extensão."}), 400
+
+    contexto = (request.form.get("contexto") or "").strip()[:300]
+    maquina_id = request.form.get("maquina_id") or None
+    try:
+        maquina_id = int(maquina_id) if maquina_id else None
+    except (TypeError, ValueError):
+        maquina_id = None
+
+    # Salva a foto (nome único para não colidir)
+    nome_seguro = secure_filename(arquivo.filename) or f"foto.{ext}"
+    nome_arquivo = f"{secrets.token_hex(8)}_{nome_seguro}"
+    caminho = os.path.join(SENSOR_FOLDER, nome_arquivo)
+    arquivo.save(caminho)
+    imagem_url = f"/{caminho.replace(os.sep, '/')}"
+
+    # Abre a imagem para a IA
+    try:
+        img_obj = Image.open(caminho)
+        if img_obj.mode in ("RGBA", "P"):
+            img_obj = img_obj.convert("RGB")
+    except Exception as e:
+        logger.warning(f"[sensor] falha ao abrir imagem {caminho}: {e}")
+        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
+
+    resultado = sensor_visual.detectar_anomalias(
+        client=gemini_client,
+        img_obj=img_obj,
+        modelos=GEMINI_MODELS,
+        should_try_next=_should_try_next_model,
+        contexto=contexto,
+    )
+
+    if resultado["status"] == "erro":
+        return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
+
+    anomalias = resultado["anomalias"]
+    try:
+        conn = get_db()
+        cursor = conn.execute(
+            """INSERT INTO percepcoes
+               (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
+                num_anomalias, severidade_max, score_saude, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                maquina_id, imagem_url, contexto, resultado["modelo"],
+                json.dumps(anomalias, ensure_ascii=False), len(anomalias),
+                resultado["severidade_max"], resultado["score"], current_user.id,
+            ),
+        )
+        percepcao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception("[sensor] erro ao salvar percepção")
+        return jsonify({"erro": f"Erro ao salvar percepção: {e}"}), 500
+
+    return jsonify({
+        "id": percepcao_id,
+        "imagem_url": imagem_url,
+        "anomalias": anomalias,
+        "score": resultado["score"],
+        "severidade_max": resultado["severidade_max"],
+        "resumo": resultado["resumo"],
+        "modelo": resultado["modelo"],
+        "status": resultado["status"],
+    })
+
+
+@app.route("/api/sensor/<int:percepcao_id>/confirmar", methods=["POST"])
+@login_required
+def sensor_confirmar(percepcao_id: int):
+    """
+    Operador confirma ou corrige a percepção. Isso a transforma em dado
+    rotulado — a base do dataset proprietário que treina a IA ao longo do tempo.
+    """
+    data = request.get_json(silent=True) or {}
+    rotulo = (data.get("rotulo_confirmado") or "").strip()[:120]
+    conn = get_db()
+    p = conn.execute("SELECT id FROM percepcoes WHERE id = ?", (percepcao_id,)).fetchone()
+    if not p:
+        conn.close()
+        return jsonify({"erro": "Percepção não encontrada."}), 404
+    conn.execute(
+        "UPDATE percepcoes SET confirmado = 1, rotulo_confirmado = ? WHERE id = ?",
+        (rotulo or None, percepcao_id),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"[sensor] percepção {percepcao_id} confirmada por user_id={current_user.id}")
+    return jsonify({"ok": True, "id": percepcao_id})
 
 
 # ── Máquinas ──────────────────────────────────────────────────────────────────

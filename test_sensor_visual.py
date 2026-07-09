@@ -1,0 +1,141 @@
+"""Testes da lógica pura do Sensor Visual (sem chamada de API)."""
+
+import sensor_visual as sv
+
+
+def test_indice_saude_sem_anomalia():
+    assert sv.calcular_indice_saude([]) == 100
+
+
+def test_indice_saude_critico_reduz():
+    anomalias = [{"severidade": "critico", "confianca": 1.0}]
+    assert sv.calcular_indice_saude(anomalias) == 65  # 100 - 35
+
+
+def test_indice_saude_acumula_e_clampa():
+    anomalias = [{"severidade": "critico", "confianca": 1.0}] * 4  # 4*35 = 140
+    assert sv.calcular_indice_saude(anomalias) == 0  # clampado
+
+
+def test_indice_saude_pondera_confianca():
+    anomalias = [{"severidade": "atencao", "confianca": 0.5}]  # 15*0.5 = 7.5
+    assert sv.calcular_indice_saude(anomalias) == 92  # round(100-7.5)
+
+
+def test_severidade_predominante():
+    assert sv.severidade_predominante([]) == "ok"
+    assert sv.severidade_predominante([{"severidade": "info"}]) == "info"
+    assert sv.severidade_predominante(
+        [{"severidade": "info"}, {"severidade": "critico"}]
+    ) == "critico"
+
+
+def test_bbox_para_overlay():
+    ov = sv.bbox_para_overlay([100, 200, 600, 800])  # ymin,xmin,ymax,xmax /10
+    assert ov == {"left": 20.0, "top": 10.0, "width": 60.0, "height": 50.0}
+
+
+def test_validar_descarta_bbox_invalido():
+    bom = sv.AnomaliaDetectada(
+        box_2d=[100, 100, 500, 500], classe="trinca", rotulo="Trinca",
+        severidade="critico", confianca=0.9, componente="carcaça",
+        descricao="d", recomendacao="r",
+    )
+    ruim = sv.AnomaliaDetectada(
+        box_2d=[500, 500, 100, 100], classe="trinca", rotulo="Trinca",  # ymax<ymin
+        severidade="critico", confianca=0.9, componente="x",
+        descricao="d", recomendacao="r",
+    )
+    out = sv._validar_anomalias([bom, ruim])
+    assert len(out) == 1
+    assert out[0]["classe"] == "trinca"
+    assert out[0]["icone"] == "fa-bolt"
+
+
+def test_validar_ordena_por_severidade():
+    a_info = sv.AnomaliaDetectada(box_2d=[0, 0, 100, 100], classe="rebarba", rotulo="Rebarba",
+                                  severidade="info", confianca=0.9, componente="x", descricao="d", recomendacao="r")
+    a_crit = sv.AnomaliaDetectada(box_2d=[0, 0, 100, 100], classe="trinca", rotulo="Trinca",
+                                  severidade="critico", confianca=0.5, componente="x", descricao="d", recomendacao="r")
+    out = sv._validar_anomalias([a_info, a_crit])
+    assert out[0]["severidade"] == "critico"  # crítico vem primeiro apesar de confiança menor
+
+
+def test_classe_fora_taxonomia_mapeia():
+    a = sv.AnomaliaDetectada(box_2d=[0, 0, 100, 100], classe="rachadura_trinca", rotulo="X",
+                             severidade="critico", confianca=0.8, componente="x", descricao="d", recomendacao="r")
+    out = sv._validar_anomalias([a])
+    assert out[0]["classe"] == "trinca"  # 'trinca' está contido em 'rachadura_trinca'
+
+
+def test_parse_json_fallback_com_cercas():
+    txt = '```json\n{"anomalias": [{"box_2d":[10,10,90,90],"classe":"corrosao","rotulo":"Corrosão",' \
+          '"severidade":"atencao","confianca":0.7,"componente":"flange","descricao":"d","recomendacao":"r"}]}\n```'
+    parsed = sv._parse_json_fallback(txt)
+    assert parsed is not None
+    assert len(parsed.anomalias) == 1
+    assert parsed.anomalias[0].classe == "corrosao"
+
+
+def test_parse_json_fallback_lista_direta():
+    txt = '[{"box_2d":[10,10,90,90],"classe":"folga","rotulo":"Folga",' \
+          '"severidade":"atencao","confianca":0.6,"componente":"parafuso","descricao":"d","recomendacao":"r"}]'
+    parsed = sv._parse_json_fallback(txt)
+    assert parsed is not None and len(parsed.anomalias) == 1
+
+
+def test_detectar_offline_sem_client():
+    r = sv.detectar_anomalias(client=None, img_obj=None, modelos=["x"], should_try_next=lambda e: False)
+    assert r["status"] == "offline"
+    assert r["score"] is None
+
+
+class _FakeResp:
+    def __init__(self, parsed): self.parsed = parsed; self.text = ""
+
+class _FakeModels:
+    def __init__(self, parsed): self._parsed = parsed
+    def generate_content(self, **kw): return _FakeResp(self._parsed)
+
+class _FakeClient:
+    def __init__(self, parsed): self.models = _FakeModels(parsed)
+
+
+def test_detectar_fluxo_ok():
+    parsed = sv.DeteccaoAnomalias(anomalias=[
+        sv.AnomaliaDetectada(box_2d=[100, 100, 400, 400], classe="vazamento", rotulo="Vazamento",
+                             severidade="critico", confianca=0.85, componente="junta",
+                             descricao="óleo escorrendo", recomendacao="trocar junta"),
+    ])
+    r = sv.detectar_anomalias(
+        client=_FakeClient(parsed), img_obj=object(),
+        modelos=["gemini-x"], should_try_next=lambda e: True,
+    )
+    assert r["status"] == "ok"
+    assert r["severidade_max"] == "critico"
+    assert 0 <= r["score"] <= 100
+    assert r["anomalias"][0]["classe"] == "vazamento"
+
+
+def test_detectar_sem_anomalia():
+    r = sv.detectar_anomalias(
+        client=_FakeClient(sv.DeteccaoAnomalias(anomalias=[])), img_obj=object(),
+        modelos=["gemini-x"], should_try_next=lambda e: True,
+    )
+    assert r["status"] == "sem_anomalia"
+    assert r["score"] == 100
+
+
+if __name__ == "__main__":
+    import sys
+    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    falhas = 0
+    for fn in fns:
+        try:
+            fn()
+            print(f"  ✓ {fn.__name__}")
+        except Exception as e:
+            falhas += 1
+            print(f"  ✗ {fn.__name__}: {e}")
+    print(f"\n{len(fns)-falhas}/{len(fns)} testes passaram")
+    sys.exit(1 if falhas else 0)
