@@ -2291,6 +2291,76 @@ def sensor_laudo_pdf(percepcao_id: int):
     return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
 
 
+@app.route("/api/sensor/<int:percepcao_id>")
+@login_required
+def sensor_get(percepcao_id: int):
+    """Devolve uma percepção salva, no formato que a tela de resultado consome."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT p.*, COALESCE(m.nome,'') AS maquina_nome "
+        "FROM percepcoes p LEFT JOIN maquinas m ON m.id = p.maquina_id WHERE p.id = ?",
+        (percepcao_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"erro": "Inspeção não encontrada."}), 404
+    try:
+        anomalias = json.loads(row["anomalias_json"] or "[]")
+    except Exception:
+        anomalias = []
+    return jsonify({
+        "id": row["id"],
+        "imagem_url": row["imagem_url"],
+        "anomalias": anomalias,
+        "score": row["score_saude"],
+        "severidade_max": row["severidade_max"],
+        "resumo": sensor_visual._resumo(anomalias, row["score_saude"]),
+        "confirmado": bool(row["confirmado"]),
+        "maquina_nome": row["maquina_nome"],
+        "contexto": row["contexto"],
+        "criado_em": row["criado_em"],
+        "status": "ok" if anomalias else "sem_anomalia",
+    })
+
+
+@app.route("/sensor/historico")
+@login_required
+def sensor_historico():
+    """Página de histórico de todas as inspeções do Sensor Visual, com filtros."""
+    f_maquina = request.args.get("maquina") or ""
+    f_sev     = request.args.get("severidade") or ""
+    f_status  = request.args.get("status") or ""
+
+    q = ("SELECT p.id, p.imagem_url, p.num_anomalias, p.severidade_max, p.score_saude, "
+         "p.confirmado, p.criado_em, p.contexto, COALESCE(m.nome,'—') AS maquina_nome "
+         "FROM percepcoes p LEFT JOIN maquinas m ON m.id = p.maquina_id WHERE 1=1")
+    params: list = []
+    if f_maquina:
+        q += " AND p.maquina_id = ?"; params.append(f_maquina)
+    if f_sev:
+        q += " AND p.severidade_max = ?"; params.append(f_sev)
+    if f_status == "confirmada":
+        q += " AND p.confirmado = 1"
+    elif f_status == "pendente":
+        q += " AND p.confirmado = 0"
+    q += " ORDER BY p.criado_em DESC"
+
+    conn = get_db()
+    inspecoes = conn.execute(q, params).fetchall()
+    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    total = conn.execute("SELECT COUNT(*) AS n FROM percepcoes").fetchone()["n"]
+    confirmadas = conn.execute("SELECT COUNT(*) AS n FROM percepcoes WHERE confirmado = 1").fetchone()["n"]
+    criticas = conn.execute("SELECT COUNT(*) AS n FROM percepcoes WHERE severidade_max = 'critico'").fetchone()["n"]
+    conn.close()
+
+    return render_template(
+        "sensor_historico.html",
+        inspecoes=inspecoes, maquinas=maquinas_lista,
+        f_maquina=f_maquina, f_sev=f_sev, f_status=f_status,
+        stats={"total": total, "confirmadas": confirmadas, "criticas": criticas},
+    )
+
+
 # ── Máquinas ──────────────────────────────────────────────────────────────────
 
 @app.route("/maquinas")

@@ -83,7 +83,9 @@
   .sv-empty i { font-size:40px; color: var(--success); display:block; margin-bottom:10px; }
 
   .sv-recent { display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:10px; }
-  .sv-recent-item { border:1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden; }
+  .sv-recent-item { border:1px solid var(--border); border-radius: var(--radius-sm); overflow:hidden;
+    display:block; text-decoration:none; color:inherit; transition:.15s; }
+  .sv-recent-item:hover { border-color: var(--primary); }
   .sv-recent-item img { width:100%; height:84px; object-fit:cover; display:block; }
   .sv-recent-meta { padding:7px 9px; font-size:11px; color: var(--text-muted); }
   .sv-recent-meta b { color: var(--text); display:block; font-size:12px; margin-bottom:2px; }
@@ -106,7 +108,11 @@
   <div class="topbar-title">
     <i class="fas fa-camera-retro"></i> Sensor Visual
   </div>
-  <div class="topbar-actions">
+  <div class="topbar-actions" style="display:flex; align-items:center; gap:10px;">
+    <a href="{{ url_for('sensor_historico') }}" class="btn btn-sm"
+       style="background:var(--bg-input); border:1px solid var(--border); color:var(--text);">
+      <i class="fas fa-clock-rotate-left"></i> Histórico
+    </a>
     {% if ia_online %}
     <span class="badge badge-success"><i class="fas fa-circle" style="font-size:7px"></i> IA ativa</span>
     {% else %}
@@ -159,10 +165,13 @@
       </button>
 
       {% if recentes %}
-      <h4 style="margin-top:22px;"><i class="fas fa-clock-rotate-left"></i> Inspeções recentes</h4>
+      <h4 style="margin-top:22px; display:flex; justify-content:space-between; align-items:center;">
+        <span><i class="fas fa-clock-rotate-left"></i> Inspeções recentes</span>
+        <a href="{{ url_for('sensor_historico') }}" style="font-size:11px; color:var(--primary); text-decoration:none;">ver todas →</a>
+      </h4>
       <div class="sv-recent">
         {% for r in recentes %}
-        <div class="sv-recent-item">
+        <a class="sv-recent-item" href="{{ url_for('sensor') }}?ver={{ r.id }}">
           <img src="{{ r.imagem_url }}" alt="inspeção" loading="lazy" />
           <div class="sv-recent-meta">
             <b>{{ r.maquina_nome or 'Sem máquina' }}</b>
@@ -172,7 +181,7 @@
               Sem anomalia
             {% endif %}
           </div>
-        </div>
+        </a>
         {% endfor %}
       </div>
       {% endif %}
@@ -329,7 +338,16 @@
         card.addEventListener('mouseleave', () => setHot(i, false));
       });
     }
+    // Estado de confirmação: inspeções reabertas já podem estar confirmadas
     confirmRow.style.display = 'flex';
+    if (data.confirmado){
+      confirmBtn.style.display = 'none';
+      confirmMsg.style.display = 'block';
+    } else {
+      confirmBtn.style.display = '';
+      confirmBtn.disabled = false;
+      confirmMsg.style.display = 'none';
+    }
   }
 
   // Destaca simultaneamente a caixa na imagem e o card na lista
@@ -402,6 +420,19 @@
       else { alert('Não foi possível confirmar.'); confirmBtn.disabled=false; }
     } catch(e){ alert('Erro: '+e.message); confirmBtn.disabled=false; }
   });
+
+  // Reabrir uma inspeção anterior via ?ver=<id>
+  const verId = new URLSearchParams(location.search).get('ver');
+  if (verId){
+    fetch('/api/sensor/' + verId)
+      .then(r => r.json())
+      .then(d => {
+        if (d.erro){ return; }
+        render(d);
+        card.scrollIntoView({ behavior:'smooth', block:'start' });
+      })
+      .catch(() => {});
+  }
 })();
 </script>
 {% endblock %}

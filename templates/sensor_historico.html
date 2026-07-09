@@ -1,0 +1,151 @@
+{% extends 'menu.html' %}
+{% block title %}Histórico de Inspeções — Nexar QRQC{% endblock %}
+
+{% block head %}
+<style>
+  .sh-stats { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .sh-stat {
+    flex:1; min-width:130px; background: var(--bg-card); border:1px solid var(--border);
+    border-radius: var(--radius); padding:14px 16px;
+  }
+  .sh-stat .n { font-size:24px; font-weight:800; color: var(--text); }
+  .sh-stat .l { font-size:11px; color: var(--text-muted); margin-top:2px; }
+  .sh-stat.crit .n { color: var(--danger); }
+  .sh-stat.ok .n { color: var(--success); }
+
+  .sh-filters {
+    display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;
+    background: var(--bg-card); border:1px solid var(--border);
+    border-radius: var(--radius); padding:14px 16px; margin-bottom:16px;
+  }
+  .sh-filters .f { display:flex; flex-direction:column; gap:4px; }
+  .sh-filters label { font-size:11px; font-weight:600; color: var(--text-muted); }
+  .sh-filters select {
+    padding:8px 10px; border:1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg-input); font-size:13px; color: var(--text); min-width:150px;
+  }
+
+  .sh-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap:14px; }
+  .sh-item {
+    background: var(--bg-card); border:1px solid var(--border); border-radius: var(--radius);
+    overflow:hidden; text-decoration:none; color:inherit; display:block; transition:.15s;
+  }
+  .sh-item:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.08); }
+  .sh-thumb { position:relative; height:130px; background:#0d1117; }
+  .sh-thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+  .sh-score {
+    position:absolute; top:8px; right:8px; width:34px; height:34px; border-radius:50%;
+    display:grid; place-items:center; font-size:13px; font-weight:800; color:#fff;
+    border:2px solid rgba(255,255,255,.85);
+  }
+  .sh-sev-badge {
+    position:absolute; bottom:8px; left:8px; font-size:9px; font-weight:700;
+    padding:2px 8px; border-radius:10px; color:#fff; text-transform:uppercase; letter-spacing:.5px;
+  }
+  .sh-body { padding:11px 13px; }
+  .sh-maq { font-weight:700; font-size:13px; color: var(--text); }
+  .sh-meta { font-size:11px; color: var(--text-muted); margin-top:3px; display:flex; justify-content:space-between; }
+  .sh-confirm { font-size:10px; color: var(--success); margin-top:6px; }
+  .sh-confirm.pend { color: var(--warning); }
+
+  .sh-empty { text-align:center; color: var(--text-muted); padding:50px 20px; }
+  .sh-empty i { font-size:44px; display:block; margin-bottom:12px; opacity:.4; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-clock-rotate-left"></i> Histórico de Inspeções
+  </div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('sensor') }}" class="btn btn-primary btn-sm">
+      <i class="fas fa-camera-retro"></i> Nova inspeção
+    </a>
+  </div>
+</div>
+
+<div class="page-body">
+
+  <div class="sh-stats">
+    <div class="sh-stat"><div class="n">{{ stats.total }}</div><div class="l">Inspeções registradas</div></div>
+    <div class="sh-stat ok"><div class="n">{{ stats.confirmadas }}</div><div class="l">Confirmadas (dataset)</div></div>
+    <div class="sh-stat crit"><div class="n">{{ stats.criticas }}</div><div class="l">Com anomalia crítica</div></div>
+  </div>
+
+  <form class="sh-filters" method="get">
+    <div class="f">
+      <label>Máquina</label>
+      <select name="maquina" onchange="this.form.submit()">
+        <option value="">Todas</option>
+        {% for m in maquinas %}
+        <option value="{{ m.id }}" {% if f_maquina == m.id|string %}selected{% endif %}>{{ m.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="f">
+      <label>Severidade</label>
+      <select name="severidade" onchange="this.form.submit()">
+        <option value="">Todas</option>
+        <option value="critico" {% if f_sev == 'critico' %}selected{% endif %}>Crítico</option>
+        <option value="atencao" {% if f_sev == 'atencao' %}selected{% endif %}>Atenção</option>
+        <option value="info" {% if f_sev == 'info' %}selected{% endif %}>Info</option>
+        <option value="ok" {% if f_sev == 'ok' %}selected{% endif %}>Sem anomalia</option>
+      </select>
+    </div>
+    <div class="f">
+      <label>Status</label>
+      <select name="status" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        <option value="confirmada" {% if f_status == 'confirmada' %}selected{% endif %}>Confirmadas</option>
+        <option value="pendente" {% if f_status == 'pendente' %}selected{% endif %}>Pendentes</option>
+      </select>
+    </div>
+    {% if f_maquina or f_sev or f_status %}
+    <a href="{{ url_for('sensor_historico') }}" class="btn btn-sm"
+       style="background:var(--bg-input); border:1px solid var(--border); color:var(--text-muted);">
+      <i class="fas fa-times"></i> Limpar
+    </a>
+    {% endif %}
+  </form>
+
+  {% if inspecoes %}
+  <div class="sh-grid">
+    {% for i in inspecoes %}
+    {% set sc = i.score_saude %}
+    {% set sc_color = '#10B981' if sc is not none and sc >= 75 else ('#F59E0B' if sc is not none and sc >= 45 else '#EF4444') %}
+    {% set sev_color = '#EF4444' if i.severidade_max == 'critico' else ('#F59E0B' if i.severidade_max == 'atencao' else ('#3B82F6' if i.severidade_max == 'info' else '#10B981')) %}
+    <a class="sh-item" href="{{ url_for('sensor') }}?ver={{ i.id }}">
+      <div class="sh-thumb">
+        <img src="{{ i.imagem_url }}" alt="inspeção {{ i.id }}" loading="lazy" />
+        {% if sc is not none %}
+        <div class="sh-score" style="background:{{ sc_color }};">{{ sc }}</div>
+        {% endif %}
+        <div class="sh-sev-badge" style="background:{{ sev_color }};">
+          {% if i.severidade_max == 'ok' %}OK{% else %}{{ i.severidade_max }}{% endif %}
+        </div>
+      </div>
+      <div class="sh-body">
+        <div class="sh-maq">{{ i.maquina_nome }}</div>
+        <div class="sh-meta">
+          <span>{{ i.criado_em[:16] if i.criado_em else '' }}</span>
+          <span>{{ i.num_anomalias }} anomalia(s)</span>
+        </div>
+        {% if i.confirmado %}
+        <div class="sh-confirm"><i class="fas fa-check-circle"></i> Confirmada</div>
+        {% else %}
+        <div class="sh-confirm pend"><i class="fas fa-clock"></i> Pendente</div>
+        {% endif %}
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="sh-empty">
+    <i class="fas fa-camera-retro"></i>
+    <div>Nenhuma inspeção encontrada{% if f_maquina or f_sev or f_status %} com esses filtros{% endif %}.</div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
