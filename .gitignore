@@ -1,3 +1,11 @@
 .env
 qrqc.db
 
+# Python
+__pycache__/
+*.pyc
+
+# Uploads gerados em runtime (mantém a pasta versionada via .gitkeep)
+static/uploads/sensor/*
+!static/uploads/sensor/.gitkeep
+
