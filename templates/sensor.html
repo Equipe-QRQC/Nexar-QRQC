@@ -27,9 +27,26 @@
   .sv-box {
     position:absolute; border:2px solid var(--danger);
     border-radius:4px; box-shadow:0 0 0 1px rgba(0,0,0,.25); cursor:pointer;
+    transition: box-shadow .12s ease;
   }
   .sv-box[data-sev="atencao"] { border-color: var(--warning); }
   .sv-box[data-sev="info"]    { border-color: var(--primary); }
+  .sv-box.hot { box-shadow:0 0 0 3px #fff, 0 0 0 6px rgba(0,0,0,.4); z-index:6; }
+
+  /* Tooltip de "lookup" ao passar o mouse sobre uma caixa */
+  .sv-tip {
+    position:absolute; z-index:20; max-width:240px; pointer-events:none;
+    background: rgba(10,15,30,.97); color:#fff; border:1px solid #1a2e50;
+    border-radius:8px; padding:9px 11px; font-size:11px; line-height:1.5;
+    box-shadow:0 8px 22px rgba(0,0,0,.45); opacity:0; transition:opacity .12s;
+  }
+  .sv-tip.show { opacity:1; }
+  .sv-tip .tsev { font-weight:700; }
+  .sv-tip .tcausa { color:#f5a623; font-weight:600; }
+  .sv-tip .tacao  { color:#3b9eff; font-weight:600; }
+  .sv-hint { font-size:11px; color:var(--text-muted); text-align:center; margin:8px 0 0; }
+  .sv-anom { transition: box-shadow .12s ease, background .12s ease; }
+  .sv-anom.hot { box-shadow: inset 0 0 0 2px var(--primary); background: var(--primary-light); }
   .sv-box-tag {
     position:absolute; top:-20px; left:-2px; font-size:10px; font-weight:600;
     padding:1px 6px; border-radius:4px; color:#fff; white-space:nowrap; line-height:1.6;
@@ -168,6 +185,9 @@
       <div class="sv-preview-wrap" id="svPreviewWrap">
         <img id="svPreview" alt="foto analisada" />
       </div>
+      <p class="sv-hint" id="svHint" style="display:none;">
+        <i class="fas fa-hand-pointer"></i> Passe o mouse sobre as marcações para ver os detalhes de cada anomalia.
+      </p>
 
       <div id="svScoreRow" class="sv-score" style="margin-top:14px; display:none;">
         <div class="sv-gauge" id="svGauge"><span id="svGaugeVal">–</span></div>
@@ -282,13 +302,16 @@
     }
     resumo.textContent = data.resumo || '';
 
+    // Dica de interação só quando há marcações
+    document.getElementById('svHint').style.display = data.anomalias.length ? 'block' : 'none';
+
     // Lista de anomalias
     if (!data.anomalias.length){
       anomList.innerHTML = '<div class="sv-empty"><i class="fas fa-circle-check"></i>' +
         'Nenhuma anomalia visível detectada.<br>Ponto em condição aparentemente normal.</div>';
     } else {
       anomList.innerHTML = data.anomalias.map((a,i) =>
-        '<div class="sv-anom" data-sev="'+a.severidade+'">' +
+        '<div class="sv-anom" id="svAnom'+i+'" data-index="'+i+'" data-sev="'+a.severidade+'">' +
           '<div class="sv-anom-head">' +
             '<span class="sv-anom-title"><i class="fas '+a.icone+'"></i>'+(i+1)+'. '+esc(a.rotulo)+
               ' <span style="color:'+sevColor(a.severidade)+'; font-size:11px;">('+a.severidade+')</span></span>' +
@@ -299,24 +322,71 @@
           '<p class="rec"><b>Ação:</b> '+esc(a.recomendacao)+'</p>' +
         '</div>'
       ).join('');
+      // Link card -> caixa: destacar a marcação ao passar o mouse no card
+      anomList.querySelectorAll('.sv-anom').forEach(card => {
+        const i = +card.dataset.index;
+        card.addEventListener('mouseenter', () => setHot(i, true));
+        card.addEventListener('mouseleave', () => setHot(i, false));
+      });
     }
     confirmRow.style.display = 'flex';
   }
 
+  // Destaca simultaneamente a caixa na imagem e o card na lista
+  function setHot(i, on){
+    const box  = document.querySelector('.sv-box[data-index="'+i+'"]');
+    const card = document.getElementById('svAnom'+i);
+    if (box)  box.classList.toggle('hot', on);
+    if (card) card.classList.toggle('hot', on);
+  }
+
   function drawBoxes(anomalias){
-    document.querySelectorAll('.sv-box').forEach(b => b.remove());
     const wrap = document.getElementById('svPreviewWrap');
+    wrap.querySelectorAll('.sv-box').forEach(b => b.remove());
+
+    // Tooltip único reaproveitado por todas as caixas
+    let tip = document.getElementById('svTip');
+    if (!tip){
+      tip = document.createElement('div');
+      tip.id = 'svTip'; tip.className = 'sv-tip';
+      wrap.appendChild(tip);
+    }
+
     anomalias.forEach((a,i) => {
       const box = document.createElement('div');
       box.className = 'sv-box';
       box.dataset.sev = a.severidade;
+      box.dataset.index = i;
       box.style.left = a.left + '%';
       box.style.top = a.top + '%';
       box.style.width = a.width + '%';
       box.style.height = a.height + '%';
       box.innerHTML = '<span class="sv-box-tag">'+(i+1)+' '+esc(a.rotulo)+'</span>';
+
+      box.addEventListener('mouseenter', () => { setHot(i, true); showTip(a, i, box, wrap, tip); });
+      box.addEventListener('mouseleave', () => { setHot(i, false); tip.classList.remove('show'); });
       wrap.appendChild(box);
     });
+  }
+
+  function showTip(a, i, box, wrap, tip){
+    tip.innerHTML =
+      '<b>'+(i+1)+'. '+esc(a.rotulo)+'</b> ' +
+      '<span class="tsev" style="color:'+sevColor(a.severidade)+'">('+a.severidade+' · '+Math.round(a.confianca*100)+'%)</span><br>' +
+      '<b>'+esc(a.componente)+':</b> '+esc(a.descricao) +
+      (a.causa_provavel ? '<br><span class="tcausa">Possível causa:</span> '+esc(a.causa_provavel) : '') +
+      '<br><span class="tacao">Ação:</span> '+esc(a.recomendacao);
+    tip.classList.add('show');
+    // Posiciona logo abaixo da caixa, sem estourar a borda direita da imagem
+    const wr = wrap.getBoundingClientRect();
+    const br = box.getBoundingClientRect();
+    let x = br.left - wr.left;
+    let y = br.bottom - wr.top + 6;
+    const tw = tip.offsetWidth, thh = tip.offsetHeight;
+    if (x + tw > wr.width) x = Math.max(2, wr.width - tw - 2);
+    if (y + thh > wr.height) y = Math.max(2, br.top - wr.top - thh - 6); // acima se não couber abaixo
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
   }
 
   confirmBtn.addEventListener('click', async () => {
