@@ -152,6 +152,27 @@ def test_causa_provavel_opcional():
     assert out[0]["causa_provavel"] == ""
 
 
+def test_desenhar_anomalias():
+    from PIL import Image
+    img = Image.new("RGB", (400, 300), (100, 100, 100))
+    anoms = [
+        {"box_2d": [100, 100, 250, 250], "severidade": "critico", "rotulo": "Vazamento"},
+        {"box_2d": [0, 0, 60, 60], "severidade": "info", "rotulo": "Sujeira"},
+    ]
+    out = sv.desenhar_anomalias(img, anoms)
+    assert out.size == (400, 300)          # mesma dimensão
+    assert out is not img                  # cópia, não muta original
+    # A imagem anotada deve diferir da original (pixels desenhados)
+    assert list(out.getdata()) != list(img.getdata())
+
+
+def test_desenhar_anomalias_sem_box():
+    from PIL import Image
+    img = Image.new("RGB", (200, 200), (50, 50, 50))
+    out = sv.desenhar_anomalias(img, [{"severidade": "info", "rotulo": "x"}])  # sem box_2d
+    assert out.size == (200, 200)          # não quebra
+
+
 def test_parse_json_fallback_com_cercas():
     txt = '```json\n{"anomalias": [{"box_2d":[10,10,90,90],"classe":"corrosao","rotulo":"Corrosão",' \
           '"severidade":"atencao","confianca":0.7,"componente":"flange","descricao":"d","recomendacao":"r"}]}\n```'

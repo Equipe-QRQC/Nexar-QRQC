@@ -2037,6 +2037,260 @@ def sensor_confirmar(percepcao_id: int):
     return jsonify({"ok": True, "id": percepcao_id})
 
 
+@app.route("/sensor/<int:percepcao_id>/laudo.pdf")
+@login_required
+def sensor_laudo_pdf(percepcao_id: int):
+    """Gera o laudo de inspeção visual em PDF, com a foto anotada e o diagnóstico."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        HRFlowable, Image as RLImage,
+    )
+    from reportlab.platypus.flowables import Flowable
+    from io import BytesIO
+    import datetime as dt_mod
+
+    conn = get_db()
+    row = conn.execute(
+        "SELECT p.*, COALESCE(m.nome,'—') AS maquina_nome, "
+        "COALESCE(u.nome,'—') AS operador_nome "
+        "FROM percepcoes p "
+        "LEFT JOIN maquinas m ON m.id = p.maquina_id "
+        "LEFT JOIN usuarios u ON u.id = p.criado_por_id "
+        "WHERE p.id = ?", (percepcao_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return "Percepção não encontrada.", 404
+
+    try:
+        anomalias = json.loads(row["anomalias_json"] or "[]")
+    except Exception:
+        anomalias = []
+
+    # ── Cores ────────────────────────────────────────────────────────────────
+    NAVY   = colors.HexColor("#0a0f1e")
+    BLUE   = colors.HexColor("#3b9eff")
+    LBLUE  = colors.HexColor("#DBEAFE")
+    C_GRAY = colors.HexColor("#6B7280")
+    C_DARK = colors.HexColor("#111827")
+    C_BG   = colors.HexColor("#F8FAFC")
+    WHITE  = colors.white
+    SEV_COR   = {"critico": "#EF4444", "atencao": "#F59E0B", "info": "#3B82F6"}
+    SEV_LABEL = {"critico": "CRÍTICO", "atencao": "ATENÇÃO", "info": "INFO"}
+
+    score = row["score_saude"]
+    if score is None:
+        score_hex = "#6B7280"
+    elif score >= 75:
+        score_hex = "#10B981"
+    elif score >= 45:
+        score_hex = "#F59E0B"
+    else:
+        score_hex = "#EF4444"
+    score_color = colors.HexColor(score_hex)
+
+    base = getSampleStyleSheet()
+
+    def sty(name, parent="Normal", **kw):
+        return ParagraphStyle(name, parent=base[parent], **kw)
+
+    s_label = sty("lb", fontName="Helvetica-Bold", fontSize=8, textColor=C_GRAY, spaceAfter=2)
+    s_value = sty("vl", fontName="Helvetica", fontSize=11, textColor=C_DARK)
+    s_ann_t = sty("at", fontName="Helvetica-Bold", fontSize=10, textColor=C_DARK, spaceAfter=1)
+    s_ann_d = sty("ad", fontName="Helvetica", fontSize=9, textColor=C_GRAY, leading=13)
+
+    def fmt_data(s):
+        if not s:
+            return "—"
+        try:
+            return dt_mod.datetime.fromisoformat(s[:16]).strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            return s[:16]
+
+    # ── Cabeçalho com Índice de Saúde ────────────────────────────────────────
+    class HeaderBlock(Flowable):
+        def __init__(self, w):
+            Flowable.__init__(self)
+            self.width = w
+            self.height = 72
+
+        def wrap(self, aw, ah):
+            return (self.width, self.height)
+
+        def draw(self):
+            c = self.canv
+            c.setFillColor(NAVY)
+            c.rect(0, 0, self.width, self.height, fill=1, stroke=0)
+            c.setFillColor(BLUE)
+            c.rect(0, 0, self.width, 22, fill=1, stroke=0)
+            c.setFillColor(WHITE)
+            c.setFont("Helvetica-Bold", 22)
+            c.drawString(20, 42, "NEXAR QRQC")
+            c.setFillColor(colors.HexColor("#93C5FD"))
+            c.setFont("Helvetica", 10)
+            c.drawString(20, 28, "Laudo de Inspeção Visual")
+            # Badge do Índice de Saúde (direita)
+            val = "—" if score is None else str(score)
+            c.setFillColor(score_color)
+            c.circle(self.width - 42, self.height / 2 + 2, 24, fill=1, stroke=0)
+            c.setFillColor(WHITE)
+            c.setFont("Helvetica-Bold", 20)
+            c.drawCentredString(self.width - 42, self.height / 2 - 4, val)
+            c.setFont("Helvetica", 7)
+            c.setFillColor(colors.HexColor("#BFDBFE"))
+            c.drawRightString(self.width - 74, self.height / 2 + 6, "ÍNDICE")
+            c.drawRightString(self.width - 74, self.height / 2 - 4, "DE SAÚDE")
+            c.setFillColor(score_color)
+            c.rect(0, self.height - 4, self.width, 4, fill=1, stroke=0)
+
+    def section_header(texto):
+        return [
+            HRFlowable(width="100%", thickness=1, color=LBLUE, spaceAfter=4),
+            Paragraph(f"<b>{texto}</b>", sty("sh", fontName="Helvetica-Bold",
+                      fontSize=10, textColor=BLUE, spaceAfter=6)),
+        ]
+
+    def info_cell(label, value):
+        return [Paragraph(label.upper(), s_label),
+                Paragraph(f"<b>{value}</b>", s_value)]
+
+    buf = BytesIO()
+    pw, ph = A4
+    margin = 20 * mm
+
+    def build_footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(NAVY)
+        canvas.rect(0, 0, pw, 14 * mm, fill=1, stroke=0)
+        canvas.setFillColor(WHITE)
+        canvas.setFont("Helvetica", 8)
+        now_str = dt_mod.datetime.now().strftime("%d/%m/%Y %H:%M")
+        canvas.drawString(margin, 5 * mm, f"Nexar QRQC · Sensor Visual · Gerado em {now_str}")
+        canvas.drawRightString(pw - margin, 5 * mm, f"Percepção #{percepcao_id} · Página {doc.page}")
+        canvas.setFillColor(score_color)
+        canvas.rect(0, 13.5 * mm, pw, 1.5 * mm, fill=1, stroke=0)
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=margin, rightMargin=margin,
+        topMargin=margin, bottomMargin=18 * mm,
+        title=f"Laudo Sensor Visual #{percepcao_id} — Nexar QRQC", author="Nexar QRQC",
+    )
+    story = [HeaderBlock(pw - 2 * margin), Spacer(1, 10)]
+
+    # ── Grade de informações ─────────────────────────────────────────────────
+    n_crit = sum(1 for a in anomalias if a.get("severidade") == "critico")
+    resumo_sev = f"{len(anomalias)} anomalia(s)" + (f" · {n_crit} crítica(s)" if n_crit else "")
+    info_data = [
+        [info_cell("Máquina", row["maquina_nome"]), info_cell("Operador", row["operador_nome"])],
+        [info_cell("Data da inspeção", fmt_data(row["criado_em"])),
+         info_cell("Anomalias", resumo_sev)],
+    ]
+    if row["contexto"]:
+        info_data.append([info_cell("Contexto informado", row["contexto"]),
+                          info_cell("Modelo IA", row["modelo_ia"] or "—")])
+    col_w = (pw - 2 * margin) / 2
+    info_table = Table(
+        [[c for pair in rp for c in pair] for rp in info_data],
+        colWidths=[col_w * 0.4, col_w * 0.6, col_w * 0.4, col_w * 0.6], hAlign="LEFT",
+    )
+    info_table.setStyle(TableStyle([
+        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, C_BG]),
+        ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.5, LBLUE),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 10))
+
+    # ── Foto anotada ─────────────────────────────────────────────────────────
+    img_path = (row["imagem_url"] or "").lstrip("/")
+    abs_path = os.path.join(app.root_path, img_path)
+    if os.path.exists(abs_path):
+        try:
+            anotada = sensor_visual.desenhar_anomalias(Image.open(abs_path), anomalias)
+            img_buf = BytesIO()
+            anotada.save(img_buf, "PNG")
+            img_buf.seek(0)
+            iw, ih = anotada.size
+            max_w = pw - 2 * margin - 8
+            max_h = 130 * mm
+            ratio = iw / ih
+            w = min(max_w, max_h * ratio)
+            h = w / ratio
+            story += section_header("Foto Inspecionada")
+            story.append(Table(
+                [[RLImage(img_buf, width=w, height=h)]],
+                colWidths=[pw - 2 * margin],
+                style=[("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                       ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#0D1117")),
+                       ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)],
+            ))
+            story.append(Spacer(1, 10))
+        except Exception as e:
+            logger.warning(f"[laudo] falha ao anotar imagem: {e}")
+
+    # ── Anomalias detectadas ─────────────────────────────────────────────────
+    if anomalias:
+        story += section_header(f"Anomalias Detectadas ({len(anomalias)})")
+        for i, a in enumerate(anomalias, 1):
+            sev = a.get("severidade", "info")
+            cor = colors.HexColor(SEV_COR.get(sev, "#3B82F6"))
+            conf = int(round(float(a.get("confianca", 0)) * 100))
+            badge = Table(
+                [[Paragraph(f"<font color='white'><b>{i}</b></font>",
+                            sty("b", fontName="Helvetica-Bold", fontSize=10,
+                                textColor=WHITE, alignment=TA_CENTER))]],
+                colWidths=[20], rowHeights=[20],
+                style=[("BACKGROUND", (0, 0), (-1, -1), cor),
+                       ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")],
+            )
+            linhas = [[Paragraph(
+                f"<b>{a.get('rotulo', '')}</b> &nbsp;"
+                f"<font color='{SEV_COR.get(sev)}' size=7><b>{SEV_LABEL.get(sev, sev.upper())} · {conf}%</b></font>",
+                s_ann_t)]]
+            if a.get("componente") or a.get("descricao"):
+                linhas.append([Paragraph(
+                    f"<b>{a.get('componente', '')}:</b> {a.get('descricao', '')}", s_ann_d)])
+            if a.get("causa_provavel"):
+                linhas.append([Paragraph(
+                    f"<font color='#B45309'><b>Possível causa:</b></font> {a['causa_provavel']}", s_ann_d)])
+            if a.get("recomendacao"):
+                linhas.append([Paragraph(
+                    f"<font color='#1D4ED8'><b>Ação:</b></font> {a['recomendacao']}", s_ann_d)])
+            txt = Table(linhas, colWidths=[pw - 2 * margin - 40],
+                        style=[("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)])
+            story.append(Table(
+                [[badge, txt]], colWidths=[28, pw - 2 * margin - 34],
+                style=[("BACKGROUND", (0, 0), (-1, -1), C_BG), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                       ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                       ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+                       ("LINEAFTER", (0, 0), (0, -1), 3, cor), ("LINEBELOW", (0, 0), (-1, -2), 0.5, LBLUE)],
+            ))
+            story.append(Spacer(1, 5))
+    else:
+        story += section_header("Resultado")
+        story.append(Paragraph("Nenhuma anomalia visível detectada. Ponto em condição aparentemente normal.",
+                               sty("ok", fontName="Helvetica", fontSize=10, textColor=C_DARK)))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "A \"possível causa\" é uma hipótese gerada por IA a partir dos sinais visíveis, "
+        "para orientar a investigação técnica — não substitui a inspeção do profissional.",
+        sty("disc", fontName="Helvetica-Oblique", fontSize=8, textColor=C_GRAY, leading=11)))
+
+    doc.build(story, onFirstPage=build_footer, onLaterPages=build_footer)
+    buf.seek(0)
+    fname = f"laudo_sensor_{percepcao_id}_{dt_mod.datetime.now().strftime('%Y%m%d')}.pdf"
+    return send_file(buf, mimetype="application/pdf", as_attachment=True, download_name=fname)
+
+
 # ── Máquinas ──────────────────────────────────────────────────────────────────
 
 @app.route("/maquinas")

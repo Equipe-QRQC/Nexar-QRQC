@@ -183,6 +183,10 @@
         <button id="svConfirmar" class="btn btn-success btn-sm" style="flex:1;">
           <i class="fas fa-check"></i> Confirmar diagnóstico
         </button>
+        <a id="svLaudo" class="btn btn-sm" href="#" target="_blank"
+           style="flex:1; background:var(--bg-input); border:1px solid var(--border); color:var(--text);">
+          <i class="fas fa-file-pdf"></i> Baixar laudo (PDF)
+        </a>
       </div>
       <p id="svConfirmMsg" style="font-size:12px; color:var(--success); margin-top:8px; display:none;">
         <i class="fas fa-check-circle"></i> Percepção confirmada — obrigado, isso treina a IA.
@@ -257,6 +261,7 @@
 
   function render(data){
     currentId = data.id;
+    document.getElementById('svLaudo').href = '/sensor/' + data.id + '/laudo.pdf';
     card.style.display = 'block';
     preview.src = data.imagem_url;
     card.scrollIntoView({ behavior:'smooth', block:'nearest' });

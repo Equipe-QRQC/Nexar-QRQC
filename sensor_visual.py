@@ -20,9 +20,17 @@ import re
 from typing import Literal
 
 from google.genai import types as genai_types
+from PIL import ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("nexar.sensor_visual")
+
+# Cor RGB de cada severidade (mesmo padrão da tela e do laudo).
+_COR_SEVERIDADE = {
+    "critico": (224, 82, 82),
+    "atencao": (245, 166, 35),
+    "info": (59, 158, 255),
+}
 
 
 # ── Taxonomia de defeitos visuais ─────────────────────────────────────────────
@@ -359,6 +367,57 @@ def _parse_json_fallback(texto: str) -> DeteccaoAnomalias | None:
         return DeteccaoAnomalias(**raw)
     except Exception:
         return None
+
+
+def _carregar_fonte(tamanho: int):
+    """Carrega uma fonte TrueType para rótulos; cai no default se indisponível."""
+    for caminho in (
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ):
+        try:
+            return ImageFont.truetype(caminho, tamanho)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def desenhar_anomalias(img, anomalias: list[dict]):
+    """
+    "Queima" as bounding boxes das anomalias sobre uma cópia da foto, com cor
+    por severidade e rótulo numerado. Usado no laudo em PDF (fidelidade de
+    impressão) e em qualquer exportação de imagem. Retorna uma nova imagem PIL.
+    """
+    img = img.convert("RGB").copy()
+    draw = ImageDraw.Draw(img)
+    W, H = img.size
+    espessura = max(2, round(min(W, H) * 0.005))
+    fonte = _carregar_fonte(max(12, round(min(W, H) * 0.026)))
+
+    for i, a in enumerate(anomalias, 1):
+        box = a.get("box_2d")
+        if not box or len(box) != 4:
+            continue
+        ymin, xmin, ymax, xmax = box
+        x1, y1 = xmin / 1000 * W, ymin / 1000 * H
+        x2, y2 = xmax / 1000 * W, ymax / 1000 * H
+        cor = _COR_SEVERIDADE.get(a.get("severidade"), _COR_SEVERIDADE["info"])
+        draw.rectangle([x1, y1, x2, y2], outline=cor, width=espessura)
+
+        rotulo = f"{i}  {a.get('rotulo', '')}".strip()
+        try:
+            l, t, r, b = draw.textbbox((0, 0), rotulo, font=fonte)
+            tw, th = r - l, b - t
+        except Exception:
+            tw, th = len(rotulo) * 7, 12
+        pad = max(3, round(th * 0.35))
+        ty = y1 - th - 2 * pad
+        if ty < 0:  # sem espaço acima → coloca a tag dentro da caixa
+            ty = y1
+        draw.rectangle([x1, ty, x1 + tw + 2 * pad, ty + th + 2 * pad], fill=cor)
+        draw.text((x1 + pad, ty + pad), rotulo, fill=(255, 255, 255), font=fonte)
+
+    return img
 
 
 def _resumo(anomalias: list[dict], score: int) -> str:
