@@ -51,8 +51,18 @@ TAXONOMIA_DEFEITOS: dict[str, dict] = {
 
 SEVERIDADES = ("critico", "atencao", "info")
 
+# Ranking de gravidade (maior = pior). Usado para impor o "piso de severidade":
+# a IA pode escalar a severidade de uma classe, nunca rebaixá-la.
+_RANK_SEVERIDADE = {"info": 1, "atencao": 2, "critico": 3}
+
 # Peso de penalidade de cada severidade no Índice de Saúde (0-100).
-_PESO_SEVERIDADE = {"critico": 35, "atencao": 15, "info": 5}
+# Calibração rigorosa: um defeito crítico derruba o índice de forma expressiva.
+_PESO_SEVERIDADE = {"critico": 50, "atencao": 22, "info": 6}
+
+# Teto do Índice de Saúde conforme a pior severidade presente. Garante que um
+# ponto com anomalia crítica jamais apareça "saudável", por menor que seja a
+# penalidade acumulada.
+_TETO_SEVERIDADE = {"critico": 55, "atencao": 82, "info": 96, "ok": 100}
 
 
 # ── Schemas de saída estruturada ──────────────────────────────────────────────
@@ -114,17 +124,25 @@ def bbox_para_overlay(bbox: list[int]) -> dict:
 def calcular_indice_saude(anomalias: list[dict]) -> int:
     """
     Índice de Saúde (0-100) do ponto inspecionado. Parte de 100 e desconta por
-    anomalia, ponderando severidade × confiança. Várias anomalias acumulam.
+    anomalia, ponderando severidade × confiança; várias anomalias acumulam.
+    Ao final aplica um teto conforme a pior severidade presente, para que um
+    ponto com defeito crítico nunca pareça saudável.
     100 = nada detectado; quanto menor, pior o estado.
     """
     if not anomalias:
         return 100
     penalidade = 0.0
     for a in anomalias:
-        peso = _PESO_SEVERIDADE.get(a.get("severidade", "info"), 5)
+        peso = _PESO_SEVERIDADE.get(a.get("severidade", "info"), 6)
         conf = float(a.get("confianca", 0.5) or 0.5)
         penalidade += peso * conf
-    return max(0, min(100, round(100 - penalidade)))
+    teto = _TETO_SEVERIDADE.get(severidade_predominante(anomalias), 100)
+    return max(0, min(teto, round(100 - penalidade)))
+
+
+def _sev_mais_grave(a: str, b: str) -> str:
+    """Retorna a severidade mais grave entre duas (piso de severidade)."""
+    return a if _RANK_SEVERIDADE.get(a, 0) >= _RANK_SEVERIDADE.get(b, 0) else b
 
 
 def severidade_predominante(anomalias: list[dict]) -> str:
@@ -151,7 +169,16 @@ def _prompt_deteccao(contexto: str) -> str:
         "defeito — nunca o fundo.\n"
         "4. confianca: seja honesto (0.0 a 1.0). Detalhe borrado ou ambíguo → confiança baixa.\n"
         "5. Máximo de 6 anomalias, priorizando as mais severas.\n"
-        "6. descricao e recomendacao: 1 frase cada, técnicas e acionáveis."
+        "6. descricao e recomendacao: 1 frase cada, técnicas e acionáveis.\n\n"
+        "CRITÉRIOS DE SEVERIDADE (seja RIGOROSO — na dúvida, suba a severidade):\n"
+        "- critico: vazamento ATIVO (óleo/fluido escorrendo ou gotejando), trinca/fissura, "
+        "superaquecimento, deformação/empeno, peça faltante, falha em solda. Risco de parada, "
+        "dano ao equipamento ou à segurança.\n"
+        "- atencao: corrosão, oxidação, desgaste, desalinhamento, folga, fixação incorreta. "
+        "Degradação em curso, sem risco imediato.\n"
+        "- info: rebarba, sujidade, acúmulo de resíduo. Observação, sem impacto funcional.\n"
+        "IMPORTANTE: um vazamento com fluido escorrendo é SEMPRE 'critico', NUNCA 'atencao'. "
+        "Não subestime defeitos que comprometem a integridade do equipamento."
     )
 
 
@@ -239,12 +266,15 @@ def _validar_anomalias(itens: list[AnomaliaDetectada]) -> list[dict]:
             continue
         classe = a.classe if a.classe in TAXONOMIA_DEFEITOS else _classe_mais_proxima(a.classe)
         meta = TAXONOMIA_DEFEITOS.get(classe, {})
+        # Piso de severidade: a IA pode escalar acima do baseline da classe,
+        # mas nunca rebaixar (ex: vazamento de óleo não vira 'atenção').
+        severidade = _sev_mais_grave(a.severidade, meta.get("severidade", "info"))
         saida.append({
             **bbox_para_overlay(a.box_2d),
             "box_2d": a.box_2d,
             "classe": classe,
             "rotulo": a.rotulo or meta.get("rotulo", classe),
-            "severidade": a.severidade,
+            "severidade": severidade,
             "confianca": round(float(a.confianca), 2),
             "componente": a.componente,
             "descricao": a.descricao,

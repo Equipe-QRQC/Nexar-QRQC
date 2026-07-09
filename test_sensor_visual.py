@@ -8,18 +8,42 @@ def test_indice_saude_sem_anomalia():
 
 
 def test_indice_saude_critico_reduz():
-    anomalias = [{"severidade": "critico", "confianca": 1.0}]
-    assert sv.calcular_indice_saude(anomalias) == 65  # 100 - 35
+    anomalias = [{"severidade": "critico", "confianca": 1.0}]  # 100-50=50, teto crítico 55
+    assert sv.calcular_indice_saude(anomalias) == 50
 
 
 def test_indice_saude_acumula_e_clampa():
-    anomalias = [{"severidade": "critico", "confianca": 1.0}] * 4  # 4*35 = 140
+    anomalias = [{"severidade": "critico", "confianca": 1.0}] * 4  # 4*50 = 200
     assert sv.calcular_indice_saude(anomalias) == 0  # clampado
 
 
 def test_indice_saude_pondera_confianca():
-    anomalias = [{"severidade": "atencao", "confianca": 0.5}]  # 15*0.5 = 7.5
-    assert sv.calcular_indice_saude(anomalias) == 92  # round(100-7.5)
+    anomalias = [{"severidade": "atencao", "confianca": 0.5}]  # 100-11=89, teto atenção 82
+    assert sv.calcular_indice_saude(anomalias) == 82
+
+
+def test_indice_saude_teto_critico():
+    # Um crítico de baixa confiança ainda mantém o índice no teto (não parece saudável).
+    anomalias = [{"severidade": "critico", "confianca": 0.1}]  # penalidade 5 → 95, teto 55
+    assert sv.calcular_indice_saude(anomalias) == 55
+
+
+def test_piso_severidade_nao_rebaixa():
+    # IA classificou vazamento de óleo como 'atencao' — o piso deve subir p/ 'critico'.
+    a = sv.AnomaliaDetectada(box_2d=[100, 100, 400, 400], classe="vazamento_oleo",
+                             rotulo="Vazamento de óleo", severidade="atencao", confianca=0.85,
+                             componente="cárter", descricao="óleo escorrendo", recomendacao="trocar junta")
+    out = sv._validar_anomalias([a])
+    assert out[0]["severidade"] == "critico"
+
+
+def test_piso_severidade_permite_escalar():
+    # IA pode ESCALAR acima do baseline (corrosão baseline 'atencao' → 'critico' permitido).
+    a = sv.AnomaliaDetectada(box_2d=[0, 0, 100, 100], classe="corrosao", rotulo="Corrosão",
+                             severidade="critico", confianca=0.9, componente="x",
+                             descricao="d", recomendacao="r")
+    out = sv._validar_anomalias([a])
+    assert out[0]["severidade"] == "critico"
 
 
 def test_severidade_predominante():
