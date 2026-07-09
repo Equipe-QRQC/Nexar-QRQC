@@ -92,6 +92,48 @@ def test_classe_fora_taxonomia_mapeia():
     assert out[0]["classe"] == "trinca"  # 'trinca' está contido em 'rachadura_trinca'
 
 
+def test_iou():
+    assert sv._iou([0, 0, 100, 100], [0, 0, 100, 100]) == 1.0          # idênticos
+    assert sv._iou([0, 0, 100, 100], [200, 200, 300, 300]) == 0.0      # disjuntos
+    assert 0.1 < sv._iou([0, 0, 100, 100], [50, 50, 150, 150]) < 0.2   # parcial
+
+
+def test_dedup_mesmo_componente():
+    # Caso real: 4x "acúmulo de sujeira" no mesmo rotor -> colapsa em 1.
+    def mk(conf, box):
+        return sv.AnomaliaDetectada(box_2d=box, classe="acumulo_residuo", rotulo="Acúmulo de sujeira",
+                                    severidade="info", confianca=conf, componente="rotor",
+                                    descricao="sujeira nas ranhuras", recomendacao="limpar")
+    out = sv._validar_anomalias([mk(0.6, [180, 130, 260, 170]), mk(0.6, [180, 180, 260, 220]),
+                                 mk(0.6, [180, 230, 260, 270]), mk(0.6, [180, 280, 260, 320])])
+    assert len(out) == 1
+
+
+def test_dedup_preserva_componentes_distintos():
+    # Mesma classe, componentes diferentes e caixas separadas -> mantém ambos.
+    a1 = sv.AnomaliaDetectada(box_2d=[0, 0, 100, 100], classe="corrosao", rotulo="Corrosão",
+                              severidade="atencao", confianca=0.8, componente="eixo",
+                              descricao="d", recomendacao="r")
+    a2 = sv.AnomaliaDetectada(box_2d=[500, 500, 700, 700], classe="corrosao", rotulo="Corrosão",
+                              severidade="atencao", confianca=0.7, componente="carcaça",
+                              descricao="d", recomendacao="r")
+    out = sv._validar_anomalias([a1, a2])
+    assert len(out) == 2
+
+
+def test_dedup_sobreposicao_alta():
+    # Mesma classe, componentes distintos mas caixas muito sobrepostas -> funde.
+    a1 = sv.AnomaliaDetectada(box_2d=[100, 100, 300, 300], classe="corrosao", rotulo="Corrosão",
+                              severidade="atencao", confianca=0.9, componente="ponto A",
+                              descricao="d", recomendacao="r")
+    a2 = sv.AnomaliaDetectada(box_2d=[110, 110, 305, 305], classe="corrosao", rotulo="Corrosão",
+                              severidade="atencao", confianca=0.6, componente="ponto B",
+                              descricao="d", recomendacao="r")
+    out = sv._validar_anomalias([a1, a2])
+    assert len(out) == 1
+    assert out[0]["confianca"] == 0.9  # mantém a de maior confiança
+
+
 def test_parse_json_fallback_com_cercas():
     txt = '```json\n{"anomalias": [{"box_2d":[10,10,90,90],"classe":"corrosao","rotulo":"Corrosão",' \
           '"severidade":"atencao","confianca":0.7,"componente":"flange","descricao":"d","recomendacao":"r"}]}\n```'

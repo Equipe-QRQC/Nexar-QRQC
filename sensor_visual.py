@@ -169,7 +169,9 @@ def _prompt_deteccao(contexto: str) -> str:
         "defeito — nunca o fundo.\n"
         "4. confianca: seja honesto (0.0 a 1.0). Detalhe borrado ou ambíguo → confiança baixa.\n"
         "5. Máximo de 6 anomalias, priorizando as mais severas.\n"
-        "6. descricao e recomendacao: 1 frase cada, técnicas e acionáveis.\n\n"
+        "6. descricao e recomendacao: 1 frase cada, técnicas e acionáveis.\n"
+        "7. NÃO repita a mesma anomalia. Se o mesmo defeito aparece em vários pontos "
+        "próximos ou no mesmo componente, consolide em UMA única entrada.\n\n"
         "CRITÉRIOS DE SEVERIDADE (seja RIGOROSO — na dúvida, suba a severidade):\n"
         "- critico: vazamento ATIVO (óleo/fluido escorrendo ou gotejando), trinca/fissura, "
         "superaquecimento, deformação/empeno, peça faltante, falha em solda. Risco de parada, "
@@ -281,10 +283,49 @@ def _validar_anomalias(itens: list[AnomaliaDetectada]) -> list[dict]:
             "recomendacao": a.recomendacao,
             "icone": meta.get("icone", "fa-triangle-exclamation"),
         })
+    # Remove duplicatas (mesma classe em região sobreposta ou mesmo componente)
+    saida = _deduplicar(saida)
     # Ordena por severidade e confiança (mais grave primeiro)
     ordem = {"critico": 0, "atencao": 1, "info": 2}
     saida.sort(key=lambda x: (ordem.get(x["severidade"], 3), -x["confianca"]))
     return saida
+
+
+def _iou(b1: list[int], b2: list[int]) -> float:
+    """Intersection-over-Union de dois bboxes [ymin, xmin, ymax, xmax]."""
+    ay1, ax1, ay2, ax2 = b1
+    by1, bx1, by2, bx2 = b2
+    iy1, ix1 = max(ay1, by1), max(ax1, bx1)
+    iy2, ix2 = min(ay2, by2), min(ax2, bx2)
+    inter = max(0, iy2 - iy1) * max(0, ix2 - ix1)
+    if inter == 0:
+        return 0.0
+    area1 = (ay2 - ay1) * (ax2 - ax1)
+    area2 = (by2 - by1) * (bx2 - bx1)
+    return inter / (area1 + area2 - inter)
+
+
+def _deduplicar(anomalias: list[dict], iou_min: float = 0.5) -> list[dict]:
+    """
+    Funde detecções redundantes: mesma classe em caixas sobrepostas (IoU alto)
+    ou no mesmo componente. Mantém a de maior confiança. Evita que o modelo
+    infle a lista repetindo a mesma anomalia várias vezes.
+    """
+    mantidas: list[dict] = []
+    for a in sorted(anomalias, key=lambda x: -x["confianca"]):
+        comp_a = (a.get("componente") or "").strip().lower()
+        duplicada = any(
+            a["classe"] == m["classe"] and (
+                _iou(a["box_2d"], m["box_2d"]) >= iou_min
+                or (comp_a and comp_a == (m.get("componente") or "").strip().lower())
+            )
+            for m in mantidas
+        )
+        if not duplicada:
+            mantidas.append(a)
+        else:
+            logger.info(f"[sensor] duplicata removida: {a['rotulo']} ({a.get('componente')})")
+    return mantidas
 
 
 def _classe_mais_proxima(classe: str) -> str:
