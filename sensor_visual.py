@@ -82,6 +82,10 @@ class AnomaliaDetectada(BaseModel):
     confianca: float = Field(description="Confiança da detecção, 0.0 a 1.0", ge=0.0, le=1.0)
     componente: str = Field(description="Componente/região afetada (ex: 'mancal', 'flange', 'carcaça')")
     descricao: str = Field(description="O que foi observado, 1 frase objetiva")
+    causa_provavel: str = Field(
+        default="",
+        description="Causa raiz mais provável do defeito, 1 frase técnica (o 'porquê')",
+    )
     recomendacao: str = Field(description="Ação recomendada, 1 frase acionável")
 
 
@@ -169,7 +173,11 @@ def _prompt_deteccao(contexto: str) -> str:
         "defeito — nunca o fundo.\n"
         "4. confianca: seja honesto (0.0 a 1.0). Detalhe borrado ou ambíguo → confiança baixa.\n"
         "5. Máximo de 6 anomalias, priorizando as mais severas.\n"
-        "6. descricao e recomendacao: 1 frase cada, técnicas e acionáveis.\n"
+        "6. Para cada anomalia preencha 1 frase técnica em cada campo:\n"
+        "   - descricao: O QUE foi observado\n"
+        "   - causa_provavel: O PORQUÊ — a causa raiz mais provável do defeito "
+        "(ex: 'lubrificação deficiente', 'desalinhamento do eixo', 'vedação ressecada')\n"
+        "   - recomendacao: A AÇÃO corretiva recomendada\n"
         "7. NÃO repita a mesma anomalia. Se o mesmo defeito aparece em vários pontos "
         "próximos ou no mesmo componente, consolide em UMA única entrada.\n\n"
         "CRITÉRIOS DE SEVERIDADE (seja RIGOROSO — na dúvida, suba a severidade):\n"
@@ -280,6 +288,7 @@ def _validar_anomalias(itens: list[AnomaliaDetectada]) -> list[dict]:
             "confianca": round(float(a.confianca), 2),
             "componente": a.componente,
             "descricao": a.descricao,
+            "causa_provavel": a.causa_provavel,
             "recomendacao": a.recomendacao,
             "icone": meta.get("icone", "fa-triangle-exclamation"),
         })

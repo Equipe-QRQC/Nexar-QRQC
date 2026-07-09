@@ -134,6 +134,24 @@ def test_dedup_sobreposicao_alta():
     assert out[0]["confianca"] == 0.9  # mantém a de maior confiança
 
 
+def test_causa_provavel_flui():
+    a = sv.AnomaliaDetectada(box_2d=[100, 100, 400, 400], classe="superaquecimento",
+                             rotulo="Superaquecimento", severidade="critico", confianca=0.9,
+                             componente="rolamento", descricao="metal descolorido pelo calor",
+                             causa_provavel="lubrificação deficiente", recomendacao="substituir rolamento")
+    out = sv._validar_anomalias([a])
+    assert out[0]["causa_provavel"] == "lubrificação deficiente"
+
+
+def test_causa_provavel_opcional():
+    # Campo é opcional: se a IA não retornar, não quebra.
+    a = sv.AnomaliaDetectada(box_2d=[100, 100, 400, 400], classe="corrosao", rotulo="Corrosão",
+                             severidade="atencao", confianca=0.8, componente="carcaça",
+                             descricao="ferrugem", recomendacao="tratar")
+    out = sv._validar_anomalias([a])
+    assert out[0]["causa_provavel"] == ""
+
+
 def test_parse_json_fallback_com_cercas():
     txt = '```json\n{"anomalias": [{"box_2d":[10,10,90,90],"classe":"corrosao","rotulo":"Corrosão",' \
           '"severidade":"atencao","confianca":0.7,"componente":"flange","descricao":"d","recomendacao":"r"}]}\n```'
