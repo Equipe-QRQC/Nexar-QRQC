@@ -952,15 +952,15 @@ def _detectar_componentes(
 def _should_try_next_model(err: Exception) -> bool:
     """
     Decide se vale a pena tentar o próximo modelo da cadeia.
-    Inclui: 429 (cota), 404 (modelo descontinuado/inválido), 503 (indisponível).
+    Cobre erros do Gemini (RESOURCE_EXHAUSTED, NOT_FOUND) e OpenAI (429, rate_limit).
     """
     s = str(err)
     s_low = s.lower()
     indicadores = [
-        "429", "RESOURCE_EXHAUSTED", "quota", "rate limit",       # cota
-        "404", "NOT_FOUND", "is not found", "is not supported",   # modelo descontinuado/inválido
-        "503", "UNAVAILABLE", "overloaded",                        # serviço indisponível
-        "DEADLINE_EXCEEDED", "timeout",                            # timeout
+        "429", "RESOURCE_EXHAUSTED", "quota", "rate limit", "rate_limit_exceeded",
+        "404", "NOT_FOUND", "is not found", "is not supported", "model_not_found",
+        "503", "UNAVAILABLE", "overloaded",
+        "DEADLINE_EXCEEDED", "timeout",
     ]
     return any(ind in s or ind.lower() in s_low for ind in indicadores)
 
@@ -1975,8 +1975,9 @@ def sensor():
 @limiter.limit("20 per minute")
 def sensor_analisar():
     """Recebe uma foto, roda a detecção de anomalias e registra a percepção."""
-    if not gemini_client:
-        return jsonify({"erro": "IA offline — configure GEMINI_API_KEY no .env."}), 503
+    _sensor_client = nexa_ia._get_client()
+    if not _sensor_client:
+        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
@@ -2012,9 +2013,9 @@ def sensor_analisar():
         return jsonify({"erro": "Não foi possível processar a imagem."}), 400
 
     resultado = sensor_visual.detectar_anomalias(
-        client=gemini_client,
+        client=_sensor_client,
         img_obj=img_obj,
-        modelos=GEMINI_MODELS,
+        modelos=["gpt-4o", "gpt-4o-mini"],
         should_try_next=_should_try_next_model,
         contexto=contexto,
     )
@@ -2828,6 +2829,249 @@ def api_machine_components_delete(mid: int, cid: str):
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+# ── Mobile API ───────────────────────────────────────────────────────────────
+# Autenticação por Bearer token para o app Flutter.
+
+def _mobile_auth(f):
+    """Decorator: valida Authorization: Bearer <token> para rotas mobile."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return jsonify({"erro": "Token não fornecido"}), 401
+        token = auth[7:]
+        conn = get_db()
+        row = conn.execute(
+            """SELECT mt.user_id, u.username, u.nome, u.cargo
+               FROM mobile_tokens mt
+               JOIN users u ON u.id = mt.user_id
+               WHERE mt.token = ? AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))""",
+            (token,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({"erro": "Token inválido ou expirado"}), 401
+        request.mobile_user = dict(row)
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _ensure_mobile_tables():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mobile_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            criado_at TEXT DEFAULT (datetime('now')),
+            expires_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+with app.app_context():
+    _ensure_mobile_tables()
+
+
+@app.route("/api/mobile/login", methods=["POST"])
+@limiter.limit("10 per minute")
+def mobile_login():
+    data = request.get_json(silent=True) or {}
+    username = (data.get("username") or "").strip()
+    password = data.get("password") or ""
+    if not username or not password:
+        return jsonify({"erro": "Usuário e senha são obrigatórios"}), 400
+
+    conn = get_db()
+    user = conn.execute(
+        "SELECT id, username, nome, cargo, password_hash FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    if not user:
+        conn.close()
+        return jsonify({"erro": "Usuário ou senha inválidos"}), 401
+
+    from werkzeug.security import check_password_hash
+    if not check_password_hash(user["password_hash"], password):
+        conn.close()
+        return jsonify({"erro": "Usuário ou senha inválidos"}), 401
+
+    token = secrets.token_hex(32)
+    conn.execute(
+        """INSERT INTO mobile_tokens (user_id, token, expires_at)
+           VALUES (?, ?, datetime('now', '+30 days'))""",
+        (user["id"], token),
+    )
+    conn.commit()
+    conn.close()
+    logger.info(f"[mobile] login — user_id={user['id']}")
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "id": user["id"],
+        "nome": user["nome"] or user["username"],
+        "cargo": user["cargo"] or "",
+    })
+
+
+@app.route("/api/mobile/maquinas")
+@_mobile_auth
+def mobile_maquinas():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, nome, setor FROM maquinas ORDER BY nome"
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/mobile/ocorrencias")
+@_mobile_auth
+def mobile_ocorrencias_get():
+    limit = min(int(request.args.get("limit", 30)), 100)
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT o.id, m.nome AS maquina_nome, o.descricao,
+                  o.tipo_ocorrencia, o.nivel_impacto, o.status,
+                  o.data_ocorrencia
+           FROM ocorrencias o
+           LEFT JOIN maquinas m ON m.id = o.maquina_id
+           ORDER BY o.data_registro DESC LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/mobile/ocorrencias", methods=["POST"])
+@_mobile_auth
+@limiter.limit("20 per minute")
+def mobile_ocorrencias_post():
+    data = request.get_json(silent=True) or {}
+    maquina_id = data.get("maquina_id")
+    descricao = (data.get("descricao") or "").strip()
+    if not maquina_id or not descricao:
+        return jsonify({"erro": "maquina_id e descricao são obrigatórios"}), 400
+
+    conn = get_db()
+    cur = conn.execute(
+        """INSERT INTO ocorrencias
+           (maquina_id, descricao, tipo_ocorrencia, nivel_impacto,
+            status, criado_por_id, data_ocorrencia, data_registro)
+           VALUES (?,?,?,?,'Aberta',?,date('now'),datetime('now'))""",
+        (
+            maquina_id,
+            descricao,
+            data.get("tipo_ocorrencia", "Falha mecânica"),
+            data.get("nivel_impacto", "Médio"),
+            request.mobile_user["user_id"],
+        ),
+    )
+    conn.commit()
+    oc_id = cur.lastrowid
+    conn.close()
+    logger.info(f"[mobile] ocorrência criada id={oc_id}")
+    return jsonify({"ok": True, "id": oc_id})
+
+
+_DOC_SYSTEM = (
+    "Você é um auditor especializado em documentos industriais e formulários técnicos. "
+    "Analisa documentos fotografados e identifica problemas com rigor profissional. "
+    "Retorna APENAS JSON válido, sem texto antes ou depois."
+)
+
+_DOC_SCHEMA = (
+    '{"problemas": [{'
+    '"tipo": "erro_calculo|campo_incorreto|dado_faltante|inconsistencia|erro_ortografico|outro", '
+    '"campo": "nome do campo ou região do documento", '
+    '"descricao": "descrição objetiva do problema encontrado", '
+    '"sugestao": "como corrigir (1 frase)", '
+    '"severidade": "alto|medio|baixo"'
+    '}], "score": 0-100, "resumo": "resumo em 1 frase"}'
+)
+
+
+@app.route("/api/mobile/inspecao/documento", methods=["POST"])
+@_mobile_auth
+@limiter.limit("10 per minute")
+def mobile_inspecao_documento():
+    openai_client = nexa_ia._get_client()
+    if not openai_client:
+        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+
+    arquivo = request.files.get("foto")
+    if not arquivo:
+        return jsonify({"erro": "Nenhuma foto enviada."}), 400
+
+    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
+
+    try:
+        img = Image.open(arquivo.stream)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+    except Exception:
+        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
+
+    import base64
+    from io import BytesIO
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+
+    ctx = f"Tipo de documento: {tipo_doc}\n" if tipo_doc else ""
+    user_prompt = (
+        f"{ctx}"
+        "Analise este documento e identifique TODOS os problemas:\n"
+        "- Erros de cálculo (somas, médias, valores incorretos)\n"
+        "- Campos preenchidos incorretamente ou com dados inconsistentes\n"
+        "- Dados obrigatórios faltantes\n"
+        "- Inconsistências entre campos relacionados\n"
+        "- Erros ortográficos em campos técnicos importantes\n\n"
+        "Se o documento estiver correto, retorne problemas: [].\n"
+        "Seja rigoroso — só reporte problemas realmente visíveis.\n\n"
+        f"Retorne APENAS JSON neste formato:\n{_DOC_SCHEMA}"
+    )
+
+    try:
+        resp = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": _DOC_SYSTEM},
+                {"role": "user", "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64}",
+                        "detail": "high",
+                    }},
+                ]},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=1500,
+        )
+        content = (resp.choices[0].message.content or "").strip()
+        result = json.loads(content)
+    except Exception as e:
+        err = str(e)
+        if "credit_balance_exhausted" in err or "insufficient_quota" in err:
+            return jsonify({"erro": "Créditos OpenAI esgotados."}), 200
+        logger.exception("[mobile/doc] erro OpenAI")
+        return jsonify({"erro": f"Falha na análise: {err[:200]}"}), 502
+
+    result.setdefault("modelo", "gpt-4o")
+    result.setdefault("score", 100 if not result.get("problemas") else max(
+        0, 100 - len(result["problemas"]) * 15))
+    result.setdefault("resumo", "Análise concluída.")
+    logger.info(
+        f"[mobile/doc] user={request.mobile_user['user_id']} "
+        f"problemas={len(result.get('problemas', []))}"
+    )
+    return jsonify(result)
 
 
 if __name__ == "__main__":

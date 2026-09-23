@@ -14,12 +14,13 @@ que injeta o `client` já inicializado. Assim o módulo é testável isoladament
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
+from io import BytesIO
 from typing import Literal
 
-from google.genai import types as genai_types
 from PIL import ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
@@ -102,22 +103,21 @@ class DeteccaoAnomalias(BaseModel):
     anomalias: list[AnomaliaDetectada]
 
 
-def build_config() -> genai_types.GenerateContentConfig:
-    """Config de geração para a detecção de anomalias (saída JSON estruturada)."""
-    return genai_types.GenerateContentConfig(
-        system_instruction=(
-            "Você é um inspetor sênior de manutenção industrial com visão computacional. "
-            "Analisa FOTOS REAIS de equipamentos (não diagramas) e localiza anomalias físicas "
-            "visíveis com bounding boxes precisos no formato [ymin, xmin, ymax, xmax] em 0-1000. "
-            "É rigoroso e conservador: só reporta o que realmente aparece na imagem e nunca "
-            "inventa coordenadas. Se a foto não mostra defeito, retorna lista vazia."
-        ),
-        temperature=0.1,
-        top_p=0.9,
-        max_output_tokens=1200,
-        response_mime_type="application/json",
-        response_schema=DeteccaoAnomalias,
-    )
+_SYSTEM_SENSOR = (
+    "Você é um inspetor sênior de manutenção industrial com visão computacional. "
+    "Analisa FOTOS REAIS de equipamentos (não diagramas) e localiza anomalias físicas "
+    "visíveis com bounding boxes precisos no formato [ymin, xmin, ymax, xmax] em escala 0-1000. "
+    "É rigoroso e conservador: só reporta o que realmente aparece na imagem e nunca "
+    "inventa coordenadas. Se a foto não mostra defeito, retorna anomalias: []."
+)
+
+_JSON_SCHEMA_HINT = (
+    '{"anomalias": [{"box_2d": [ymin,xmin,ymax,xmax], '
+    '"classe": "string", "rotulo": "string", '
+    '"severidade": "critico|atencao|info", "confianca": 0.0, '
+    '"componente": "string", "descricao": "string", '
+    '"causa_provavel": "string", "recomendacao": "string"}]}'
+)
 
 
 # ── Conversão de bbox e pontuação ─────────────────────────────────────────────
@@ -208,10 +208,10 @@ def detectar_anomalias(
     contexto: str = "",
 ) -> dict:
     """
-    Executa a detecção de anomalias sobre uma foto.
+    Executa a detecção de anomalias sobre uma foto usando OpenAI Vision.
 
     Args:
-        client: cliente Gemini já inicializado (genai.Client).
+        client: cliente OpenAI já inicializado.
         img_obj: imagem PIL (RGB).
         modelos: cadeia de modelos a tentar (fallback em cota/indisponibilidade).
         should_try_next: callable(Exception)->bool que decide o fallback de modelo.
@@ -224,24 +224,46 @@ def detectar_anomalias(
     if client is None or img_obj is None:
         return {
             "anomalias": [], "score": None, "severidade_max": "ok",
-            "resumo": "IA indisponível — configure GEMINI_API_KEY.",
+            "resumo": "IA indisponível — configure OPENAI_API_KEY.",
             "modelo": None, "status": "offline",
         }
 
-    config = build_config()
-    prompt = _prompt_deteccao(contexto)
+    # Converte imagem para JPEG base64
+    buf = BytesIO()
+    img_obj.convert("RGB").save(buf, format="JPEG", quality=90)
+    b64 = base64.b64encode(buf.getvalue()).decode()
+
+    user_prompt = _prompt_deteccao(contexto) + f"\n\nRetorne APENAS JSON válido neste formato:\n{_JSON_SCHEMA_HINT}"
     ultimo_erro: Exception | None = None
 
     for modelo in modelos:
         try:
-            response = client.models.generate_content(
+            response = client.chat.completions.create(
                 model=modelo,
-                contents=[prompt, img_obj],
-                config=config,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_SENSOR},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": user_prompt},
+                        {"type": "image_url", "image_url": {
+                            "url": f"data:image/jpeg;base64,{b64}",
+                            "detail": "high",
+                        }},
+                    ]},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+                max_tokens=1500,
             )
-            parsed: DeteccaoAnomalias | None = response.parsed
-            if parsed is None:
-                parsed = _parse_json_fallback(response.text or "")
+            content = (response.choices[0].message.content or "").strip()
+            parsed: DeteccaoAnomalias | None = None
+            try:
+                raw = json.loads(content)
+                if isinstance(raw, list):
+                    raw = {"anomalias": raw}
+                parsed = DeteccaoAnomalias(**raw)
+            except Exception:
+                parsed = _parse_json_fallback(content)
+
             if parsed is None:
                 logger.warning(f"[sensor/{modelo}] resposta sem JSON parseável")
                 continue
