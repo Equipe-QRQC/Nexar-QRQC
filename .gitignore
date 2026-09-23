@@ -1,5 +1,6 @@
 .env
 qrqc.db
+f_err.log
 
 # Python
 __pycache__/
