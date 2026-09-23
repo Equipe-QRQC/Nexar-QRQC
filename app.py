@@ -55,6 +55,10 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.errorhandler(429)
+def rate_limit_handler(e):
+    return jsonify({"erro": "Muitas tentativas. Aguarde um momento e tente novamente."}), 429
+
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
 # Modelo: gemini-2.0-flash (free tier: 15 req/min, 1500 req/dia)
 # Obter chave: https://aistudio.google.com/apikey
@@ -3073,5 +3077,86 @@ def mobile_inspecao_documento():
     return jsonify(result)
 
 
+@app.route("/api/mobile/sensor/analisar", methods=["POST"])
+@_mobile_auth
+@limiter.limit("20 per minute")
+def mobile_sensor_analisar():
+    _sensor_client = nexa_ia._get_client()
+    if not _sensor_client:
+        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+
+    arquivo = request.files.get("foto")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"erro": "Nenhuma foto enviada."}), 400
+
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
+    if ext not in _SENSOR_EXT:
+        return jsonify({"erro": "Formato inválido. Envie PNG ou JPG."}), 400
+
+    contexto = (request.form.get("contexto") or "").strip()[:300]
+    maquina_id = request.form.get("maquina_id") or None
+    try:
+        maquina_id = int(maquina_id) if maquina_id else None
+    except (TypeError, ValueError):
+        maquina_id = None
+
+    nome_seguro = secure_filename(arquivo.filename) or f"foto.{ext}"
+    nome_arquivo = f"{secrets.token_hex(8)}_{nome_seguro}"
+    caminho = os.path.join(SENSOR_FOLDER, nome_arquivo)
+    arquivo.save(caminho)
+    imagem_url = f"/{caminho.replace(os.sep, '/')}"
+
+    try:
+        img_obj = Image.open(caminho)
+        if img_obj.mode in ("RGBA", "P"):
+            img_obj = img_obj.convert("RGB")
+    except Exception:
+        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
+
+    resultado = sensor_visual.detectar_anomalias(
+        client=_sensor_client,
+        img_obj=img_obj,
+        modelos=["gpt-4o", "gpt-4o-mini"],
+        should_try_next=_should_try_next_model,
+        contexto=contexto,
+    )
+
+    if resultado["status"] == "erro":
+        return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
+
+    anomalias = resultado["anomalias"]
+    user_id = request.mobile_user["user_id"]
+    try:
+        conn = get_db()
+        cursor = conn.execute(
+            """INSERT INTO percepcoes
+               (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
+                num_anomalias, severidade_max, score_saude, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                maquina_id, imagem_url, contexto, resultado["modelo"],
+                json.dumps(anomalias, ensure_ascii=False), len(anomalias),
+                resultado["severidade_max"], resultado["score"], user_id,
+            ),
+        )
+        percepcao_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception("[mobile/sensor] erro ao salvar percepção")
+        return jsonify({"erro": f"Erro ao salvar: {e}"}), 500
+
+    return jsonify({
+        "id": percepcao_id,
+        "imagem_url": imagem_url,
+        "anomalias": anomalias,
+        "score": resultado["score"],
+        "severidade_max": resultado["severidade_max"],
+        "resumo": resultado["resumo"],
+        "modelo": resultado["modelo"],
+        "status": resultado["status"],
+    })
+
+
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)

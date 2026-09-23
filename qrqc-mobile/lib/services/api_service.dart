@@ -102,7 +102,7 @@ class ApiService {
   }) async {
     final req = http.MultipartRequest(
       'POST',
-      Uri.parse('$_baseUrl/api/sensor/analisar'),
+      Uri.parse('$_baseUrl/api/mobile/sensor/analisar'),
     );
     req.headers['Authorization'] = 'Bearer $_token';
     req.files.add(await http.MultipartFile.fromPath('foto', foto.path));
