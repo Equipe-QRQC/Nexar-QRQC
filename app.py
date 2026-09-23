@@ -2883,6 +2883,7 @@ with app.app_context():
 
 
 @app.route("/api/mobile/login", methods=["POST"])
+@csrf.exempt
 @limiter.limit("10 per minute")
 def mobile_login():
     data = request.get_json(silent=True) or {}
@@ -2924,6 +2925,7 @@ def mobile_login():
 
 
 @app.route("/api/mobile/maquinas")
+@csrf.exempt
 @_mobile_auth
 def mobile_maquinas():
     conn = get_db()
@@ -2935,6 +2937,7 @@ def mobile_maquinas():
 
 
 @app.route("/api/mobile/ocorrencias")
+@csrf.exempt
 @_mobile_auth
 def mobile_ocorrencias_get():
     limit = min(int(request.args.get("limit", 30)), 100)
@@ -2953,6 +2956,7 @@ def mobile_ocorrencias_get():
 
 
 @app.route("/api/mobile/ocorrencias", methods=["POST"])
+@csrf.exempt
 @_mobile_auth
 @limiter.limit("20 per minute")
 def mobile_ocorrencias_post():
@@ -3000,6 +3004,7 @@ _DOC_SCHEMA = (
 
 
 @app.route("/api/mobile/inspecao/documento", methods=["POST"])
+@csrf.exempt
 @_mobile_auth
 @limiter.limit("10 per minute")
 def mobile_inspecao_documento():
@@ -3078,6 +3083,7 @@ def mobile_inspecao_documento():
 
 
 @app.route("/api/mobile/sensor/analisar", methods=["POST"])
+@csrf.exempt
 @_mobile_auth
 @limiter.limit("20 per minute")
 def mobile_sensor_analisar():
