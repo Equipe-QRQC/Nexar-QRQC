@@ -1,0 +1,249 @@
+{% extends 'menu.html' %}
+{% block title %}QRQC 3D AI — Nexar{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/qrqc3d.css" />
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title">
+    <i class="fas fa-cube" style="color:var(--primary)"></i>
+    QRQC 3D AI
+    <span class="demo-badge" style="margin-left:10px">NEXA IA</span>
+  </div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('historico') }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-arrow-left"></i> Voltar
+    </a>
+  </div>
+</div>
+
+<div class="page-body" style="padding:0 24px 24px; overflow:hidden;">
+
+  <div class="qrqc3d-layout">
+
+    <!-- ── Viewer 3D ──────────────────────────────── -->
+    <div class="viewer-card">
+      <div class="viewer-toolbar">
+        <span class="viewer-title">
+          <i class="fas fa-cogs" style="color:var(--primary);margin-right:6px"></i>
+          {% if maquina %}{{ maquina.nome }}{% else %}Máquina{% endif %}
+        </span>
+        <span class="demo-badge">MODELO DEMO</span>
+        <button class="btn-3d" onclick="resetCamera()">
+          <i class="fas fa-compress-arrows-alt"></i> Reset
+        </button>
+        <button class="btn-3d" onclick="clearHighlights()">
+          <i class="fas fa-times"></i> Limpar
+        </button>
+      </div>
+
+      <canvas id="three-canvas"></canvas>
+
+      <!-- Tooltip hover -->
+      <div class="component-tooltip" id="component-tooltip">
+        <div class="ct-name"></div>
+        <div class="ct-prob"></div>
+      </div>
+
+      <!-- Overlay de investigação -->
+      <div class="investigation-overlay" id="investigation-overlay" style="display:none">
+        <div class="inv-title">
+          <i class="fas fa-robot" style="margin-right:8px"></i>
+          NEXA IA — INVESTIGAÇÃO
+        </div>
+        <div class="inv-steps" id="inv-steps"></div>
+      </div>
+    </div>
+
+    <!-- ── Painel direito ──────────────────────────── -->
+    <div class="panel-info">
+
+      <!-- Ocorrência -->
+      <div>
+        <div class="panel-section-title">Ocorrência #{{ ocorrencia.id }}</div>
+        <div class="occ-info">
+          <div class="occ-info-row">
+            <span class="occ-info-label">Operador</span>
+            <span class="occ-info-value">{{ ocorrencia.nome_operador or '—' }}</span>
+          </div>
+          <div class="occ-info-row">
+            <span class="occ-info-label">Tipo</span>
+            <span class="occ-info-value">{{ ocorrencia.tipo_ocorrencia or '—' }}</span>
+          </div>
+          <div class="occ-info-row">
+            <span class="occ-info-label">Impacto</span>
+            <span class="occ-info-value">
+              {% if ocorrencia.nivel_impacto == 'Alto' %}
+                <span class="severity-badge severity-high">Alto</span>
+              {% elif ocorrencia.nivel_impacto == 'Médio' %}
+                <span class="severity-badge severity-medium">Médio</span>
+              {% else %}
+                <span class="severity-badge severity-low">{{ ocorrencia.nivel_impacto or '—' }}</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="occ-info-row">
+            <span class="occ-info-label">Status</span>
+            <span class="occ-info-value">{{ ocorrencia.status }}</span>
+          </div>
+        </div>
+        <div style="margin-top:10px; padding:10px; background:var(--bg-input); border-radius:var(--radius-sm); font-size:12px; color:var(--text-muted); line-height:1.5;">
+          {{ ocorrencia.descricao or '' }}
+        </div>
+      </div>
+
+      <!-- Botão de análise -->
+      <div>
+        {% if not ocorrencia.maquina_id %}
+          <div class="tech-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            Esta ocorrência não tem máquina associada. Associe uma máquina para habilitar a análise 3D.
+          </div>
+        {% else %}
+          <button class="btn-analyze" id="btn-analyze"
+                  onclick="startAnalysis({{ ocorrencia.id }})">
+            <i class="fas fa-robot"></i>
+            {% if diagnostico %}Reanalisar com Nexa IA{% else %}Iniciar Análise Nexa IA{% endif %}
+          </button>
+        {% endif %}
+      </div>
+
+      <!-- Resultado — hidden até análise -->
+      <div id="result-sections" style="{{ 'display:block' if diagnostico else 'display:none' }}">
+
+        <!-- Severidade geral + summary -->
+        <div>
+          <div class="panel-section-title" style="display:flex;align-items:center;gap:8px">
+            Diagnóstico
+            <span class="severity-badge severity-{{ diagnostico.severity if diagnostico else 'low' }}"
+                  id="overall-severity">
+              {% if diagnostico %}
+                {{ {'high':'Alta','medium':'Média','low':'Baixa'}.get(diagnostico.severity, diagnostico.severity) }}
+              {% endif %}
+            </span>
+          </div>
+          <div class="summary-box" id="summary-box">
+            {{ diagnostico.summary if diagnostico else '' }}
+          </div>
+        </div>
+
+        <!-- Componente selecionado -->
+        <div class="selected-comp-panel" id="selected-comp-panel">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span class="scp-name" style="font-weight:600;font-size:14px;color:var(--text)"></span>
+            <span class="severity-badge scp-sev"></span>
+            <span class="scp-prob" style="margin-left:auto;font-weight:700;color:var(--primary);font-size:13px"></span>
+          </div>
+          <div class="scp-id" style="font-size:11px;color:var(--text-muted);margin-bottom:4px"></div>
+          <div class="scp-reason" style="font-size:12px;color:var(--text-muted);line-height:1.5"></div>
+        </div>
+
+        <!-- Hipóteses -->
+        <div>
+          <div class="panel-section-title">Hipóteses</div>
+          <div class="hypothesis-list" id="hypothesis-list">
+            {% if diag_componentes %}
+              {% for c in diag_componentes | sort(attribute='probability', reverse=True) %}
+              <div class="hypothesis-item" data-cid="{{ c.component_id }}"
+                   onclick="selectComponent('{{ c.component_id }}'); focusComponent('{{ c.component_id }}')">
+                <div class="hyp-header">
+                  <span class="hyp-dot {{ c.severity }}"></span>
+                  <span class="hyp-name">{{ c.component_name }}</span>
+                  <span class="hyp-prob">{{ (c.probability * 100)|int }}%</span>
+                </div>
+                <div class="hyp-reason">{{ c.reason }}</div>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Análise de padrão -->
+        <div id="pattern-section" style="{{ 'display:none' if not (diagnostico and diagnostico.pattern_analysis) else '' }}">
+          <div class="panel-section-title">Padrão Histórico</div>
+          <div class="summary-box" id="pattern-analysis"
+               style="border-left:3px solid var(--info);background:var(--info-light);color:var(--info)">
+            {{ diagnostico.pattern_analysis if diagnostico and diagnostico.pattern_analysis else '' }}
+          </div>
+        </div>
+
+        <!-- Ações recomendadas -->
+        <div>
+          <div class="panel-section-title">Ações Recomendadas</div>
+          <div class="action-list" id="action-list">
+            {% if diagnostico and diagnostico.recommended_actions %}
+              {% for a in diagnostico.recommended_actions %}
+              <div class="action-item">
+                <span class="action-num">{{ loop.index }}</span>
+                <span>{{ a }}</span>
+              </div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Empty state -->
+      <div id="empty-state" style="{{ 'display:none' if diagnostico else '' }}">
+        <div class="empty-state">
+          <i class="fas fa-robot"></i>
+          <p>Inicie a análise para que a Nexa IA investigue a ocorrência e destaque os componentes suspeitos no modelo 3D.</p>
+        </div>
+      </div>
+
+      <!-- Aviso técnico -->
+      <div id="tech-warning-section" style="{{ '' if diagnostico else 'display:none' }}">
+        <div class="tech-warning">
+          <i class="fas fa-shield-alt" style="margin-right:4px"></i>
+          O diagnóstico é sugestão baseada em dados históricos. A inspeção deve ser realizada por técnico qualificado. A Nexa IA não controla equipamentos.
+        </div>
+      </div>
+
+    </div><!-- /panel-info -->
+
+  </div><!-- /qrqc3d-layout -->
+
+  <!-- ── Etapas de investigação ─────────────────── -->
+  <div id="steps-section" style="{{ '' if (diagnostico and diagnostico.steps_used) else 'display:none' }}; margin-top:16px;">
+    <div class="panel-steps">
+      <div class="panel-section-title">Ferramentas Utilizadas pela Nexa IA</div>
+      <div class="steps-grid" id="steps-chips">
+        {% if diagnostico and diagnostico.steps_used %}
+          {% set steps = diagnostico.steps_used | tojson | safe %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page-body -->
+
+<!-- Three.js via CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="/static/js/qrqc3d.js"></script>
+
+<script>
+  // Dados passados do backend para o JS
+  const QRQC3D_CONFIG = {
+    ocorrenciaId: {{ ocorrencia.id }},
+    components: {{ componentes | tojson }},
+    diagnosis: {% if diagnostico %}{{ diagnostico | tojson }}{% else %}null{% endif %},
+    diagComponents: {{ diag_componentes | tojson }},
+  };
+
+  // Inicia após DOM + Three.js carregar
+  window.addEventListener('DOMContentLoaded', () => {
+    initQRQC3D(QRQC3D_CONFIG);
+
+    // Renderiza steps chips se há diagnóstico
+    {% if diagnostico and diagnostico.steps_used %}
+      const savedSteps = {{ diagnostico.steps_used | tojson }};
+      if (Array.isArray(savedSteps)) renderStepChips(savedSteps);
+    {% endif %}
+  });
+</script>
+
+{% endblock %}

@@ -243,6 +243,10 @@
     <!-- Rodapé -->
     <div class="modal-ftr">
       <button onclick="closeModal()" class="btn btn-outline btn-sm">{{ t.fechar }}</button>
+      <a id="modal3dBtn" href="#"
+         class="btn btn-sm" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;border:none;">
+        <i class="fas fa-cube"></i> QRQC 3D AI
+      </a>
       <a id="modalPdfBtn" href="#" target="_blank"
          class="btn btn-outline btn-sm" style="color:#EF4444; border-color:#FECACA;">
         <i class="fas fa-file-pdf"></i> Baixar PDF
@@ -475,6 +479,7 @@
       const ocId = this.dataset.id;
       document.getElementById('modalId').textContent = ocId;
       document.getElementById('modalPdfBtn').href = `/ocorrencia/${ocId}/pdf`;
+      document.getElementById('modal3dBtn').href = `/qrqc3d/${ocId}`;
 
       // Accent bar por nível de impacto
       const accentCor = impacto === 'Alto'  ? 'var(--danger)'

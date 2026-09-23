@@ -65,6 +65,13 @@
         <span>Análise</span>
       </a>
 
+      <a href="{{ url_for('historico') }}"
+         class="nav-item {% if request.endpoint == 'qrqc3d' %}active{% endif %}"
+         style="background: {% if request.endpoint == 'qrqc3d' %}var(--sidebar-active){% else %}linear-gradient(135deg,rgba(14,165,233,.15),rgba(14,165,233,.05)){% endif %}; border: 1px solid rgba(14,165,233,.2);">
+        <i class="fas fa-cube" style="color:var(--primary)"></i>
+        <span style="color:var(--primary);font-weight:600">QRQC 3D AI</span>
+      </a>
+
       <span class="nav-label" style="margin-top:8px">Suporte</span>
 
       <a href="{{ url_for('solicitacao') }}"

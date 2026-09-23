@@ -2406,3 +2406,998 @@ reportlab.platypus.doctemplate.LayoutError: Flowable <Table@0x1C22F854710 1 rows
 2026-06-11 11:50:01,425 [INFO] nexar.qrqc — [suporte] ticket criado — protocolo=NXR-6DF607 prioridade=Crítica
 2026-06-11 11:50:08,046 [INFO] nexar.qrqc — [suporte] email enviado — protocolo=NXR-6DF607
 2026-06-11 11:50:08,057 [INFO] werkzeug — 127.0.0.1 - - [11/Jun/2026 11:50:08] "POST /enviar HTTP/1.1" 200 -
+2026-06-16 11:50:17,706 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-06-16 11:50:17,757 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-06-16 11:50:17,758 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-06-16 11:52:36,914 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:52:36] "GET / HTTP/1.1" 200 -
+2026-06-16 11:52:37,085 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:52:37] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-06-16 11:52:37,100 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:52:37] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-06-16 11:52:37,359 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:52:37] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-06-16 11:53:12,000 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:11] "GET /login HTTP/1.1" 200 -
+2026-06-16 11:53:12,027 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:12] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:53:12,037 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:12] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-06-16 11:53:29,562 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:29] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-06-16 11:53:29,653 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:29] "GET /dashboard HTTP/1.1" 200 -
+2026-06-16 11:53:29,686 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:29] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:53:29,687 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:29] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:53:29,719 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:29] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-06-16 11:53:30,225 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:53:30] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-06-16 11:54:21,778 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:21] "GET /analise HTTP/1.1" 200 -
+2026-06-16 11:54:21,803 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:21] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:54:21,809 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:21] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:54:21,810 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:21] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:54:22,585 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:22] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:54:56,175 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:56] "GET /historico HTTP/1.1" 200 -
+2026-06-16 11:54:56,196 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:56] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:54:56,201 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:54:56,203 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:54:56,231 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:54:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:55:25,525 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:25] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-06-16 11:55:25,546 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:25] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:55:25,552 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:25] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:55:25,553 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:25] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:55:26,217 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:26] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:55:44,802 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:44] "GET /maquinas HTTP/1.1" 200 -
+2026-06-16 11:55:44,824 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:44] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:55:44,827 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:44] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:55:44,831 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:44] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:55:44,852 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:55:44] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:56:56,332 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:56:56] "GET /suporte HTTP/1.1" 200 -
+2026-06-16 11:56:56,352 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:56:56] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:56:56,359 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:56:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:56:56,360 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:56:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:56:56,385 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:56:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:58:30,667 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:58:30] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-06-16 11:58:30,699 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:58:30] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 11:58:30,701 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:58:30] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 11:58:30,704 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:58:30] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:58:30,996 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 11:58:30] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 11:59:26,196 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-06-16 11:59:50,622 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-16 11:59:50,636 [INFO] nexar.qrqc — [bbox] componente primário detectado: VÁLVULA
+2026-06-16 11:59:50,636 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-06-16 11:59:56,257 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-06-16 11:59:56,269 [WARNING] nexar.qrqc — [bbox/gemini-2.5-flash] resposta sem JSON parseável: '{\n  "componentes": [\n    {\n      "box_2d": ['
+2026-06-16 11:59:56,269 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-06-16 11:59:57,330 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-06-16 11:59:57,332 [WARNING] nexar.qrqc — [bbox/gemini-2.0-flash] erro transitório — tentando próximo
+2026-06-16 11:59:57,332 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-06-16 12:00:00,076 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-06-16 12:00:00,082 [WARNING] nexar.qrqc — [bbox/gemini-2.5-flash-lite] componente primário 'VÁLVULA' NÃO encontrado nas anotações (D1 B4 D4 D6) — tentando próximo modelo
+2026-06-16 12:00:00,082 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-06-16 12:00:01,203 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-06-16 12:00:01,207 [WARNING] nexar.qrqc — [bbox/gemini-2.0-flash-lite] erro transitório — tentando próximo
+2026-06-16 12:00:01,207 [INFO] nexar.qrqc — [bbox] usando fallback de gemini-2.5-flash-lite com 4 componente(s) (componente primário 'VÁLVULA' não foi marcado)
+2026-06-16 12:00:01,207 [INFO] nexar.qrqc — [ocorrencia] IA respondeu — status=ok, len=5661, anotacoes=4
+2026-06-16 12:00:01,218 [INFO] nexar.qrqc — [ocorrencia] criada id=71 ia_status=ok
+2026-06-16 12:00:01,296 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "POST /registrar_ocorrencia HTTP/1.1" 200 -
+2026-06-16 12:00:01,325 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-06-16 12:00:01,330 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-06-16 12:00:01,332 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "GET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1" 200 -
+2026-06-16 12:00:01,334 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-06-16 12:00:01,933 [INFO] werkzeug — 127.0.0.1 - - [16/Jun/2026 12:00:01] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:03,336 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-02 14:58:03,356 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-02 14:58:03,356 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-02 14:58:09,837 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:09] "GET / HTTP/1.1" 200 -
+2026-07-02 14:58:09,938 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:09] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:09,939 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:09] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-07-02 14:58:19,012 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:19] "GET / HTTP/1.1" 200 -
+2026-07-02 14:58:19,053 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:19] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-07-02 14:58:19,056 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:19] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-02 14:58:19,518 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:19] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-02 14:58:20,668 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:20] "GET /login HTTP/1.1" 200 -
+2026-07-02 14:58:20,709 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:20] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:20,709 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:20] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-02 14:58:33,271 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-07-02 14:58:33,356 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "GET /dashboard HTTP/1.1" 200 -
+2026-07-02 14:58:33,403 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 14:58:33,408 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:33,412 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-02 14:58:33,456 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:33] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-02 14:58:37,094 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:37] "GET /historico HTTP/1.1" 200 -
+2026-07-02 14:58:37,132 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:37] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 14:58:37,134 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:37] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:37,138 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:37,184 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:40,475 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:40] "GET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1" 200 -
+2026-07-02 14:58:46,628 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:46] "GET /analise HTTP/1.1" 200 -
+2026-07-02 14:58:46,679 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:46] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 14:58:46,686 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:46] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:46,687 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:46] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:46,717 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:46] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:47,090 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:47] "GET /analise HTTP/1.1" 200 -
+2026-07-02 14:58:47,136 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:47] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 14:58:47,142 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:47] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 14:58:47,143 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:47] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 14:58:47,361 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 14:58:47] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:04:52,581 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:04:52] "GET /dashboard HTTP/1.1" 200 -
+2026-07-02 15:04:52,622 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:04:52] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:04:52,627 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:04:52] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:04:52,633 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:04:52] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:04:52,644 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:04:52] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:05:08,733 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:08] "GET /maquinas HTTP/1.1" 200 -
+2026-07-02 15:05:08,775 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:08] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:05:08,783 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:08] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:05:08,787 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:08] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:05:08,826 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:08] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:05:42,370 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:42] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-02 15:05:42,399 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:42] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:05:42,402 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:42] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:05:42,407 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:42] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:05:42,428 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:05:42] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:06:52,348 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-02 15:07:13,313 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-02 15:07:13,322 [INFO] nexar.qrqc — [bbox] componente primário detectado: VÁLVULA
+2026-07-02 15:07:13,322 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-02 15:07:19,049 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-02 15:07:19,052 [WARNING] nexar.qrqc — [bbox/gemini-2.5-flash] resposta sem JSON parseável: '{\n  "componentes": [\n    {\n      "box_2d": ['
+2026-07-02 15:07:19,053 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-02 15:07:19,998 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-02 15:07:20,002 [WARNING] nexar.qrqc — [bbox/gemini-2.0-flash] erro transitório — tentando próximo
+2026-07-02 15:07:20,003 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-02 15:07:25,145 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-07-02 15:07:25,146 [WARNING] nexar.qrqc — [bbox/gemini-2.5-flash-lite] erro transitório — tentando próximo
+2026-07-02 15:07:25,146 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-02 15:07:26,085 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-02 15:07:26,089 [WARNING] nexar.qrqc — [bbox/gemini-2.0-flash-lite] erro transitório — tentando próximo
+2026-07-02 15:07:26,091 [INFO] nexar.qrqc — [ocorrencia] IA respondeu — status=ok, len=625, anotacoes=0
+2026-07-02 15:07:26,105 [INFO] nexar.qrqc — [ocorrencia] criada id=72 ia_status=ok
+2026-07-02 15:07:26,142 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "POST /registrar_ocorrencia HTTP/1.1" 200 -
+2026-07-02 15:07:26,184 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:07:26,190 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:07:26,190 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:07:26,195 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "[36mGET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1[0m" 304 -
+2026-07-02 15:07:26,217 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:26] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:07:37,297 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:37] "GET /historico HTTP/1.1" 200 -
+2026-07-02 15:07:37,330 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:37] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:07:37,335 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:37] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:07:37,338 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:07:37,380 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:07:39,905 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:07:39] "[36mGET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1[0m" 304 -
+2026-07-02 15:09:27,416 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:27] "GET /maquinas HTTP/1.1" 200 -
+2026-07-02 15:09:27,443 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:27] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:09:27,448 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:27] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:27,448 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:27] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:09:28,144 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:28,580 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "GET /maquinas/3/editar HTTP/1.1" 200 -
+2026-07-02 15:09:28,606 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:09:28,611 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:28,612 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:09:28,823 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:28] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:32,168 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:32] "GET /maquinas HTTP/1.1" 200 -
+2026-07-02 15:09:32,196 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:32] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:09:32,201 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:32] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:09:32,202 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:32,222 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:33,476 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:33] "GET /maquinas/cadastro HTTP/1.1" 200 -
+2026-07-02 15:09:33,502 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:33] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:09:33,506 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:33] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:09:33,509 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:33] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:09:33,751 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:09:33] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:10:37,747 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:37] "GET /historico HTTP/1.1" 200 -
+2026-07-02 15:10:37,778 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:37] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-02 15:10:37,779 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:37] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-02 15:10:37,781 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:10:38,353 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-02 15:10:38,989 [INFO] werkzeug — 127.0.0.1 - - [02/Jul/2026 15:10:38] "[36mGET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1[0m" 304 -
+2026-07-09 11:45:57,391 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 11:45:57,419 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 11:45:57,420 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 11:45:59,944 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:45:59] "GET / HTTP/1.1" 200 -
+2026-07-09 11:46:00,100 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:00] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:00,101 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:00] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:10,537 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:10] "GET / HTTP/1.1" 200 -
+2026-07-09 11:46:10,582 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:10] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-07-09 11:46:10,586 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:10] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-09 11:46:11,270 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:11] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-09 11:46:18,068 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:18] "GET /login HTTP/1.1" 200 -
+2026-07-09 11:46:18,100 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:18] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:18,100 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:18] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-09 11:46:29,494 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-07-09 11:46:29,558 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:46:29,588 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:29,589 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:29,589 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-09 11:46:29,610 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:29] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-09 11:46:32,268 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:32] "GET /analise HTTP/1.1" 200 -
+2026-07-09 11:46:32,360 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:32] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:32,365 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:32] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:32,366 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:32,397 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:33,698 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:33] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:46:33,732 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:33] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:33,735 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:33] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:33,739 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:33] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:34,186 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:34,546 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-09 11:46:34,565 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:34,572 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:34,572 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:34,780 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:34] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,439 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "GET /historico HTTP/1.1" 200 -
+2026-07-09 11:46:38,462 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,465 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,469 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,491 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,823 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "GET /maquinas HTTP/1.1" 200 -
+2026-07-09 11:46:38,843 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,847 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:38,848 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:38] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:39,072 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:39] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:41,622 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:41] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:46:41,646 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:41] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:41,650 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:41] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:41,651 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:41] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:41,695 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:41] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:50,865 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:50] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-09 11:46:50,890 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:50] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:50,893 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:50] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:50,895 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:50] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:50,936 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:50] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:57,841 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:57] "GET /suporte HTTP/1.1" 200 -
+2026-07-09 11:46:57,870 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:57] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:57,873 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:57] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:57,877 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:57] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:57,928 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:57] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:58,906 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:58] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:46:58,936 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:58] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:46:58,943 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:58] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:46:58,944 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:58] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:46:59,188 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:46:59] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:47:17,512 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:17] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:47:17,535 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:17] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:47:17,539 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:17] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:47:17,541 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:17] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:47:17,548 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:17] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:47:31,510 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:31] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-09 11:47:31,539 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:31] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:47:31,540 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:31] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:47:31,543 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:31] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:47:32,116 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:47:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:48:52,483 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 11:48:52,501 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 11:48:52,503 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 11:48:56,471 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:48:56] "GET / HTTP/1.1" 200 -
+2026-07-09 11:48:56,583 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:48:56] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-07-09 11:48:56,587 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:48:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:05,749 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:05] "GET / HTTP/1.1" 200 -
+2026-07-09 11:49:05,791 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:05] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:05,791 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:05] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:05,865 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:05] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-09 11:49:06,884 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:06] "GET /login HTTP/1.1" 200 -
+2026-07-09 11:49:06,918 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:06] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:06,922 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:06] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:15,965 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:15] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-07-09 11:49:16,023 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:16] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:49:16,052 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:16] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:16,055 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:16] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:16,056 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:16] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:16,604 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:16] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:21,549 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:21] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-09 11:49:21,578 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:21] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:21,580 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:21] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:21,583 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:21] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:21,610 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:21] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:27,445 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:27] "GET /analise HTTP/1.1" 200 -
+2026-07-09 11:49:27,469 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:27] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:27,470 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:27] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:27,477 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:27] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:27,932 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:27] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:29,370 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:29] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:49:29,394 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:29] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:49:29,399 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:29] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:49:29,401 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:29] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:49:29,985 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:49:29] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:50:12,408 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:50:12,434 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-09 11:50:12,438 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-09 11:50:12,439 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-09 11:50:12,758 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:50:12,968 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:50:12] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-09 11:51:02,571 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 11:51:02,592 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 11:51:02,592 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 11:51:03,874 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:03] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:51:04,023 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:04] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:51:04,025 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:04] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:51:04,031 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:04] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:04,240 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:04] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:10,255 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:10] "GET /CadastroOcorrencia HTTP/1.1" 200 -
+2026-07-09 11:51:10,278 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:10] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:51:10,284 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:10] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:51:10,285 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:10] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:10,861 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:10] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:11,703 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:11] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:51:11,731 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:11] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:51:11,734 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:11] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:51:11,735 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:11] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:12,300 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:12] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:53,930 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 11:51:53,950 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 11:51:53,950 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 11:51:55,475 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:55] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 11:51:55,610 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:55] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-09 11:51:55,618 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:55] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-09 11:51:55,620 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:55] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-09 11:51:55,847 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:55] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-09 11:51:56,591 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:56] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 11:51:56,612 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:56] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 11:51:56,619 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 11:51:56,621 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:51:57,324 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:51:57] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 11:57:03,748 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 11:57:11,888 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 11:57:11,900 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 11:57:11,901 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 11:57:12,746 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 11:57:12,750 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 11:57:12,751 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 11:57:14,320 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 503 Service Unavailable"
+2026-07-09 11:57:14,322 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] cota/indisponível — tentando próximo modelo
+2026-07-09 11:57:14,322 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 11:57:15,167 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 11:57:15,168 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash-lite] cota/indisponível — tentando próximo modelo
+2026-07-09 11:57:15,169 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 11:57:15] "[35m[1mPOST /api/sensor/analisar HTTP/1.1[0m" 502 -
+2026-07-09 12:00:07,362 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:00:07,389 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:00:07,390 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:00:12,758 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:12] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:00:12,892 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:12] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:00:12,893 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:12] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:00:12,900 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:12] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:00:12,900 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:12] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:00:19,685 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:00:28,048 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:00:28,053 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:00:28,054 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:00:28,906 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:00:28,911 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:00:28,911 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:00:37,781 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:00:37,790 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 2 anomalia(s), saúde=84
+2026-07-09 12:00:37,798 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:37] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:00:37,808 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:00:37] "GET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-09 12:05:53,235 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:05:53,254 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:05:53,254 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:05:57,957 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:57] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:05:58,111 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:58] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:05:58,114 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:58] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:05:58,118 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:58] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:05:58,167 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:58] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-09 12:05:58,355 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:05:58] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:06:30,234 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:06:39,011 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:06:39,016 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:06:39,017 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:06:40,407 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:06:40,411 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:06:40,411 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:06:54,178 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:06:54,180 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 6 anomalia(s), saúde=65
+2026-07-09 12:06:54,193 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:06:54] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:06:54,204 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:06:54] "GET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1" 200 -
+2026-07-09 12:17:53,746 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:17:53,768 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:17:53,768 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:17:56,745 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:17:56,881 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:17:56,890 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:17:56,892 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:17:56,920 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-09 12:17:56,921 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:56] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-09 12:17:57,105 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:17:57] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:18:24,908 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:18:34,410 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:18:34,416 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:18:34,416 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:18:36,008 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:18:36,010 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:18:36,010 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:18:46,476 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:18:46,479 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 3 anomalia(s), saúde=0
+2026-07-09 12:18:46,491 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:18:46] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:18:46,499 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:18:46] "GET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1" 200 -
+2026-07-09 12:36:32,672 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:36:32,696 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:36:32,696 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:36:34,931 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:34] "GET / HTTP/1.1" 200 -
+2026-07-09 12:36:35,124 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:35] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-07-09 12:36:35,147 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:35] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:35,239 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:35] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-09 12:36:36,234 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:36] "GET /login HTTP/1.1" 200 -
+2026-07-09 12:36:36,259 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:36] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:36:36,262 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:36] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:48,445 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-07-09 12:36:48,494 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "GET /dashboard HTTP/1.1" 200 -
+2026-07-09 12:36:48,521 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:36:48,523 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:36:48,528 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:48,550 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:48] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,630 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:36:49,655 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,658 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,661 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,690 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,691 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,692 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-09 12:36:49,705 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:36:49] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:36:54,351 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:37:05,455 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:37:05,461 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:37:05,461 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:37:06,977 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:37:06,978 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:37:06,979 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:37:24,335 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:37:24,341 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 3 anomalia(s), saúde=17
+2026-07-09 12:37:24,348 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:37:24] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:37:24,356 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:37:24] "GET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1" 200 -
+2026-07-09 12:39:49,991 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:39:50,009 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:39:50,011 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:39:52,115 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:39:52,320 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,326 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,345 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,346 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,356 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,361 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,363 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-09 12:39:52,542 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:39:52] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:39:55,786 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:40:07,116 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:40:07,121 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:40:07,121 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:40:08,617 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:40:08,618 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:40:08,618 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:40:17,428 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:40:17,432 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 5 anomalia(s), saúde=9
+2026-07-09 12:40:17,442 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:40:17] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:40:17,449 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:40:17] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-07-09 12:40:50,421 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:40:50] "GET /sensor/5/laudo.pdf HTTP/1.1" 200 -
+2026-07-09 12:47:50,385 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-09 12:47:50,404 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-09 12:47:50,404 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-09 12:47:52,835 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:52] "GET /sensor HTTP/1.1" 200 -
+2026-07-09 12:47:52,974 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:52] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-09 12:47:52,978 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:52] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-09 12:47:52,981 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:52] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:47:53,011 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-07-09 12:47:53,012 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-07-09 12:47:53,014 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-07-09 12:47:53,019 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-09 12:47:53,024 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-09 12:47:53,237 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:47:53] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-09 12:47:56,764 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:48:05,225 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:48:05,230 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-09 12:48:05,231 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:48:06,104 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-09 12:48:06,105 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-09 12:48:06,105 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-09 12:48:22,471 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-09 12:48:22,476 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 2 anomalia(s), saúde=50
+2026-07-09 12:48:22,484 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:48:22] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-09 12:48:22,493 [INFO] werkzeug — 127.0.0.1 - - [09/Jul/2026 12:48:22] "GET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-10 17:25:07,197 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-10 17:25:07,242 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-10 17:25:07,242 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-10 17:25:42,757 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:42] "GET / HTTP/1.1" 200 -
+2026-07-10 17:25:42,856 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:42] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-07-10 17:25:42,871 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:42] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:25:55,863 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:55] "GET / HTTP/1.1" 200 -
+2026-07-10 17:25:55,938 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:55] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-07-10 17:25:55,941 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:55] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-10 17:25:56,597 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:56] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-07-10 17:25:57,969 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:57] "GET /login HTTP/1.1" 200 -
+2026-07-10 17:25:57,996 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:57] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:25:58,024 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:25:58] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-10 17:26:48,809 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:48] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-07-10 17:26:48,903 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:48] "GET /dashboard HTTP/1.1" 200 -
+2026-07-10 17:26:48,954 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:48] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-10 17:26:48,964 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:48] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:26:48,972 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:48] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-10 17:26:49,027 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:49] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-10 17:26:50,963 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:50] "GET /sensor HTTP/1.1" 200 -
+2026-07-10 17:26:50,994 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:50] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-10 17:26:50,998 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:50] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:26:51,002 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:26:51,021 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:26:51,054 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-10 17:26:51,066 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1" 200 -
+2026-07-10 17:26:51,067 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1" 200 -
+2026-07-10 17:26:51,068 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1" 200 -
+2026-07-10 17:26:51,068 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-07-10 17:26:51,070 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:26:51] "GET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-10 17:28:04,052 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "GET /sensor HTTP/1.1" 200 -
+2026-07-10 17:28:04,094 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,100 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,101 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,114 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,166 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,167 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,172 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,174 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,182 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-07-10 17:28:04,184 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:28:04] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-07-10 17:28:48,617 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:28:57,510 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-10 17:28:57,518 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-10 17:28:57,518 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:28:58,920 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-10 17:28:58,922 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-10 17:28:58,922 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:29:05,209 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-10 17:29:05,213 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] resposta sem JSON parseável
+2026-07-10 17:29:05,213 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:29:06,723 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-10 17:29:06,724 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash-lite] cota/indisponível — tentando próximo modelo
+2026-07-10 17:29:06,726 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:29:06] "[35m[1mPOST /api/sensor/analisar HTTP/1.1[0m" 502 -
+2026-07-10 17:29:54,936 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-10 17:29:54,966 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-10 17:29:54,967 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-10 17:30:05,617 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:30:14,819 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-10 17:30:14,827 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-10 17:30:14,828 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:30:50,641 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-07-10 17:30:50,672 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-07-10 17:30:50,672 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-07-10 17:30:53,501 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:53] "[32mGET / HTTP/1.1[0m" 302 -
+2026-07-10 17:30:53,609 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:53] "GET /dashboard HTTP/1.1" 200 -
+2026-07-10 17:30:53,781 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:53] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-10 17:30:53,790 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:53] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-07-10 17:30:53,796 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:53] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-07-10 17:30:54,459 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:54] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-07-10 17:30:56,008 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /sensor HTTP/1.1" 200 -
+2026-07-10 17:30:56,043 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-07-10 17:30:56,046 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-07-10 17:30:56,050 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:30:56,106 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-10 17:30:56,114 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-07-10 17:30:56,118 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1" 200 -
+2026-07-10 17:30:56,121 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1" 200 -
+2026-07-10 17:30:56,124 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1" 200 -
+2026-07-10 17:30:56,127 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "GET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1" 200 -
+2026-07-10 17:30:56,383 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:30:56] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-07-10 17:31:05,146 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:31:15,332 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent "HTTP/1.1 200 OK"
+2026-07-10 17:31:15,337 [WARNING] nexar.sensor_visual — [sensor/gemini-2.5-flash] resposta sem JSON parseável
+2026-07-10 17:31:15,338 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:31:16,877 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 429 Too Many Requests"
+2026-07-10 17:31:16,878 [WARNING] nexar.sensor_visual — [sensor/gemini-2.0-flash] cota/indisponível — tentando próximo modelo
+2026-07-10 17:31:16,879 [INFO] google_genai.models — AFC is enabled with max remote calls: 10.
+2026-07-10 17:31:22,874 [INFO] httpx — HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent "HTTP/1.1 200 OK"
+2026-07-10 17:31:22,877 [INFO] nexar.sensor_visual — [sensor/gemini-2.5-flash-lite] 3 anomalia(s), saúde=28
+2026-07-10 17:31:22,907 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:31:22] "POST /api/sensor/analisar HTTP/1.1" 200 -
+2026-07-10 17:31:22,919 [INFO] werkzeug — 127.0.0.1 - - [10/Jul/2026 17:31:22] "GET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1" 200 -
+2026-09-08 12:14:28,549 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-08 12:15:04,710 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-08 12:15:04,740 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-08 12:15:04,741 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-08 12:18:07,651 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-08 12:18:07,704 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-08 12:18:07,705 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-08 12:18:08,070 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:08] "HEAD / HTTP/1.1" 200 -
+2026-09-08 12:18:08,091 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:08] "GET / HTTP/1.1" 200 -
+2026-09-08 12:18:08,403 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:08] "GET / HTTP/1.1" 200 -
+2026-09-08 12:18:08,786 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:08] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-09-08 12:18:08,822 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:08] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-09-08 12:18:09,341 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:09] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:18:11,138 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:11] "GET /login HTTP/1.1" 200 -
+2026-09-08 12:18:11,397 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:11] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-09-08 12:18:11,473 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:11] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:18:11,735 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:11] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:18:39,891 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:39] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-09-08 12:18:39,982 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:39] "GET /dashboard HTTP/1.1" 200 -
+2026-09-08 12:18:40,325 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:40] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-08 12:18:40,325 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:40] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:18:40,343 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:40] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-09-08 12:18:40,571 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:40] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:18:58,824 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:58] "GET /qrqc3d/41 HTTP/1.1" 200 -
+2026-09-08 12:18:59,154 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-08 12:18:59,155 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "GET /static/css/qrqc3d.css HTTP/1.1" 200 -
+2026-09-08 12:18:59,156 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:18:59,180 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "GET /static/js/qrqc3d.js HTTP/1.1" 200 -
+2026-09-08 12:18:59,412 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-08 12:18:59,594 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:18:59] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:19:27,439 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=41 maquina=2
+2026-09-08 12:19:33,818 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:19:33,819 [INFO] openai._base_client — Retrying request in 0.473273 seconds
+2026-09-08 12:19:35,150 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:19:35,151 [INFO] openai._base_client — Retrying request in 0.823549 seconds
+2026-09-08 12:19:37,024 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:19:37,035 [ERROR] app — Exception on /api/ai/analisar/41 [POST]
+Traceback (most recent call last):
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_limiter\_limits.py", line 326, in __inner
+    return cast(R, flask.current_app.ensure_sync(obj)(*a, **k))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\app.py", line 2636, in api_ai_analisar
+    resultado = nexa_ia.analisar_ocorrencia(oc_dict, machine_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\nexa_ia.py", line 302, in analisar_ocorrencia
+    resp = client.chat.completions.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_utils\_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1296, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1368, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1141, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.', 'type': 'insufficient_quota', 'param': None, 'code': 'credit_balance_exhausted'}}
+2026-09-08 12:19:37,045 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:19:37] "[35m[1mPOST /api/ai/analisar/41 HTTP/1.1[0m" 500 -
+2026-09-08 12:20:14,631 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=41 maquina=2
+2026-09-08 12:20:15,659 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:15,661 [INFO] openai._base_client — Retrying request in 0.384902 seconds
+2026-09-08 12:20:16,878 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:16,878 [INFO] openai._base_client — Retrying request in 0.849395 seconds
+2026-09-08 12:20:17,972 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:17,973 [ERROR] app — Exception on /api/ai/analisar/41 [POST]
+Traceback (most recent call last):
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_limiter\_limits.py", line 326, in __inner
+    return cast(R, flask.current_app.ensure_sync(obj)(*a, **k))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\app.py", line 2636, in api_ai_analisar
+    resultado = nexa_ia.analisar_ocorrencia(oc_dict, machine_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\nexa_ia.py", line 302, in analisar_ocorrencia
+    try:
+         
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_utils\_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1296, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1368, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1141, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.', 'type': 'insufficient_quota', 'param': None, 'code': 'credit_balance_exhausted'}}
+2026-09-08 12:20:17,976 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:20:17] "[35m[1mPOST /api/ai/analisar/41 HTTP/1.1[0m" 500 -
+2026-09-08 12:20:22,281 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=41 maquina=2
+2026-09-08 12:20:22,536 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:22,536 [INFO] openai._base_client — Retrying request in 0.498542 seconds
+2026-09-08 12:20:23,281 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:23,281 [INFO] openai._base_client — Retrying request in 0.830272 seconds
+2026-09-08 12:20:24,351 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:20:24,353 [ERROR] app — Exception on /api/ai/analisar/41 [POST]
+Traceback (most recent call last):
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask\app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_login\utils.py", line 290, in decorated_view
+    return current_app.ensure_sync(func)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\flask_limiter\_limits.py", line 326, in __inner
+    return cast(R, flask.current_app.ensure_sync(obj)(*a, **k))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\app.py", line 2636, in api_ai_analisar
+    resultado = nexa_ia.analisar_ocorrencia(oc_dict, machine_id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Repositorios\Nexar-QRQC\nexa_ia.py", line 302, in analisar_ocorrencia
+    try:
+         
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_utils\_utils.py", line 298, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\resources\chat\completions\completions.py", line 1296, in create
+    return self._post(
+           ^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1368, in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\enzoj\AppData\Local\Programs\Python\Python312\Lib\site-packages\openai\_base_client.py", line 1141, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.RateLimitError: Error code: 429 - {'error': {'message': 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.', 'type': 'insufficient_quota', 'param': None, 'code': 'credit_balance_exhausted'}}
+2026-09-08 12:20:24,356 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:20:24] "[35m[1mPOST /api/ai/analisar/41 HTTP/1.1[0m" 500 -
+2026-09-08 12:21:09,840 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-08 12:21:09,874 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-08 12:21:09,875 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-08 12:21:10,314 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:10] "HEAD / HTTP/1.1" 200 -
+2026-09-08 12:21:10,638 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:10] "[32mGET / HTTP/1.1[0m" 302 -
+2026-09-08 12:21:10,959 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:10] "GET /dashboard HTTP/1.1" 200 -
+2026-09-08 12:21:11,042 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:11] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-08 12:21:11,305 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:11] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-08 12:21:11,306 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:11] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:21:11,691 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:11] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:21:14,677 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:14] "GET /login HTTP/1.1" 200 -
+2026-09-08 12:21:15,009 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:15] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-08 12:21:15,010 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:15] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:21:15,264 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:15] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:21:26,877 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:26] "GET /qrqc3d/41 HTTP/1.1" 200 -
+2026-09-08 12:21:27,242 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[36mGET /static/css/qrqc3d.css HTTP/1.1[0m" 304 -
+2026-09-08 12:21:27,243 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-08 12:21:27,244 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-08 12:21:27,246 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-08 12:21:27,503 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-08 12:21:27,594 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:27] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-08 12:21:41,617 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=41 maquina=2
+2026-09-08 12:21:45,898 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:21:45,899 [INFO] openai._base_client — Retrying request in 0.467434 seconds
+2026-09-08 12:21:46,616 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:21:46,617 [INFO] openai._base_client — Retrying request in 0.883406 seconds
+2026-09-08 12:21:47,767 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-08 12:21:47,780 [WARNING] nexar.qrqc — [qrqc3d] erro na análise: Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.
+2026-09-08 12:21:47,781 [INFO] werkzeug — 127.0.0.1 - - [08/Sep/2026 12:21:47] "POST /api/ai/analisar/41 HTTP/1.1" 200 -
+2026-09-22 14:06:55,211 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-22 14:06:55,223 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-22 14:06:55,255 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-22 14:06:55,255 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-22 14:06:55,260 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-22 14:06:55,260 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-22 14:06:57,856 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:06:57] "GET / HTTP/1.1" 200 -
+2026-09-22 14:06:58,011 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:06:58] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:06:58,013 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:06:58] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:04,383 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:04] "GET / HTTP/1.1" 200 -
+2026-09-22 14:07:04,429 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:04] "GET /static/css/inicialtotem.css HTTP/1.1" 200 -
+2026-09-22 14:07:04,436 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:04] "GET /static/assets/img/nexar_logo_clean.png HTTP/1.1" 200 -
+2026-09-22 14:07:05,497 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:05] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-22 14:07:08,750 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:08] "GET /login HTTP/1.1" 200 -
+2026-09-22 14:07:08,789 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:08] "GET /static/css/design-system.css HTTP/1.1" 200 -
+2026-09-22 14:07:08,792 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:08] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:21,772 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-09-22 14:07:21,840 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "GET /dashboard HTTP/1.1" 200 -
+2026-09-22 14:07:21,869 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:21,877 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:21,879 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-09-22 14:07:21,896 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:21] "GET /static/js/chat.js HTTP/1.1" 200 -
+2026-09-22 14:07:31,962 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:31] "GET /sensor HTTP/1.1" 200 -
+2026-09-22 14:07:31,995 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:31] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:32,003 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:32,004 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:32,039 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:07:32,046 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1" 200 -
+2026-09-22 14:07:32,048 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-09-22 14:07:32,053 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:07:32,061 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:07:32,063 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1" 200 -
+2026-09-22 14:07:32,079 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "GET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1" 200 -
+2026-09-22 14:07:32,082 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:32] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:38,119 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:38] "GET /maquinas HTTP/1.1" 200 -
+2026-09-22 14:07:38,147 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:38] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:38,149 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:38,151 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:38] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:38,162 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:38] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,069 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "GET /sensor HTTP/1.1" 200 -
+2026-09-22 14:07:39,090 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,097 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,098 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,106 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,108 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,116 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,118 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,122 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,129 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,134 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:07:39,560 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:39] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:40,053 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:40] "GET /analise HTTP/1.1" 200 -
+2026-09-22 14:07:40,079 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:40] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:40,080 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:40] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:40,081 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:40] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:41,036 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:41] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:41,250 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:41] "GET /historico HTTP/1.1" 200 -
+2026-09-22 14:07:41,289 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:41] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:41,293 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:41] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:41,298 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:41] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:42,964 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:42] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:45,054 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:45] "GET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1" 200 -
+2026-09-22 14:07:47,146 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "GET /qrqc3d/72 HTTP/1.1" 200 -
+2026-09-22 14:07:47,193 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:47,202 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "GET /static/css/qrqc3d.css HTTP/1.1" 200 -
+2026-09-22 14:07:47,206 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:47,206 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "GET /static/js/qrqc3d.js HTTP/1.1" 200 -
+2026-09-22 14:07:47,208 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:47,270 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:47] "GET /static/js/qrqc3d.js HTTP/1.1" 200 -
+2026-09-22 14:07:48,158 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:48] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:55,575 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:55] "GET /historico HTTP/1.1" 200 -
+2026-09-22 14:07:55,609 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:55] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:55,610 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:55] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:55,616 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:55] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:55,637 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:55] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:57,469 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:57] "[36mGET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,187 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "GET /qrqc3d/71 HTTP/1.1" 200 -
+2026-09-22 14:07:59,216 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,219 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/css/qrqc3d.css HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,224 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,227 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,229 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,983 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:07:59,984 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:07:59] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:08:02,982 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=71 maquina=6
+2026-09-22 14:08:12,296 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:08:12,297 [INFO] openai._base_client — Retrying request in 0.460980 seconds
+2026-09-22 14:08:13,036 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:08:13,037 [INFO] openai._base_client — Retrying request in 0.806140 seconds
+2026-09-22 14:08:14,812 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:08:14,835 [WARNING] nexar.qrqc — [qrqc3d] erro na análise: Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.
+2026-09-22 14:08:14,837 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:08:14] "POST /api/ai/analisar/71 HTTP/1.1" 200 -
+2026-09-22 14:09:29,942 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-22 14:09:29,967 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-22 14:09:29,967 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-22 14:09:35,637 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=71 maquina=6
+2026-09-22 14:09:36,918 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:36,920 [INFO] openai._base_client — Retrying request in 0.423258 seconds
+2026-09-22 14:09:37,587 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:37,588 [INFO] openai._base_client — Retrying request in 0.991258 seconds
+2026-09-22 14:09:38,849 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:38,850 [WARNING] nexar.qrqc — [qrqc3d] erro na análise: Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.
+2026-09-22 14:09:38,851 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:38] "POST /api/ai/analisar/71 HTTP/1.1" 200 -
+2026-09-22 14:09:45,508 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "GET /qrqc3d/71 HTTP/1.1" 200 -
+2026-09-22 14:09:45,546 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,549 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/css/qrqc3d.css HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,550 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,555 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,558 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,984 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:09:45,984 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:45] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:09:47,714 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=71 maquina=6
+2026-09-22 14:09:48,225 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:48,225 [INFO] openai._base_client — Retrying request in 0.430545 seconds
+2026-09-22 14:09:48,908 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:48,909 [INFO] openai._base_client — Retrying request in 0.868575 seconds
+2026-09-22 14:09:50,016 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:09:50,018 [WARNING] nexar.qrqc — [qrqc3d] erro na análise: Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.
+2026-09-22 14:09:50,019 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:09:50] "POST /api/ai/analisar/71 HTTP/1.1" 200 -
+2026-09-22 14:10:05,101 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "GET / HTTP/1.1" 200 -
+2026-09-22 14:10:05,193 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-09-22 14:10:05,201 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:10:05,329 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "GET / HTTP/1.1" 200 -
+2026-09-22 14:10:05,406 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-09-22 14:10:05,410 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:05] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:10:07,144 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:07] "GET /login HTTP/1.1" 200 -
+2026-09-22 14:10:07,197 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:07] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:10:07,201 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:10:07] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:09,254 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:09] "GET / HTTP/1.1" 200 -
+2026-09-22 14:11:09,390 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:09] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-09-22 14:11:09,395 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:09] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:09,546 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:09] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2026-09-22 14:11:22,570 [INFO] nexar.qrqc — Gemini inicializado — modelo gemini-2.5-flash
+2026-09-22 14:11:22,597 [INFO] werkzeug — [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2026-09-22 14:11:22,597 [INFO] werkzeug — [33mPress CTRL+C to quit[0m
+2026-09-22 14:11:28,579 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:28] "GET / HTTP/1.1" 200 -
+2026-09-22 14:11:28,666 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:28] "[36mGET /static/css/inicialtotem.css HTTP/1.1[0m" 304 -
+2026-09-22 14:11:28,667 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:28] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:30,210 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:30] "GET /login HTTP/1.1" 200 -
+2026-09-22 14:11:30,247 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:30] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:30,247 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:30] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:11:41,325 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:41] "POST /login HTTP/1.1" 200 -
+2026-09-22 14:11:41,350 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:41] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:11:41,351 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:41] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:58,895 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:58] "[32mPOST /login HTTP/1.1[0m" 302 -
+2026-09-22 14:11:58,912 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:58] "GET /dashboard HTTP/1.1" 200 -
+2026-09-22 14:11:58,941 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:58] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:11:58,947 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:58] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:11:58,948 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:11:58] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:04,228 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /sensor HTTP/1.1" 200 -
+2026-09-22 14:12:04,266 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:04,271 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:04,272 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:04,316 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1" 200 -
+2026-09-22 14:12:04,317 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:12:04,318 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:12:04,319 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1" 200 -
+2026-09-22 14:12:04,320 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1" 200 -
+2026-09-22 14:12:04,323 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1" 200 -
+2026-09-22 14:12:04,345 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:04] "GET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1" 200 -
+2026-09-22 14:12:11,208 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:11] "GET /analise HTTP/1.1" 200 -
+2026-09-22 14:12:11,228 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:11] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:11,234 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:11] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:11,235 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:11] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,530 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "GET /sensor HTTP/1.1" 200 -
+2026-09-22 14:12:17,569 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,585 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,585 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,586 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,586 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,587 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,591 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,599 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,604 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,605 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:12:17,634 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:17] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,167 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "GET /sensor HTTP/1.1" 200 -
+2026-09-22 14:12:26,209 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,211 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,213 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,232 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,305 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/d0a071b5c221f070_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,310 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/9b1fc31461c79a8c_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,315 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/ec0e869d028e98bf_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,321 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/0a5c8d6abf6f802f_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,326 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/b7eb18e42664702d_teste3.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,329 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/3e36551aacbd0c61_teste2motor.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:26,336 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:26] "[36mGET /static/uploads/sensor/573af9be8edd0271_testevazamento.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:12:28,047 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:28] "GET /historico HTTP/1.1" 200 -
+2026-09-22 14:12:28,078 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:28] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:28,080 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:28] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:28,081 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:28] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:28,212 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:28] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:30,617 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:30] "GET /static/uploads/maquinas/2/diagrama_prensa_hidraulica.png HTTP/1.1" 200 -
+2026-09-22 14:12:34,647 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:34] "[36mGET /static/uploads/maquinas/6/sistema_pneumatico_completo.jpg HTTP/1.1[0m" 304 -
+2026-09-22 14:12:37,890 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "GET /qrqc3d/72 HTTP/1.1" 200 -
+2026-09-22 14:12:37,918 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "[36mGET /static/css/design-system.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:37,920 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "[36mGET /static/css/qrqc3d.css HTTP/1.1[0m" 304 -
+2026-09-22 14:12:37,926 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "[36mGET /static/assets/img/nexar_logo_clean.png HTTP/1.1[0m" 304 -
+2026-09-22 14:12:37,930 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:37,931 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:37] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:38,588 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:38] "[36mGET /static/js/qrqc3d.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:39,428 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:39] "[36mGET /static/js/chat.js HTTP/1.1[0m" 304 -
+2026-09-22 14:12:39,430 [INFO] nexar.qrqc — [qrqc3d] iniciando análise Nexa IA — oc=72 maquina=6
+2026-09-22 14:12:40,942 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:12:40,943 [INFO] openai._base_client — Retrying request in 0.470207 seconds
+2026-09-22 14:12:41,651 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:12:41,652 [INFO] openai._base_client — Retrying request in 0.816131 seconds
+2026-09-22 14:12:43,411 [INFO] httpx2 — HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 429 Too Many Requests"
+2026-09-22 14:12:43,412 [WARNING] nexar.qrqc — [qrqc3d] erro na análise: Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.
+2026-09-22 14:12:43,413 [INFO] werkzeug — 127.0.0.1 - - [22/Sep/2026 14:12:43] "POST /api/ai/analisar/72 HTTP/1.1" 200 -

@@ -25,6 +25,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 import sensor_visual
+import nexa_ia
 
 load_dotenv()
 
@@ -529,6 +530,47 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_percepcoes_maquina
             ON percepcoes(maquina_id, criado_em);
+
+        -- QRQC 3D AI: componentes físicos de cada máquina (mapeados ao modelo 3D)
+        CREATE TABLE IF NOT EXISTS machine_components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            maquina_id INTEGER NOT NULL,
+            component_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT,
+            description TEXT,
+            UNIQUE(maquina_id, component_id),
+            FOREIGN KEY (maquina_id) REFERENCES maquinas(id)
+        );
+
+        -- QRQC 3D AI: diagnósticos estruturados gerados pelo agente
+        CREATE TABLE IF NOT EXISTS ai_diagnoses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ocorrencia_id INTEGER NOT NULL UNIQUE,
+            summary TEXT,
+            severity TEXT,
+            pattern_analysis TEXT,
+            recommended_actions TEXT,
+            model_used TEXT,
+            steps_used TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ocorrencia_id) REFERENCES ocorrencias(id)
+        );
+
+        -- QRQC 3D AI: componentes identificados em cada diagnóstico
+        CREATE TABLE IF NOT EXISTS ai_diagnosis_components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            diagnosis_id INTEGER NOT NULL,
+            component_id TEXT NOT NULL,
+            component_name TEXT,
+            probability REAL,
+            severity TEXT,
+            reason TEXT,
+            FOREIGN KEY (diagnosis_id) REFERENCES ai_diagnoses(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ai_diag_ocorrencia
+            ON ai_diagnoses(ocorrencia_id);
     """)
     # Migração leve: adiciona colunas que possam estar ausentes em DBs antigos.
     cols = [r["name"] for r in c.execute("PRAGMA table_info(ocorrencias)").fetchall()]
@@ -2588,6 +2630,204 @@ def enviar():
         "protocolo": protocolo,
         "email_enviado": email_ok,
     })
+
+
+# ── QRQC 3D AI ───────────────────────────────────────────────────────────────
+
+@app.route("/qrqc3d/<int:oc_id>")
+@login_required
+def qrqc3d(oc_id: int):
+    conn = get_db()
+    oc = conn.execute("SELECT * FROM ocorrencias WHERE id = ?", (oc_id,)).fetchone()
+    if not oc:
+        conn.close()
+        flash("Ocorrência não encontrada.", "danger")
+        return redirect(url_for("historico"))
+
+    maquina = None
+    componentes = []
+    diagnostico = None
+    diag_componentes = []
+
+    if oc["maquina_id"]:
+        maquina = conn.execute(
+            "SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)
+        ).fetchone()
+        componentes = conn.execute(
+            "SELECT * FROM machine_components WHERE maquina_id = ?", (oc["maquina_id"],)
+        ).fetchall()
+
+    diag = conn.execute(
+        "SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)
+    ).fetchone()
+    if diag:
+        diagnostico = dict(diag)
+        diagnostico["recommended_actions"] = json.loads(
+            diag["recommended_actions"] or "[]"
+        )
+        diag_componentes = conn.execute(
+            "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)
+        ).fetchall()
+
+    conn.close()
+
+    lang = session.get("lang", "pt")
+    t = TRANSLATIONS.get(lang, TRANSLATIONS["pt"])
+    return render_template(
+        "qrqc3d.html",
+        ocorrencia=oc,
+        maquina=maquina,
+        componentes=[dict(c) for c in componentes],
+        diagnostico=diagnostico,
+        diag_componentes=[dict(c) for c in diag_componentes],
+        t=t,
+        lang=lang,
+    )
+
+
+@app.route("/api/ai/analisar/<int:oc_id>", methods=["POST"])
+@login_required
+@limiter.limit("5 per minute")
+def api_ai_analisar(oc_id: int):
+    conn = get_db()
+    oc = conn.execute("SELECT * FROM ocorrencias WHERE id = ?", (oc_id,)).fetchone()
+    if not oc:
+        conn.close()
+        return jsonify({"error": "Ocorrência não encontrada"}), 404
+    if not oc["maquina_id"]:
+        conn.close()
+        return jsonify({"error": "Ocorrência sem máquina associada"}), 400
+
+    oc_dict = dict(oc)
+    machine_id = oc["maquina_id"]
+    conn.close()
+
+    logger.info(f"[qrqc3d] iniciando análise Nexa IA — oc={oc_id} maquina={machine_id}")
+    resultado = nexa_ia.analisar_ocorrencia(oc_dict, machine_id)
+
+    if "error" in resultado:
+        logger.warning(f"[qrqc3d] erro na análise: {resultado['error']}")
+        return jsonify(resultado), 200
+
+    # Persiste diagnóstico
+    conn = get_db()
+    try:
+        componentes = resultado.get("components", [])
+        actions_json = json.dumps(resultado.get("recommended_actions", []), ensure_ascii=False)
+        steps_json = json.dumps(resultado.get("_steps", []), ensure_ascii=False)
+
+        conn.execute("DELETE FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,))
+        cur = conn.execute(
+            """INSERT INTO ai_diagnoses
+               (ocorrencia_id, summary, severity, pattern_analysis,
+                recommended_actions, model_used, steps_used)
+               VALUES (?,?,?,?,?,?,?)""",
+            (
+                oc_id,
+                resultado.get("summary", ""),
+                resultado.get("severity", "medium"),
+                resultado.get("pattern_analysis"),
+                actions_json,
+                resultado.get("_model", ""),
+                steps_json,
+            ),
+        )
+        diag_id = cur.lastrowid
+
+        for comp in componentes:
+            conn.execute(
+                """INSERT INTO ai_diagnosis_components
+                   (diagnosis_id, component_id, component_name, probability, severity, reason)
+                   VALUES (?,?,?,?,?,?)""",
+                (
+                    diag_id,
+                    comp.get("component_id", ""),
+                    comp.get("component_name", ""),
+                    comp.get("probability", 0),
+                    comp.get("severity", "low"),
+                    comp.get("reason", ""),
+                ),
+            )
+        conn.commit()
+        logger.info(f"[qrqc3d] diagnóstico salvo — diag_id={diag_id}")
+    except Exception:
+        logger.exception("[qrqc3d] falha ao persistir diagnóstico")
+    finally:
+        conn.close()
+
+    return jsonify(resultado)
+
+
+@app.route("/api/ai/diagnostico/<int:oc_id>")
+@login_required
+def api_ai_diagnostico(oc_id: int):
+    conn = get_db()
+    diag = conn.execute(
+        "SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)
+    ).fetchone()
+    if not diag:
+        conn.close()
+        return jsonify({"error": "Diagnóstico não encontrado"}), 404
+
+    result = dict(diag)
+    result["recommended_actions"] = json.loads(diag["recommended_actions"] or "[]")
+    result["steps_used"] = json.loads(diag["steps_used"] or "[]")
+
+    comps = conn.execute(
+        "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)
+    ).fetchall()
+    result["components"] = [dict(c) for c in comps]
+    conn.close()
+    return jsonify(result)
+
+
+@app.route("/api/machines/<int:mid>/components", methods=["GET"])
+@login_required
+def api_machine_components_get(mid: int):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM machine_components WHERE maquina_id = ? ORDER BY id", (mid,)
+    ).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/machines/<int:mid>/components", methods=["POST"])
+@login_required
+def api_machine_components_post(mid: int):
+    data = request.get_json(silent=True) or {}
+    cid = (data.get("component_id") or "").strip()
+    name = (data.get("name") or "").strip()
+    if not cid or not name:
+        return jsonify({"error": "component_id e name são obrigatórios"}), 400
+
+    conn = get_db()
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO machine_components
+               (maquina_id, component_id, name, type, description)
+               VALUES (?,?,?,?,?)""",
+            (mid, cid, name, data.get("type", ""), data.get("description", "")),
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.close()
+        return jsonify({"error": str(exc)}), 500
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/machines/<int:mid>/components/<cid>", methods=["DELETE"])
+@login_required
+def api_machine_components_delete(mid: int, cid: str):
+    conn = get_db()
+    conn.execute(
+        "DELETE FROM machine_components WHERE maquina_id = ? AND component_id = ?",
+        (mid, cid),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
