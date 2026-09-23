@@ -2845,9 +2845,9 @@ def _mobile_auth(f):
         token = auth[7:]
         conn = get_db()
         row = conn.execute(
-            """SELECT mt.user_id, u.username, u.nome, u.cargo
+            """SELECT mt.user_id, u.email, u.nome, u.perfil
                FROM mobile_tokens mt
-               JOIN users u ON u.id = mt.user_id
+               JOIN usuarios u ON u.id = mt.user_id
                WHERE mt.token = ? AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))""",
             (token,),
         ).fetchone()
@@ -2882,22 +2882,22 @@ with app.app_context():
 @limiter.limit("10 per minute")
 def mobile_login():
     data = request.get_json(silent=True) or {}
-    username = (data.get("username") or "").strip()
+    email = (data.get("username") or data.get("email") or "").strip().lower()
     password = data.get("password") or ""
-    if not username or not password:
-        return jsonify({"erro": "Usuário e senha são obrigatórios"}), 400
+    if not email or not password:
+        return jsonify({"erro": "Email e senha são obrigatórios"}), 400
 
     conn = get_db()
     user = conn.execute(
-        "SELECT id, username, nome, cargo, password_hash FROM users WHERE username = ?",
-        (username,),
+        "SELECT id, nome, email, perfil, senha_hash FROM usuarios WHERE LOWER(email) = ? AND ativo = 1",
+        (email,),
     ).fetchone()
     if not user:
         conn.close()
         return jsonify({"erro": "Usuário ou senha inválidos"}), 401
 
     from werkzeug.security import check_password_hash
-    if not check_password_hash(user["password_hash"], password):
+    if not check_password_hash(user["senha_hash"], password):
         conn.close()
         return jsonify({"erro": "Usuário ou senha inválidos"}), 401
 
@@ -2914,8 +2914,8 @@ def mobile_login():
         "ok": True,
         "token": token,
         "id": user["id"],
-        "nome": user["nome"] or user["username"],
-        "cargo": user["cargo"] or "",
+        "nome": user["nome"] or user["email"],
+        "cargo": user["perfil"] or "",
     })
 
 
@@ -2962,14 +2962,13 @@ def mobile_ocorrencias_post():
     cur = conn.execute(
         """INSERT INTO ocorrencias
            (maquina_id, descricao, tipo_ocorrencia, nivel_impacto,
-            status, criado_por_id, data_ocorrencia, data_registro)
-           VALUES (?,?,?,?,'Aberta',?,date('now'),datetime('now'))""",
+            status, data_ocorrencia, data_registro)
+           VALUES (?,?,?,?,'Aberta',date('now'),datetime('now'))""",
         (
             maquina_id,
             descricao,
             data.get("tipo_ocorrencia", "Falha mecânica"),
             data.get("nivel_impacto", "Médio"),
-            request.mobile_user["user_id"],
         ),
     )
     conn.commit()
