@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from google import genai
@@ -91,6 +91,22 @@ def proteger_uploads():
         if ok:
             return None
     return ("Acesso não autorizado.", 401)
+
+
+@app.errorhandler(CSRFError)
+def csrf_handler(e):
+    """
+    Sessão expirada ou página aberta antes de o servidor reiniciar: em vez de um
+    400 cru, volta para a página com um aviso (ou JSON, nas chamadas via fetch).
+    """
+    logger.info(f"[csrf] {e.description} — {request.method} {request.path}")
+    msg = "Sua sessão expirou. Tente novamente."
+    if request.path.startswith("/api/") or request.is_json or request.accept_mimetypes.best == "application/json":
+        return jsonify({"ok": False, "erro": msg + " Se persistir, recarregue a página."}), 400
+    if request.path == "/login":
+        return render_template("login.html", erro=msg), 400
+    flash(msg, "warning")
+    return redirect(request.referrer or url_for("dashboard"))
 
 
 @app.errorhandler(413)
