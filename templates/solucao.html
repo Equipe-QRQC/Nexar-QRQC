@@ -13,6 +13,18 @@
     <a href="{{ url_for('historico') }}" class="btn btn-ghost btn-sm">
       <i class="fas fa-history"></i> {{ t.historico }}
     </a>
+    {% if dados.status == 'Aberta' %}
+    <button type="button" class="btn btn-outline btn-sm" id="btnIniciar"
+            onclick="OcorrenciaAcoes.iniciarAtendimento({{ dados.id }}, () => location.reload())">
+      <i class="fas fa-play"></i> Iniciar atendimento
+    </button>
+    {% endif %}
+    {% if dados.status in ('Aberta', 'Em andamento') %}
+    <button type="button" class="btn btn-success btn-sm" id="btnResolver"
+            onclick="OcorrenciaAcoes.abrirResolucao({{ dados.id }}, SUGESTOES_COMPONENTE, () => setTimeout(() => location.reload(), 600))">
+      <i class="fas fa-check-circle"></i> Resolver
+    </button>
+    {% endif %}
     {% if dados.id %}
     <a href="{{ url_for('ocorrencia_pdf', oc_id=dados.id) }}" class="btn btn-outline btn-sm" target="_blank">
       <i class="fas fa-file-pdf" style="color:#EF4444;"></i> Baixar PDF
@@ -31,7 +43,13 @@
 
 <div class="page-body">
 
-  {% if ia_status in ('erro', 'fallback') %}
+  {% if ia_status == 'pendente' %}
+  <div style="background:var(--primary-light); color:var(--primary-dark); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span style="font-size:13px;">A Nexar IA está gerando o diagnóstico desta ocorrência. A página será atualizada automaticamente.</span>
+  </div>
+  <script>setTimeout(() => location.reload(), 8000);</script>
+  {% elif ia_status in ('erro', 'fallback') %}
   <div style="background:var(--warning-light); color:#9A6700; padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
     <i class="fas fa-circle-info"></i>
     <span style="font-size:13px;">O diagnóstico automático não estava disponível no momento do registro. A ocorrência foi salva e abaixo está o roteiro padrão de inspeção.</span>
@@ -106,6 +124,27 @@
         </div>
       </div>
 
+      {% if dados.solucao_aplicada %}
+      <!-- Resolução -->
+      <div class="card" style="border-left:3px solid var(--success);">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-circle-check" style="color:var(--success);"></i> Resolução</span>
+          <span style="font-size:12px; color:var(--text-muted);">
+            {% if dados.resolvido_por_nome %}por {{ dados.resolvido_por_nome }}{% endif %}
+            {% if dados.data_resolucao %} em {{ dados.data_resolucao | data_br }}{% endif %}
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="label-mini">Solução aplicada</div>
+          <div style="font-size:14px; line-height:1.6; white-space:pre-wrap;">{{ dados.solucao_aplicada }}</div>
+          {% if dados.componente_real %}
+          <div class="label-mini" style="margin-top:12px;">Componente que falhou</div>
+          <div class="value-mini">{{ dados.componente_real }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Solução IA -->
       <div class="card">
         <div class="card-header">
@@ -145,7 +184,20 @@
 
     <!-- Coluna 2 — Diagrama -->
     <div>
-      {% if diagrama_url %}
+      {% if diagrama_url and diagrama_url.lower().endswith('.pdf') %}
+      <div class="card diagram-sticky">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
+        </div>
+        <div class="card-body" style="text-align:center; padding:40px 24px; color:var(--text-muted);">
+          <i class="fas fa-file-pdf" style="font-size:40px; margin-bottom:12px; opacity:.4; display:block;"></i>
+          <p style="font-size:13px; margin-bottom:12px;">A documentação técnica desta máquina (PDF) foi considerada no diagnóstico.</p>
+          <a href="{{ diagrama_url }}" target="_blank" class="btn btn-outline btn-sm">
+            <i class="fas fa-up-right-from-square"></i> Abrir documentação
+          </a>
+        </div>
+      </div>
+      {% elif diagrama_url %}
       <div class="card diagram-sticky">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
@@ -315,7 +367,11 @@
 {% endblock %}
 
 {% block scripts %}
+{% include 'partials/modal_resolver.html' %}
+<script src="/static/js/ocorrencia_acoes.js"></script>
 <script>
+  const SUGESTOES_COMPONENTE = {{ (anotacoes or []) | map(attribute='titulo') | list | tojson }};
+
   // Renderiza markdown muito leve no diagnóstico: **negrito** e numeração 1./2./3./4.
   (function () {
     const el = document.getElementById('iaContent');

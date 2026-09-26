@@ -20,7 +20,10 @@ Legenda de prioridade:
 S1, S2, S3 (chave aleatória quando ausente + `ADMIN_PASSWORD`), S7, S8, S9 · O1 (PRG + página `/ocorrencia/<id>`), O2, O3, O4 (operador), O5, O7, O9 · H1, H2, H3, H7 (ESC), confirmação ao resolver · D1, D2, D5, D6 · V1, V3 · Q1/Q2/Q3 (3D fora do menu, "beta" dentro da ocorrência), Q4 · X1 (texto), X2, X3, X6, X7, X8 (PT fixo; `ENABLE_I18N=1` reativa), X9 · MB1, MB2, MB10 · seção 4.3 (bibliotecas em `static/vendor/`) · A1 (`.env.example` + README), A3, A6 · parte de A10 (arquivos mortos removidos) · emojis de status removidos (Dashboard, Histórico, formulário, PDF).
 Bug extra encontrado e corrigido: a página de Análise rodava o script dos gráficos duas vezes (bloco `scripts` aninhado dentro de `content`).
 
-**Pendente (próximos passos):** H4/UX-5 (resolução com "solução aplicada"), H5, V2 (ocorrência a partir da inspeção), S4 (uploads protegidos), S5/S6 (perfis e usuários), MB3/MB4 (tabelas em cards no mobile), base de demonstração, demais itens 🟡/🟢.
+**Segunda rodada — corrigido e verificado** (mais 29 verificações no navegador sobre a base de demonstração, sem erros de JavaScript):
+H4/UX-5 (resolução com solução aplicada + componente, gravadas e usadas no prompt da IA), H5 (Iniciar atendimento), H9/UX-7 (toast), V2 (ocorrência a partir da inspeção, com máquina, descrição, impacto e setor pré-preenchidos), V4 (rótulo "Validar laudo"), O4 (setor pela máquina), O11 (diagrama em PDF vira link), S4 (uploads exigem login ou token mobile), S10 (logout mobile revoga o token), S12 parcial (nome do operador não é mais enviado à IA), AP1 (ocorrência do app recebe operador, setor e diagnóstico em segundo plano), MB3 (tabelas viram cards no celular), MB6 (modal em tela cheia no celular), resolução no PDF da ocorrência e `scripts/seed_demo.py` (base de demonstração).
+
+**Pendente:** S5/S6 (perfis e cadastro de usuários), MB4 (filtros recolhíveis no celular), AP2–AP4 (app Flutter), página de máquina (M1/M2), paginação no servidor (H8), demais itens 🟡/🟢.
 
 ---
 

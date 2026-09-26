@@ -57,6 +57,14 @@ class ApiService {
   }
 
   Future<void> logout() async {
+    // Revoga o token no servidor (melhor esforço: sem rede, apaga só localmente)
+    if (_token != null) {
+      try {
+        await http
+            .post(Uri.parse('$_baseUrl/api/mobile/logout'), headers: _headers)
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {}
+    }
     _token = null;
     await _storage.delete(key: _keyToken);
   }

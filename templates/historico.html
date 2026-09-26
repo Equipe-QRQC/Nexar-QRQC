@@ -69,7 +69,7 @@
   <!-- Tabela -->
   <div class="card">
     <div class="table-wrapper">
-      <table class="table" id="tabelaHistorico">
+      <table class="table table-cards" id="tabelaHistorico">
         <thead>
           <tr>
             <th>#</th>
@@ -90,10 +90,10 @@
               data-impacto="{{ o.nivel_impacto }}"
               data-status="{{ o.status or 'Aberta' }}"
               data-data="{{ o.data_ocorrencia[:10] if o.data_ocorrencia else '' }}">
-            <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
-            <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
-            <td style="font-size:13px;">{{ o.nome_operador }}</td>
-            <td>
+            <td class="c-id" style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
+            <td class="c-maq"><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
+            <td class="c-op" style="font-size:13px;">{{ o.nome_operador }}</td>
+            <td class="c-tipo">
               {% if o.tipo_ocorrencia == 'Qualidade' %}
                 <span class="badge badge-primary">{{ o.tipo_ocorrencia }}</span>
               {% elif o.tipo_ocorrencia == 'Segurança' %}
@@ -104,7 +104,7 @@
                 <span class="badge badge-info">{{ o.tipo_ocorrencia }}</span>
               {% endif %}
             </td>
-            <td>
+            <td class="c-imp">
               {% if o.nivel_impacto == 'Alto' %}
                 <span class="badge badge-danger">Alto</span>
               {% elif o.nivel_impacto == 'Médio' %}
@@ -115,15 +115,15 @@
                 <span style="color:var(--text-light);">—</span>
               {% endif %}
             </td>
-            <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;">
+            <td class="c-desc" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;">
               {{ o.descricao }}
             </td>
-            <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+            <td class="c-data" style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
               {% if o.data_ocorrencia %}
                 {{ o.data_ocorrencia[:10].split('-')|reverse|join('/') }}
               {% endif %}
             </td>
-            <td class="status-cell">
+            <td class="c-status status-cell">
               {% if o.status in ('Resolvida', 'Fechada') %}
                 <span class="badge badge-success">{{ o.status }}</span>
               {% elif o.status == 'Em andamento' %}
@@ -132,7 +132,7 @@
                 <span class="badge badge-info">{{ o.status or 'Aberta' }}</span>
               {% endif %}
             </td>
-            <td>
+            <td class="c-acao">
               <button class="btn btn-ghost btn-icon btn-abrir-modal"
                       data-id="{{ o.id }}"
                       data-maquina="{{ (o.maquina_nome or '—') | e }}"
@@ -145,6 +145,10 @@
                       data-resposta="{{ (o.resposta_ia or '') | e }}"
                       data-diagrama="{{ (o.diagrama_url or '') | e }}"
                       data-anotacoes="{{ (o.anotacoes_ia or '') | e }}"
+                      data-solucao="{{ (o.solucao_aplicada or '') | e }}"
+                      data-componente="{{ (o.componente_real or '') | e }}"
+                      data-resolvido-por="{{ (o.resolvido_por_nome or '') | e }}"
+                      data-data-resolucao="{{ (o.data_resolucao or '') | e }}"
                       title="{{ t.ver_detalhes }}">
                 <i class="fas fa-eye" style="color:var(--primary);"></i>
               </button>
@@ -235,6 +239,9 @@
                  style="max-width:100%; max-height:280px; object-fit:contain; display:block; border-radius:var(--radius-sm);" />
             <div id="modalAnnotationLayer" style="position:absolute; inset:8px; pointer-events:none;"></div>
           </div>
+          <a id="modalDiagPdf" href="#" target="_blank" class="btn btn-outline btn-sm" style="display:none;">
+            <i class="fas fa-file-pdf"></i> Abrir documentação técnica (PDF)
+          </a>
           <div id="modalAnotacoesList" style="display:none; flex-direction:column; gap:4px;"></div>
         </div>
 
@@ -246,6 +253,17 @@
           <i class="fas fa-robot"></i> {{ t.diag_ia }}
         </div>
         <div id="modalResposta" class="modal-diagnosis"></div>
+
+        <div id="modalResolucaoWrap" style="display:none;">
+          <div class="modal-section-label">
+            <i class="fas fa-circle-check" style="color:var(--success);"></i> Resolução
+          </div>
+          <div class="modal-text-block" style="border-left:3px solid var(--success);">
+            <div id="modalSolucao" style="white-space:pre-wrap;"></div>
+            <div id="modalComponenteReal" style="margin-top:8px; font-size:12.5px; color:var(--text-muted);"></div>
+            <div id="modalResolvidoPor" style="margin-top:4px; font-size:12px; color:var(--text-muted);"></div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -259,6 +277,9 @@
       <a id="modalAbrirBtn" href="#" class="btn btn-primary btn-sm">
         <i class="fas fa-up-right-from-square"></i> Abrir ocorrência
       </a>
+      <button id="modalIniciarBtn" class="btn btn-outline btn-sm" onclick="iniciarOcorrencia()" style="display:none;">
+        <i class="fas fa-play"></i> Iniciar atendimento
+      </button>
       <button id="modalResolverBtn" class="btn btn-sm" onclick="resolverOcorrencia()"
               style="background:var(--success); color:#fff; border:none; display:none;">
         <i class="fas fa-check-circle"></i> {{ t.marcar_resolvida }}
@@ -383,6 +404,13 @@
 
   /* Mobile */
   @media (max-width: 640px) {
+    /* Modal ocupa a tela inteira no celular */
+    #modalOverlay { padding: 0 !important; }
+    .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; }
+    .modal-hdr { padding: 14px 16px; }
+    .modal-col { padding: 16px; }
+    .modal-ftr { flex-wrap: wrap; padding: 10px 12px; }
+    .modal-ftr .btn { flex: 1 1 45%; justify-content: center; min-height: 44px; }
     .modal-body-2col { grid-template-columns: 1fr; overflow-y: auto; }
     .modal-col-left { border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
     .modal-col-right { overflow-y: visible; }
@@ -392,6 +420,8 @@
 {% endblock %}
 
 {% block scripts %}
+{% include 'partials/modal_resolver.html' %}
+<script src="/static/js/ocorrencia_acoes.js"></script>
 <script>
   const I18N = {
     marcar_resolvida: "{{ t.marcar_resolvida }}",
@@ -534,10 +564,18 @@
       ].join('');
 
       // Botão resolver
-      const resolverBtn = document.getElementById('modalResolverBtn');
-      resolverBtn.style.display = (st === 'Aberta' || st === 'Em andamento') ? '' : 'none';
-      resolverBtn.disabled = false;
-      resolverBtn.innerHTML = `<i class="fas fa-check-circle"></i> ${I18N.marcar_resolvida}`;
+      botaoAtual = this;
+      atualizarAcoesModal(st);
+
+      // Resolução (quando já resolvida)
+      const solucao = this.dataset.solucao || '';
+      document.getElementById('modalResolucaoWrap').style.display = solucao ? '' : 'none';
+      document.getElementById('modalSolucao').textContent = solucao;
+      document.getElementById('modalComponenteReal').textContent =
+        this.dataset.componente ? 'Componente: ' + this.dataset.componente : '';
+      const por = this.dataset.resolvidoPor, quando = this.dataset.dataResolucao;
+      document.getElementById('modalResolvidoPor').textContent =
+        por ? `Resolvida por ${por}${quando ? ' em ' + fmtDataHora(quando) : ''}` : '';
 
       // Descrição
       document.getElementById('modalDescricao').textContent = this.dataset.descricao || '—';
@@ -561,8 +599,13 @@
       layer.innerHTML = ''; listWrap.innerHTML = '';
       listWrap.style.display = 'none'; cntWrap.style.display = 'none';
 
+      const ehPdf = /\.pdf$/i.test(diagrama || '');
+      document.getElementById('modalDiagWrap').style.display = ehPdf ? 'none' : 'inline-block';
+      const pdfLink = document.getElementById('modalDiagPdf');
+      pdfLink.style.display = ehPdf ? 'inline-flex' : 'none';
+      if (ehPdf) pdfLink.href = diagrama;
       if (diagrama) {
-        document.getElementById('modalDiagrama').src = diagrama;
+        if (!ehPdf) document.getElementById('modalDiagrama').src = diagrama;
         wrap.style.display = '';
         try {
           const anots = JSON.parse(this.dataset.anotacoes || '[]');
@@ -617,42 +660,55 @@
   });
 
   // ── Resolver ocorrência ───────────────────────────────────────────────────
-  async function resolverOcorrencia() {
-    const id  = document.getElementById('modalId').textContent;
-    const btn = document.getElementById('modalResolverBtn');
-    if (!confirm(`Confirmar a resolução da ocorrência #${id}?`)) return;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+  let botaoAtual = null;   // botão "ver detalhes" da linha aberta no modal
 
+  function atualizarAcoesModal(st) {
+    const aberta = st === 'Aberta' || st === 'Em andamento';
+    document.getElementById('modalResolverBtn').style.display = aberta ? '' : 'none';
+    document.getElementById('modalIniciarBtn').style.display = st === 'Aberta' ? '' : 'none';
+    const cor = (st === 'Resolvida' || st === 'Fechada') ? 'badge-success'
+              : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
+    document.getElementById('modalStatusBadge').innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+  }
+
+  function atualizarLinha(id, st) {
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if (!row) return;
+    row.dataset.status = st;
+    const cor = st === 'Resolvida' ? 'badge-success' : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
+    row.querySelector('.status-cell').innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+    const eyeBtn = row.querySelector('.btn-abrir-modal');
+    if (eyeBtn) eyeBtn.dataset.status = st;
+    const card = document.querySelector(`.oc-card[data-id="${id}"] .oc-card-status`);
+    if (card) card.innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+  }
+
+  function iniciarOcorrencia() {
+    const id = document.getElementById('modalId').textContent;
+    OcorrenciaAcoes.iniciarAtendimento(id, () => {
+      atualizarAcoesModal('Em andamento');
+      atualizarLinha(id, 'Em andamento');
+    });
+  }
+
+  function resolverOcorrencia() {
+    const id = document.getElementById('modalId').textContent;
+    let sugestoes = [];
     try {
-      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-      const res  = await fetch(`/ocorrencias/${id}/resolver`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrf },
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.erro || 'Erro desconhecido');
-
-      document.getElementById('modalStatusBadge').innerHTML =
-        '<span class="badge badge-success">Resolvida</span>';
-      btn.style.display = 'none';
-
-      const row = document.querySelector(`tr[data-id="${id}"]`);
-      if (row) {
-        row.dataset.status = 'Resolvida';
-        row.querySelector('.status-cell').innerHTML =
-          '<span class="badge badge-success">Resolvida</span>';
-        const eyeBtn = row.querySelector('.btn-abrir-modal');
-        if (eyeBtn) eyeBtn.dataset.status = 'Resolvida';
+      sugestoes = JSON.parse(botaoAtual?.dataset.anotacoes || '[]').map(a => a.titulo);
+    } catch (e) { /* sem sugestões */ }
+    OcorrenciaAcoes.abrirResolucao(id, sugestoes, (data) => {
+      atualizarAcoesModal('Resolvida');
+      atualizarLinha(id, 'Resolvida');
+      if (botaoAtual) {
+        botaoAtual.dataset.solucao = document.getElementById('rsSolucao').value;
       }
-
-      if (document.getElementById('statusSelect').value === 'Aberta') filtrar();
-
-    } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-check-circle"></i> Marcar como Resolvida';
-      alert('Erro ao resolver: ' + err.message);
-    }
+      document.getElementById('modalResolucaoWrap').style.display = '';
+      document.getElementById('modalSolucao').textContent = botaoAtual?.dataset.solucao || '';
+      document.getElementById('modalResolvidoPor').textContent =
+        data.resolvido_por_nome ? `Resolvida por ${data.resolvido_por_nome}` : '';
+      filtrar();
+    });
   }
 
   // ── Fecha modal ───────────────────────────────────────────────────────────
@@ -663,7 +719,8 @@
     if (e.target === this) closeModal();
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeModal();
+    // Com o modal de resolução aberto, o ESC fecha só ele
+    if (e.key === 'Escape' && !e.defaultPrevented) closeModal();
   });
 
   // ── Export Excel ─────────────────────────────────────────────────────────
@@ -677,6 +734,15 @@
     });
     window.location.href = `/historico/export?${params}`;
   }
+
+  // Linha inteira clicável (principalmente no celular, onde vira card)
+  todasLinhas.forEach(r => {
+    r.style.cursor = 'pointer';
+    r.addEventListener('click', e => {
+      if (e.target.closest('button, a')) return;
+      r.querySelector('.btn-abrir-modal')?.click();
+    });
+  });
 
   // ── Init ──────────────────────────────────────────────────────────────────
   filtrar();

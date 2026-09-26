@@ -67,6 +67,31 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.before_request
+def proteger_uploads():
+    """
+    Arquivos enviados (diagramas, fotos de inspeção, anexos de suporte) ficam em
+    static/uploads/ e seriam servidos a qualquer um. Exige sessão web ou token
+    mobile válido para acessá-los.
+    """
+    if not request.path.startswith("/static/uploads/"):
+        return None
+    if current_user.is_authenticated:
+        return None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        conn = get_db()
+        ok = conn.execute(
+            "SELECT 1 FROM mobile_tokens WHERE token = ? "
+            "AND (expires_at IS NULL OR expires_at > datetime('now'))",
+            (auth[7:],),
+        ).fetchone()
+        conn.close()
+        if ok:
+            return None
+    return ("Acesso não autorizado.", 401)
+
+
 @app.errorhandler(413)
 def too_large_handler(e):
     msg = "Arquivo muito grande. O limite é de 10 MB por envio."
@@ -1725,6 +1750,17 @@ def ocorrencia_pdf(oc_id: int):
         story.append(Spacer(1, 4))
 
     # Diagrama
+    # Resolução registrada pela manutenção
+    if row["solucao_aplicada"]:
+        story.append(section_header("Resolução", ""))
+        txt = f"<b>Solução aplicada:</b> {pdf_texto(row['solucao_aplicada'])}"
+        if row["componente_real"]:
+            txt += f"<br/><b>Componente que falhou:</b> {pdf_texto(row['componente_real'])}"
+        if row["data_resolucao"]:
+            txt += f"<br/><b>Resolvida em:</b> {pdf_texto(data_br(row['data_resolucao']))}"
+        story.append(Paragraph(txt, box_style("res_box", C_GRNBG, C_GRN)))
+        story.append(Spacer(1, 4))
+
     diag_path = (row["diagrama_url"] or "").lstrip("/")
     if diag_path:
         abs_diag = os.path.join(app.root_path, diag_path)
@@ -1812,9 +1848,16 @@ def ocorrencia_pdf(oc_id: int):
 @login_required
 def resolver_ocorrencia(ocorrencia_id: int):
     """
-    Marca uma ocorrência como Resolvida.
-    Não exige descrição — basta a confirmação do operador.
+    Marca uma ocorrência como Resolvida, registrando a solução aplicada e o
+    componente que de fato falhou. Esses campos alimentam o agente Nexar IA
+    (get_previous_solutions / get_similar_occurrences) nas próximas ocorrências.
     """
+    data = request.get_json(silent=True) or request.form
+    solucao = (data.get("solucao_aplicada") or "").strip()[:2000]
+    componente = (data.get("componente_real") or "").strip()[:120]
+    if len(solucao) < 5:
+        return jsonify({"ok": False, "erro": "Descreva a solução aplicada (mínimo de 5 caracteres)."}), 400
+
     try:
         conn = get_db()
         oc = conn.execute(
@@ -1825,22 +1868,18 @@ def resolver_ocorrencia(ocorrencia_id: int):
             return jsonify({"ok": False, "erro": "Ocorrência não encontrada."}), 404
         if oc["status"] in ("Resolvida", "Fechada"):
             conn.close()
-            return jsonify({
-                "ok": False,
-                "erro": f"Ocorrência já está {oc['status']}.",
-            }), 409
+            return jsonify({"ok": False, "erro": f"Esta ocorrência já está {oc['status'].lower()}."}), 409
 
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(
             """UPDATE ocorrencias
-               SET status='Resolvida',
-                   data_resolucao=?, resolvido_por_id=?
+               SET status='Resolvida', data_resolucao=?, resolvido_por_id=?,
+                   solucao_aplicada=?, componente_real=?
                WHERE id = ?""",
-            (agora, current_user.id, ocorrencia_id),
+            (agora, current_user.id, solucao, componente or None, ocorrencia_id),
         )
         conn.commit()
 
-        # Busca dados atualizados pra resposta (UI atualiza inline)
         row = conn.execute(
             "SELECT o.status, o.data_resolucao, u.nome AS resolvido_por_nome "
             "FROM ocorrencias o "
@@ -1857,9 +1896,28 @@ def resolver_ocorrencia(ocorrencia_id: int):
             "data_resolucao": row["data_resolucao"],
             "resolvido_por_nome": row["resolvido_por_nome"],
         })
-    except Exception as e:
+    except Exception:
         logger.exception("[ocorrencia] falha ao resolver")
         return jsonify({"ok": False, "erro": "Não foi possível salvar. Tente novamente."}), 500
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/iniciar", methods=["POST"])
+@login_required
+def iniciar_atendimento(ocorrencia_id: int):
+    """Aberta → Em andamento (técnico assumiu o atendimento)."""
+    conn = get_db()
+    try:
+        oc = conn.execute("SELECT status FROM ocorrencias WHERE id = ?", (ocorrencia_id,)).fetchone()
+        if not oc:
+            return jsonify({"ok": False, "erro": "Ocorrência não encontrada."}), 404
+        if (oc["status"] or "Aberta") != "Aberta":
+            return jsonify({"ok": False, "erro": f"Esta ocorrência já está {oc['status'].lower()}."}), 409
+        conn.execute("UPDATE ocorrencias SET status = 'Em andamento' WHERE id = ?", (ocorrencia_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    logger.info(f"[ocorrencia] em andamento id={ocorrencia_id} por user_id={current_user.id}")
+    return jsonify({"ok": True, "status": "Em andamento"})
 
 
 @app.route("/suporte")
@@ -1875,7 +1933,128 @@ def CadastroOcorrencia():
     maquinas = conn.execute("SELECT id, nome, setor FROM maquinas ORDER BY nome").fetchall()
     conn.close()
     preselect = request.args.get("maquina", type=int)
-    return render_template("CadastroOcorrencia.html", maquinas=maquinas, preselect_maquina=preselect)
+    prefill = {}
+
+    # Ocorrência aberta a partir de uma inspeção por foto (Sensor Visual)
+    inspecao_id = request.args.get("inspecao", type=int)
+    if inspecao_id:
+        conn = get_db()
+        p = conn.execute("SELECT * FROM percepcoes WHERE id = ?", (inspecao_id,)).fetchone()
+        conn.close()
+        if p:
+            try:
+                anomalias = json.loads(p["anomalias_json"] or "[]")
+            except Exception:
+                anomalias = []
+            preselect = p["maquina_id"] or preselect
+            rotulos = ", ".join(dict.fromkeys(a.get("rotulo", "") for a in anomalias if a.get("rotulo")))
+            linhas = [f"Inspeção por foto nº {inspecao_id} — Índice de Saúde {p['score_saude']}/100."]
+            for i, a in enumerate(anomalias, 1):
+                linhas.append(
+                    f"{i}. {a.get('rotulo', '')} ({a.get('severidade', '')}) em {a.get('componente', '—')}: "
+                    f"{a.get('descricao', '')}"
+                    + (f" Possível causa: {a['causa_provavel']}" if a.get("causa_provavel") else "")
+                )
+            if p["contexto"]:
+                linhas.append(f"Contexto informado: {p['contexto']}")
+            prefill = {
+                "descricao": f"Anomalia detectada em inspeção visual: {rotulos}." if rotulos
+                             else "Anomalia detectada em inspeção visual.",
+                "detalhamento": "\n".join(linhas),
+                "impacto": {"critico": "Alto", "atencao": "Médio", "info": "Baixo"}.get(p["severidade_max"], ""),
+                "tipo": "Manutenção",
+                "inspecao_id": inspecao_id,
+            }
+    return render_template("CadastroOcorrencia.html", maquinas=maquinas,
+                           preselect_maquina=preselect, prefill=prefill)
+
+
+def diagnosticar_ocorrencia(campos: dict) -> dict:
+    """
+    Monta o contexto da máquina (dados, diagrama, histórico e soluções já
+    aplicadas) e gera o diagnóstico da IA. Usado pela web e pela API mobile.
+    O nome do operador não é enviado ao provedor de IA (minimização de dados).
+    Retorna {resposta_ia, anotacoes, ia_status, diagrama_url}.
+    """
+    maquina_id = campos.get("maquina_id")
+    maquina_info = ""
+    diagrama_path = None
+    diagrama_url = None
+
+    try:
+        if maquina_id:
+            conn = get_db()
+            maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+            diagrama = conn.execute(
+                "SELECT * FROM diagramas WHERE maquina_id = ? "
+                "ORDER BY CASE tipo WHEN 'PDF' THEN 1 ELSE 0 END LIMIT 1",
+                (maquina_id,),
+            ).fetchone()
+            historico_maquina = conn.execute(
+                "SELECT descricao FROM ocorrencias "
+                "WHERE maquina_id = ? ORDER BY data_registro DESC LIMIT 3",
+                (maquina_id,),
+            ).fetchall()
+            solucoes = conn.execute(
+                "SELECT descricao, solucao_aplicada, componente_real FROM ocorrencias "
+                "WHERE maquina_id = ? AND solucao_aplicada IS NOT NULL AND solucao_aplicada != '' "
+                "ORDER BY data_resolucao DESC LIMIT 5",
+                (maquina_id,),
+            ).fetchall()
+            conn.close()
+
+            if maquina:
+                maquina_info = (
+                    f"Máquina: {maquina['nome']} | Modelo: {maquina['modelo'] or '—'} | "
+                    f"Fabricante: {maquina['fabricante'] or '—'} | Ano: {maquina['ano'] or '—'}\n"
+                    f"Setor: {maquina['setor'] or '—'}\n"
+                )
+            if diagrama:
+                diagrama_path = diagrama["caminho"]
+                diagrama_url = "/" + diagrama_path.replace("\\", "/")
+            if historico_maquina:
+                maquina_info += "\nÚltimas ocorrências desta máquina:\n"
+                for h in historico_maquina:
+                    maquina_info += f"- {(h['descricao'] or '')[:80]}\n"
+            if solucoes:
+                maquina_info += ("\nSoluções já aplicadas pela manutenção nesta máquina "
+                                 "(considere-as ao formular a causa provável):\n")
+                for r in solucoes:
+                    comp = f" | componente: {r['componente_real']}" if r["componente_real"] else ""
+                    maquina_info += (f"- Problema: {(r['descricao'] or '')[:80]} → "
+                                     f"Solução: {(r['solucao_aplicada'] or '')[:160]}{comp}\n")
+    except Exception:
+        logger.exception("Erro ao carregar contexto da máquina")
+        # Continua mesmo sem contexto da máquina — não é fatal.
+
+    prompt = f"""{maquina_info}
+DADOS DA OCORRÊNCIA:
+- Data: {campos.get('data_ocorrencia') or '—'}
+- Setor: {campos.get('setor_area') or '—'}
+- Tipo: {campos.get('tipo_ocorrencia') or '—'} | Impacto: {campos.get('nivel_impacto') or '—'} | Recorrente: {campos.get('problema_recorrente') or '—'}
+- Descrição: {campos.get('descricao') or ''}
+- Detalhamento técnico: {campos.get('detalhamento_tecnico') or '—'}
+
+{"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
+
+**1. Causa provável**
+Hipótese principal em 3-5 linhas. Cite os sintomas específicos do detalhamento que sustentam o diagnóstico (pressão, temperatura, ruídos, histórico de manutenção). Identifique o componente primário suspeito.
+
+**2. Componentes a verificar**
+Liste 4-7 componentes em ordem de prioridade. Para cada um, escreva uma linha: "- Nome técnico: justificativa".
+
+**3. Procedimento de inspeção**
+Lista numerada de 5-8 passos. OBRIGATÓRIO começar por isolamento de segurança (LOTO, despressurização, bloqueio elétrico). Inclua medições específicas (valores e tolerâncias quando aplicável).
+
+**4. Quando escalar para o fabricante**
+Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que indicam que a manutenção interna não é suficiente.
+
+Use linguagem técnica em português. Foque em ações práticas imediatas. Seja DETALHADO em cada seção."""
+
+    resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
+    logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
+    return {"resposta_ia": resposta_ia, "anotacoes": anotacoes,
+            "ia_status": ia_status, "diagrama_url": diagrama_url}
 
 
 @app.route("/registrar_ocorrencia", methods=["POST"])
@@ -1907,75 +2086,15 @@ def registrar_ocorrencia():
     problema_recorrente  = request.form.get("problema_recorrente", "").strip()
     detalhamento_tecnico = request.form.get("detalhamento_tecnico", "").strip()
 
-    # ── Contexto da máquina ──────────────────────────────────────────────────
-    maquina_info = ""
-    diagrama_path = None
-    maquina_nome = ""
-    diagrama_url = None
-
-    try:
-        if maquina_id:
-            conn = get_db()
-            maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
-            diagrama = conn.execute(
-                "SELECT * FROM diagramas WHERE maquina_id = ? "
-                "ORDER BY CASE tipo WHEN 'PDF' THEN 1 ELSE 0 END LIMIT 1",
-                (maquina_id,),
-            ).fetchone()
-            historico_maquina = conn.execute(
-                "SELECT descricao, resposta_ia FROM ocorrencias "
-                "WHERE maquina_id = ? ORDER BY data_registro DESC LIMIT 3",
-                (maquina_id,),
-            ).fetchall()
-            conn.close()
-
-            if maquina:
-                maquina_nome = maquina["nome"]
-                maquina_info = (
-                    f"Máquina: {maquina['nome']} | Modelo: {maquina['modelo'] or '—'} | "
-                    f"Fabricante: {maquina['fabricante'] or '—'} | Ano: {maquina['ano'] or '—'}\n"
-                    f"Setor: {maquina['setor'] or '—'}\n"
-                )
-            if diagrama:
-                diagrama_path = diagrama["caminho"]
-                diagrama_url = "/" + diagrama_path.replace("\\", "/")
-            if historico_maquina:
-                maquina_info += "\nÚltimas ocorrências desta máquina:\n"
-                for h in historico_maquina:
-                    desc = (h["descricao"] or "")[:80]
-                    maquina_info += f"- {desc}\n"
-    except Exception:
-        logger.exception("Erro ao carregar contexto da máquina")
-        # Continua mesmo sem contexto da máquina — não é fatal.
-
-    # ── Prompt para a IA ─────────────────────────────────────────────────────
-    prompt = f"""{maquina_info}
-DADOS DA OCORRÊNCIA:
-- Operador: {nome_operador}
-- Data: {data_ocorrencia}
-- Setor: {setor_area}
-- Tipo: {tipo_ocorrencia} | Impacto: {nivel_impacto} | Recorrente: {problema_recorrente}
-- Descrição: {descricao}
-- Detalhamento técnico: {detalhamento_tecnico}
-
-{"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
-
-**1. Causa provável**
-Hipótese principal em 3-5 linhas. Cite os sintomas específicos do detalhamento que sustentam o diagnóstico (pressão, temperatura, ruídos, histórico de manutenção). Identifique o componente primário suspeito.
-
-**2. Componentes a verificar**
-Liste 4-7 componentes em ordem de prioridade. Para cada um, escreva uma linha: "- Nome técnico: justificativa".
-
-**3. Procedimento de inspeção**
-Lista numerada de 5-8 passos. OBRIGATÓRIO começar por isolamento de segurança (LOTO, despressurização, bloqueio elétrico). Inclua medições específicas (valores e tolerâncias quando aplicável).
-
-**4. Quando escalar para o fabricante**
-Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que indicam que a manutenção interna não é suficiente.
-
-Use linguagem técnica em português. Foque em ações práticas imediatas. Seja DETALHADO em cada seção."""
-
-    resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
-    logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
+    diag = diagnosticar_ocorrencia({
+        "maquina_id": maquina_id, "data_ocorrencia": data_ocorrencia,
+        "setor_area": setor_area, "descricao": descricao,
+        "tipo_ocorrencia": tipo_ocorrencia, "nivel_impacto": nivel_impacto,
+        "problema_recorrente": problema_recorrente,
+        "detalhamento_tecnico": detalhamento_tecnico,
+    })
+    resposta_ia, anotacoes, ia_status = diag["resposta_ia"], diag["anotacoes"], diag["ia_status"]
+    diagrama_url = diag["diagrama_url"]
     anotacoes_json = json.dumps(anotacoes, ensure_ascii=False) if anotacoes else None
 
     # ── Persistência ─────────────────────────────────────────────────────────
@@ -3052,6 +3171,10 @@ def mobile_ocorrencias_get():
 @_mobile_auth
 @limiter.limit("20 per minute")
 def mobile_ocorrencias_post():
+    """
+    Cria a ocorrência na hora (o app espera no máximo 15 s) e gera o
+    diagnóstico da IA em segundo plano — ele aparece na web ao abrir a ocorrência.
+    """
     data = request.get_json(silent=True) or {}
     maquina_id = data.get("maquina_id")
     descricao = (data.get("descricao") or "").strip()
@@ -3059,23 +3182,66 @@ def mobile_ocorrencias_post():
         return jsonify({"erro": "maquina_id e descricao são obrigatórios"}), 400
 
     conn = get_db()
+    maq = conn.execute("SELECT setor FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    if not maq:
+        conn.close()
+        return jsonify({"erro": "Máquina não encontrada"}), 404
+    campos = {
+        "maquina_id": maquina_id,
+        "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "setor_area": (data.get("setor_area") or maq["setor"] or "").strip(),
+        "descricao": descricao,
+        "tipo_ocorrencia": data.get("tipo_ocorrencia") or "Manutenção",
+        "nivel_impacto": data.get("nivel_impacto") or "Médio",
+        "problema_recorrente": data.get("problema_recorrente") or "Não informado",
+        "detalhamento_tecnico": (data.get("detalhamento_tecnico") or "").strip(),
+    }
     cur = conn.execute(
         """INSERT INTO ocorrencias
-           (maquina_id, descricao, tipo_ocorrencia, nivel_impacto,
-            status, data_ocorrencia, data_registro)
-           VALUES (?,?,?,?,'Aberta',date('now'),datetime('now'))""",
-        (
-            maquina_id,
-            descricao,
-            data.get("tipo_ocorrencia", "Falha mecânica"),
-            data.get("nivel_impacto", "Médio"),
-        ),
+           (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
+            tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
+            ia_status, status, data_registro)
+           VALUES (?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
+        (maquina_id, campos["data_ocorrencia"], request.mobile_user["nome"],
+         campos["setor_area"], descricao, campos["tipo_ocorrencia"],
+         campos["nivel_impacto"], campos["problema_recorrente"], campos["detalhamento_tecnico"]),
     )
     conn.commit()
     oc_id = cur.lastrowid
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
+
+    def _diagnosticar_em_segundo_plano():
+        try:
+            diag = diagnosticar_ocorrencia(campos)
+            c = get_db()
+            c.execute(
+                "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
+                (diag["resposta_ia"], diag["ia_status"],
+                 json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
+                 diag["diagrama_url"], oc_id),
+            )
+            c.commit()
+            c.close()
+        except Exception:
+            logger.exception(f"[mobile] falha no diagnóstico em segundo plano oc={oc_id}")
+
+    import threading
+    threading.Thread(target=_diagnosticar_em_segundo_plano, daemon=True).start()
     return jsonify({"ok": True, "id": oc_id})
+
+
+@app.route("/api/mobile/logout", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+def mobile_logout():
+    """Revoga o token do aparelho."""
+    token = request.headers.get("Authorization", "")[7:]
+    conn = get_db()
+    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 _DOC_SYSTEM = (

@@ -9,6 +9,12 @@
 </div>
 
 <div class="page-body">
+  {% if prefill and prefill.inspecao_id %}
+  <div style="background:var(--primary-light); color:var(--primary-dark); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center; font-size:13px;">
+    <i class="fas fa-camera"></i>
+    <span>Campos preenchidos a partir da inspeção por foto nº {{ prefill.inspecao_id }}. Revise antes de registrar.</span>
+  </div>
+  {% endif %}
   <form action="{{ url_for('registrar_ocorrencia') }}" method="POST" id="formOcorrencia">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <div class="grid-2">
@@ -25,10 +31,10 @@
               <i class="fas fa-cogs" style="color:var(--primary); margin-right:5px;"></i>
               {{ t.maquina }}
             </label>
-            <select name="maquina_id" class="form-select">
+            <select name="maquina_id" id="maquinaSelect" class="form-select">
               <option value="">{{ t.selecione_maquina }}</option>
               {% for m in maquinas %}
-              <option value="{{ m.id }}" {% if preselect_maquina == m.id %}selected{% endif %}>{{ m.nome }} {% if m.setor %}({{ m.setor }}){% endif %}</option>
+              <option value="{{ m.id }}" data-setor="{{ m.setor or '' }}" {% if preselect_maquina == m.id %}selected{% endif %}>{{ m.nome }} {% if m.setor %}({{ m.setor }}){% endif %}</option>
               {% endfor %}
             </select>
           </div>
@@ -56,7 +62,7 @@
               <i class="fas fa-map-marker-alt" style="color:var(--primary); margin-right:5px;"></i>
               {{ t.setor }}
             </label>
-            <input type="text" name="setor_area" class="form-control"
+            <input type="text" name="setor_area" id="setorInput" class="form-control"
                    placeholder="Ex: Linha 3 — Montagem" required />
           </div>
 
@@ -66,7 +72,7 @@
               {{ t.descricao }}
             </label>
             <textarea name="descricao" class="form-control" rows="4"
-                      placeholder="Descreva o problema de forma clara e objetiva..." required></textarea>
+                      placeholder="Descreva o problema de forma clara e objetiva..." required>{{ prefill.descricao if prefill else '' }}</textarea>
           </div>
 
         </div>
@@ -135,7 +141,7 @@
             <label class="form-label">{{ t.detalhamento }}</label>
             <textarea name="detalhamento_tecnico" class="form-control" rows="5"
                       placeholder="Forneça detalhes técnicos: códigos de erro, leituras de sensores, comportamento observado..."
-                      required></textarea>
+                      required>{{ prefill.detalhamento if prefill else '' }}</textarea>
           </div>
 
         </div>
@@ -195,6 +201,16 @@
 
 {% block scripts %}
 <script>
+  const PREFILL = {{ (prefill or {}) | tojson }};
+  document.addEventListener('DOMContentLoaded', () => {
+    if (PREFILL.tipo) document.querySelector('select[name=tipo_ocorrencia]').value = PREFILL.tipo;
+    if (PREFILL.impacto) {
+      const b = document.querySelector(`.impact-btn[data-value="${PREFILL.impacto}"]`);
+      if (b) selImpacto(b);
+    }
+  });
+</script>
+<script>
   // Data/hora da ocorrência: preenche com o momento atual (fuso local)
   function preencherAgora() {
     const el = document.getElementById('dataOcorrencia');
@@ -205,6 +221,20 @@
     }
   }
   preencherAgora();
+
+  // Setor: sugere o setor cadastrado da máquina (sem sobrescrever o que foi digitado)
+  (function () {
+    const sel = document.getElementById('maquinaSelect');
+    const setor = document.getElementById('setorInput');
+    let setorAuto = true;
+    setor.addEventListener('input', () => { setorAuto = !setor.value; });
+    function aplicarSetor() {
+      const opt = sel.options[sel.selectedIndex];
+      if (setorAuto && opt && opt.dataset.setor) setor.value = opt.dataset.setor;
+    }
+    sel.addEventListener('change', aplicarSetor);
+    aplicarSetor();
+  })();
 
   // "Limpar": o reset nativo não conhece os seletores de impacto/recorrência
   document.getElementById('formOcorrencia').addEventListener('reset', function () {

@@ -209,15 +209,18 @@
 
       <div class="sv-confirm-row" id="svConfirmRow" style="display:none;">
         <button id="svConfirmar" class="btn btn-success btn-sm" style="flex:1;">
-          <i class="fas fa-check"></i> Confirmar diagnóstico
+          <i class="fas fa-check"></i> Validar laudo
         </button>
         <a id="svLaudo" class="btn btn-sm" href="#" target="_blank"
            style="flex:1; background:var(--bg-input); border:1px solid var(--border); color:var(--text);">
           <i class="fas fa-file-pdf"></i> Baixar laudo (PDF)
         </a>
       </div>
+      <a id="svAbrirOc" class="btn btn-primary btn-sm" href="#" style="display:none; width:100%; margin-top:8px; justify-content:center;">
+        <i class="fas fa-triangle-exclamation"></i> Abrir ocorrência a partir desta inspeção
+      </a>
       <p id="svConfirmMsg" style="font-size:12px; color:var(--success); margin-top:8px; display:none;">
-        <i class="fas fa-check-circle"></i> Percepção confirmada — obrigado, isso treina a IA.
+        <i class="fas fa-check-circle"></i> Laudo validado. A inspeção fica registrada no histórico da máquina.
       </p>
     </div>
 
@@ -290,6 +293,9 @@
   function render(data){
     currentId = data.id;
     document.getElementById('svLaudo').href = '/sensor/' + data.id + '/laudo.pdf';
+    const abrirOc = document.getElementById('svAbrirOc');
+    abrirOc.href = '/CadastroOcorrencia?inspecao=' + data.id;
+    abrirOc.style.display = (data.anomalias && data.anomalias.length) ? 'flex' : 'none';
     card.style.display = 'block';
     preview.src = data.imagem_url;
     card.scrollIntoView({ behavior:'smooth', block:'nearest' });

@@ -100,6 +100,20 @@ Acesse **http://localhost:5000** no navegador.
 
 **Login:** `admin@nexar.com` com a senha definida em `ADMIN_PASSWORD`.
 
+### Base de demonstração
+
+Para apresentações, popule o banco com 6 máquinas e ~27 ocorrências dos últimos 60 dias
+(abertas, em andamento e resolvidas com a solução registrada):
+
+```bash
+python scripts/seed_demo.py              # recusa se o banco já tiver ocorrências
+python scripts/seed_demo.py --forcar     # apaga máquinas/ocorrências e recria
+DATABASE_PATH=demo.db python scripts/seed_demo.py   # em um banco separado
+```
+
+Com `GEMINI_API_KEY` configurada, cada diagnóstico é gerado pela IA (leva ~2 minutos
+por causa do limite de requisições); sem chave, fica o roteiro padrão de inspeção.
+
 ## Estrutura
 
 ```

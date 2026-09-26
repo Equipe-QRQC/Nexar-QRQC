@@ -1,0 +1,28 @@
+{# Modal de resolução de ocorrência — usado no Histórico e na página da ocorrência. #}
+<div id="resolverOverlay" class="rs-overlay" role="dialog" aria-modal="true" aria-labelledby="rsTitulo" hidden>
+  <form id="resolverForm" class="rs-box" novalidate>
+    <div class="rs-hdr">
+      <h3 id="rsTitulo">Resolver ocorrência #<span id="rsId"></span></h3>
+      <button type="button" class="rs-close" data-rs-fechar aria-label="Fechar"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="rs-body">
+      <label class="form-label" for="rsSolucao">Solução aplicada <span style="color:var(--danger)">*</span></label>
+      <textarea id="rsSolucao" class="form-control" rows="4" maxlength="2000"
+                placeholder="Ex.: Substituída a vedação do cilindro principal e ajustada a pressão para 180 bar."></textarea>
+      <label class="form-label" for="rsComponente" style="margin-top:14px;">Componente que falhou</label>
+      <input id="rsComponente" class="form-control" list="rsSugestoes" maxlength="120"
+             placeholder="Ex.: Vedação do cilindro" autocomplete="off" />
+      <datalist id="rsSugestoes"></datalist>
+      <p class="rs-hint"><i class="fas fa-circle-info"></i>
+        Esse registro fica no histórico da máquina e é usado pela Nexar IA nos próximos diagnósticos.</p>
+      <p id="rsErro" class="rs-erro" hidden></p>
+    </div>
+    <div class="rs-ftr">
+      <button type="button" class="btn btn-outline btn-sm" data-rs-fechar>Cancelar</button>
+      <button type="submit" id="rsConfirmar" class="btn btn-success btn-sm">
+        <i class="fas fa-check-circle"></i> Confirmar resolução
+      </button>
+    </div>
+  </form>
+</div>
+<div id="toastStack" class="toast-stack" aria-live="polite"></div>

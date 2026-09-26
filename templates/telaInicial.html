@@ -144,7 +144,7 @@
     <div class="card-body" style="padding:0;">
       {% if ultimas %}
       <div class="table-wrapper">
-      <table class="table" style="margin:0;">
+      <table class="table table-cards" style="margin:0;">
         <thead>
           <tr>
             <th>#</th>
@@ -159,26 +159,26 @@
         <tbody>
           {% for o in ultimas %}
           <tr class="row-link" onclick="location.href='{{ url_for('ver_ocorrencia', oc_id=o.id) }}'" style="cursor:pointer;">
-            <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
-            <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
-            <td style="font-size:13px;">{{ o.nome_operador }}</td>
-            <td>
+            <td class="c-id" style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
+            <td class="c-maq"><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
+            <td class="c-op" style="font-size:13px;">{{ o.nome_operador or '—' }}</td>
+            <td class="c-tipo">
               {% if o.tipo_ocorrencia == 'Qualidade' %}<span class="badge badge-primary">{{ o.tipo_ocorrencia }}</span>
               {% elif o.tipo_ocorrencia == 'Segurança' %}<span class="badge badge-danger">{{ o.tipo_ocorrencia }}</span>
               {% elif o.tipo_ocorrencia == 'Produção' %}<span class="badge badge-warning">{{ o.tipo_ocorrencia }}</span>
               {% else %}<span class="badge badge-info">{{ o.tipo_ocorrencia or '—' }}</span>{% endif %}
             </td>
-            <td>
+            <td class="c-imp">
               {% if o.nivel_impacto == 'Alto' %}<span class="badge badge-danger">Alto</span>
               {% elif o.nivel_impacto == 'Médio' %}<span class="badge badge-warning">Médio</span>
               {% elif o.nivel_impacto %}<span class="badge badge-success">Baixo</span>{% else %}—{% endif %}
             </td>
-            <td>
+            <td class="c-status">
               {% if o.status in ('Resolvida','Fechada') %}<span class="badge badge-success">{{ o.status }}</span>
               {% elif o.status == 'Em andamento' %}<span class="badge badge-warning">{{ o.status }}</span>
               {% else %}<span class="badge badge-info">{{ o.status or 'Aberta' }}</span>{% endif %}
             </td>
-            <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+            <td class="c-data" style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
               {{ (o.data_ocorrencia or o.data_registro) | data_br }}
             </td>
           </tr>
