@@ -1,10 +1,10 @@
 """
 Popula o banco com uma base de demonstração realista para apresentações.
 
-Cria 8 máquinas (com diagramas de test_diagrams/), cerca de 30 ocorrências
-distribuídas nos últimos 60 dias — abertas, em andamento e resolvidas com a
-solução aplicada registrada, incluindo casos recorrentes — e os componentes
-da Visualização 3D para a prensa hidráulica (modelo em código).
+Cria 5 máquinas com CAD 3D do fabricante (robôs ABB IRB 6700 e tornos CX704)
+e cerca de 20 ocorrências distribuídas nos últimos 60 dias — abertas, em
+andamento e resolvidas com a solução aplicada —, cada uma com a peça apontada
+no 3D e o sintoma, incluindo casos recorrentes.
 
 Os diagnósticos são gerados pela IA de verdade (Gemini) quando GEMINI_API_KEY
 está configurada; sem chave, fica o roteiro padrão de inspeção. Nenhum texto
@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import sys
 import time
 from datetime import datetime, timedelta
@@ -34,207 +33,130 @@ os.chdir(RAIZ)
 
 import app as nexar  # noqa: E402  (inicializa o banco e a IA)
 
+ROBO = {"fonte": "cad", "modelo": "robo-abb-irb6700"}
+TORNO = {"fonte": "cad", "modelo": "torno-cx704"}
+
+# Só máquinas com CAD 3D: a ocorrência é registrada apontando a peça no modelo.
 MAQUINAS = [
-    {"nome": "Prensa Hidráulica PH-200", "modelo": "PH-200/40T", "fabricante": "Schuler",
-     "ano": "2019", "setor": "Estamparia",
-     "descricao": "Prensa hidráulica de 40 t para estampagem de chapas. Pressão nominal 180 bar.",
-     "diagrama": "diagrama_prensa_hidraulica.png",
-     "modelo_3d": {"fonte": "familia", "familia": "prensa_hidraulica"}},
-    {"nome": "Motor do Transportador MT-75", "modelo": "W22 75 cv", "fabricante": "WEG",
-     "ano": "2020", "setor": "Montagem",
-     "descricao": "Motor de indução trifásico que aciona a esteira principal da linha de montagem.",
-     "diagrama": "diagrama_motor_eletrico.png"},
-    {"nome": "Manifold Pneumático MP-12", "modelo": "VTUG-12", "fabricante": "Festo",
-     "ano": "2018", "setor": "Pintura",
-     "descricao": "Bloco de 12 válvulas solenoides que comanda os atuadores da cabine de pintura.",
-     "diagrama": "arranjo_pneumatico_manifold.jpg"},
-    {"nome": "Válvula de Controle VP-03", "modelo": "Série 8", "fabricante": "Morin",
-     "ano": "2017", "setor": "Utilidades",
-     "descricao": "Válvula esfera com atuador pneumático na linha de distribuição de água gelada.",
-     "diagrama": "sistema_pneumatico_completo.jpg"},
-    {"nome": "Torno CNC GL-240M", "modelo": "GL-240M", "fabricante": "Romi",
-     "ano": "2021", "setor": "Usinagem",
-     "descricao": "Torno CNC com magazine de 12 ferramentas para usinagem de eixos.",
-     "diagrama_static": "static/Ficha_Tecnica_Torno_CNC_GL240M.pdf"},
-    {"nome": "Compressor de Ar CA-50", "modelo": "GA 37", "fabricante": "Atlas Copco",
-     "ano": "2016", "setor": "Utilidades",
-     "descricao": "Compressor parafuso de 50 hp que abastece a rede de ar comprimido da planta.",
-     "diagrama": None},
     {"nome": "Robô de Solda RS-01", "modelo": "IRB 6700-235/2.65", "fabricante": "ABB",
      "ano": "2022", "setor": "Soldagem",
-     "descricao": "Robô de 6 eixos da célula de solda a ponto da carroceria. Carga útil 235 kg.",
-     "diagrama": None,
-     "modelo_3d": {"fonte": "cad", "modelo": "robo-abb-irb6700"}},
+     "descricao": "Robô de 6 eixos da célula 1 de solda a ponto da carroceria. Carga útil 235 kg.",
+     "modelo_3d": ROBO},
+    {"nome": "Robô de Solda RS-02", "modelo": "IRB 6700-200/2.60", "fabricante": "ABB",
+     "ano": "2022", "setor": "Soldagem",
+     "descricao": "Robô de 6 eixos da célula 2 de solda a ponto. Carga útil 200 kg.",
+     "modelo_3d": ROBO},
+    {"nome": "Robô de Paletização RP-01", "modelo": "IRB 6700-150/3.20", "fabricante": "ABB",
+     "ano": "2021", "setor": "Expedição",
+     "descricao": "Robô de paletização de caixas no fim da linha. Alcance de 3,2 m.",
+     "modelo_3d": ROBO},
     {"nome": "Torno Mecânico TM-04", "modelo": "CX704", "fabricante": "Craftex",
      "ano": "2020", "setor": "Ferramentaria",
      "descricao": "Torno de bancada para reparo de peças e usinagem de buchas na ferramentaria.",
-     "diagrama": None,
-     "modelo_3d": {"fonte": "cad", "modelo": "torno-cx704"}},
+     "modelo_3d": TORNO},
+    {"nome": "Torno Mecânico TM-05", "modelo": "CX704", "fabricante": "Craftex",
+     "ano": "2021", "setor": "Manutenção Central",
+     "descricao": "Torno de bancada da oficina de manutenção para usinagem de pinos e eixos.",
+     "modelo_3d": TORNO},
 ]
 
-# (máquina, dias atrás, hora, operador, tipo, impacto, recorrente, descrição, detalhe,
-#  status, solução aplicada, componente real, horas até resolver)
+# (máquina, dias atrás, hora, operador, componente no 3D, sintoma, parou?, risco?,
+#  impacto, recorrente, descrição, detalhe, status, solução aplicada, horas até resolver)
 OCORRENCIAS = [
-    (0, 58, "07:40", "Carlos Souza", "Manutenção", "Alto", "Não",
-     "Vazamento de óleo no cilindro principal e queda de pressão",
-     "Pressão caiu de 180 para 130 bar durante o ciclo. Óleo acumulado na base do cilindro.",
-     "Resolvida", "Substituído o kit de vedação do cilindro principal e completado o nível de óleo.",
-     "Vedação do cilindro principal", 6),
-    (1, 55, "14:10", "Ana Lima", "Manutenção", "Médio", "Não",
-     "Motor da esteira aquecendo acima do normal",
-     "Temperatura da carcaça em 92 °C (normal até 75 °C). Ruído leve no lado acoplado.",
-     "Resolvida", "Relubrificado o rolamento do lado acoplado e limpas as aletas de refrigeração.",
-     "Rolamento lado acoplado", 4),
-    (2, 52, "09:05", "Juliana Rocha", "Produção", "Médio", "Não",
-     "Atuador da cabine de pintura não recua",
-     "Válvula 7 do manifold não comuta. Bobina com tensão presente.",
-     "Resolvida", "Trocada a válvula solenoide 7 do manifold; carretel estava travado por sujeira.",
-     "Válvula solenoide 7", 3),
-    (4, 50, "10:30", "Marcos Pereira", "Qualidade", "Médio", "Não",
-     "Peças com diâmetro fora da tolerância no torno",
-     "Eixos com +0,04 mm no diâmetro de 40 mm. Desvio aumenta ao longo do turno.",
-     "Resolvida", "Compensado o desgaste da ferramenta e substituído o inserto T3.",
-     "Inserto da ferramenta T3", 2),
-    (5, 47, "06:55", "Carlos Souza", "Produção", "Alto", "Não",
-     "Compressor desarmando por alta temperatura",
-     "Alarme de temperatura do elemento compressor a 110 °C. Rede de ar caiu para 5 bar.",
-     "Resolvida", "Limpo o radiador de óleo obstruído e substituído o filtro de ar de admissão.",
-     "Radiador de óleo", 5),
-    (0, 44, "15:20", "Ana Lima", "Segurança", "Alto", "Não",
-     "Cortina de luz da prensa não interrompe o ciclo",
-     "Teste diário: ao cruzar a cortina de luz a prensa completou o ciclo.",
-     "Resolvida", "Realinhados emissor e receptor da cortina de luz e testado o relé de segurança.",
-     "Cortina de luz", 2),
-    (3, 41, "11:45", "Marcos Pereira", "Manutenção", "Baixo", "Não",
-     "Válvula de controle com resposta lenta",
-     "Tempo de abertura de 9 s (especificado 3 s). Pressão de pilotagem normal.",
-     "Resolvida", "Lubrificada a haste e substituído o filtro regulador do ar de pilotagem.",
-     "Filtro regulador de pilotagem", 8),
-    (1, 38, "08:15", "Juliana Rocha", "Manutenção", "Alto", "Sim",
-     "Motor da esteira aquecendo novamente e com vibração",
-     "Temperatura 95 °C e vibração de 7 mm/s no mancal dianteiro. Segunda ocorrência no mês.",
-     "Resolvida", "Substituído o rolamento 6316 do lado acoplado e corrigido o alinhamento do acoplamento.",
-     "Rolamento lado acoplado", 10),
-    (0, 35, "13:00", "Carlos Souza", "Manutenção", "Alto", "Sim",
-     "Novo vazamento de óleo no cilindro da prensa",
-     "Gotejamento na haste do cilindro. Vedação trocada há 3 semanas.",
-     "Resolvida", "Haste do cilindro com riscos: haste retificada e vedação trocada; filtro de óleo substituído.",
-     "Haste do cilindro principal", 12),
-    (4, 33, "16:40", "Marcos Pereira", "Produção", "Médio", "Não",
-     "Torno parando com alarme de lubrificação",
-     "Alarme 2011 (baixa pressão de lubrificação) a cada 2 horas.",
-     "Resolvida", "Completado o reservatório de lubrificação central e desobstruído o distribuidor.",
-     "Distribuidor de lubrificação", 3),
-    (2, 30, "07:20", "Ana Lima", "Qualidade", "Médio", "Não",
-     "Falhas de pintura por pressão de ar instável",
-     "Pressão na pistola oscilando entre 3 e 5 bar. Peças com escorrimento.",
-     "Resolvida", "Substituído o regulador de pressão da entrada do manifold.",
-     "Regulador de pressão", 4),
-    (5, 27, "09:50", "Juliana Rocha", "Manutenção", "Médio", "Não",
-     "Compressor com consumo de óleo elevado",
-     "Reposição de 1 L de óleo por semana e óleo na rede de ar.",
-     "Resolvida", "Trocado o elemento separador de óleo.",
-     "Elemento separador de óleo", 6),
-    (1, 24, "10:05", "Carlos Souza", "Produção", "Baixo", "Não",
-     "Esteira com velocidade oscilando",
-     "Velocidade variando ±8% no inversor. Sem alarmes.",
-     "Resolvida", "Reajustados os parâmetros de rampa do inversor e reapertados os bornes do encoder.",
-     "Encoder do motor", 2),
-    (0, 21, "14:30", "Marcos Pereira", "Qualidade", "Médio", "Não",
-     "Peças estampadas com rebarba",
-     "Rebarba de 0,3 mm na borda das peças do lote 2231.",
-     "Resolvida", "Afiada a matriz de corte e ajustada a folga punção-matriz.",
-     "Matriz de corte", 5),
-    (3, 18, "08:35", "Ana Lima", "Segurança", "Alto", "Não",
-     "Vazamento de ar no atuador da válvula de água gelada",
-     "Chiado audível próximo ao atuador; consumo de ar da rede aumentou.",
-     "Resolvida", "Substituídas as vedações do atuador pneumático.",
-     "Vedação do atuador", 4),
-    (4, 15, "11:10", "Juliana Rocha", "Manutenção", "Alto", "Não",
-     "Ruído anormal no cabeçote do torno",
-     "Ruído metálico acima de 2.500 rpm. Temperatura do cabeçote normal.",
-     "Resolvida", "Substituída a correia do cabeçote e ajustada a tensão.",
-     "Correia do cabeçote", 7),
-    (2, 13, "15:55", "Carlos Souza", "Produção", "Baixo", "Não",
-     "Atuador da cabine lento no avanço",
-     "Tempo de avanço de 2,5 s (normal 1,2 s).",
-     "Resolvida", "Regulada a válvula reguladora de fluxo do atuador.",
-     "Reguladora de fluxo", 1),
-    (1, 11, "07:15", "Marcos Pereira", "Manutenção", "Médio", "Sim",
-     "Vibração no motor da esteira após troca de rolamento",
-     "Vibração de 5 mm/s no lado acoplado. Rolamento trocado há 27 dias.",
-     "Resolvida", "Acoplamento com elemento elástico desgastado: trocado e realinhado a laser.",
-     "Acoplamento", 6),
-    (6, 40, "09:30", "Juliana Rocha", "Manutenção", "Médio", "Não",
-     "Robô parando com alarme de sobreaquecimento no motor do eixo 2",
+    (0, 58, "07:40", "Carlos Souza", "eixo2", "aquecimento", True, False, "Alto", "Não",
+     "Motor do eixo 2 aquecendo e robô parando com alarme",
      "Alarme 50296 após 3 horas de ciclo. Carcaça do motor do eixo 2 a 85 °C.",
-     "Resolvida", "Limpo o ventilador do motor do eixo 2 e reduzida a aceleração no trecho de retorno.",
-     "Braço inferior — eixo 2", 4),
-    (6, 20, "13:15", "Carlos Souza", "Manutenção", "Alto", "Não",
+     "Resolvida", "Limpo o ventilador do motor do eixo 2 e reduzida a aceleração no trecho de retorno.", 4),
+    (3, 55, "14:10", "Marcos Pereira", "contraponto", "medida", False, False, "Médio", "Não",
+     "Buchas saindo cônicas no torno",
+     "Diferença de 0,05 mm entre as pontas em 80 mm de comprimento.",
+     "Resolvida", "Realinhado o contraponto e reapertada a fixação no barramento.", 3),
+    (1, 52, "09:05", "Juliana Rocha", "chicote", "intermitente", True, False, "Alto", "Não",
      "Perda de sinal do encoder durante a solda",
      "Alarme 38103 intermitente. Cabo do chicote roçando na carcaça do eixo 3.",
-     "Resolvida", "Substituído o trecho do chicote de cabos entre os eixos 3 e 4 e refeita a fixação.",
-     "Chicote de cabos", 9),
-    (7, 36, "10:40", "Marcos Pereira", "Qualidade", "Médio", "Não",
-     "Buchas saindo cônicas no torno da ferramentaria",
-     "Diferença de 0,05 mm entre as pontas em 80 mm de comprimento.",
-     "Resolvida", "Realinhado o contraponto e reapertada a fixação no barramento.",
-     "Contraponto", 3),
-    (7, 16, "15:30", "Ana Lima", "Manutenção", "Alto", "Não",
+     "Resolvida", "Substituído o trecho do chicote de cabos entre os eixos 3 e 4 e refeita a fixação.", 9),
+    (2, 50, "10:30", "Ana Lima", "eixo6", "folga", False, False, "Médio", "Não",
+     "Garra da paletização com folga no flange",
+     "Caixas soltando no ponto de descarga; folga visível entre a garra e o flange.",
+     "Resolvida", "Reapertados os parafusos do flange com torque especificado e trocados os pinos-guia.", 2),
+    (4, 47, "06:55", "Carlos Souza", "transmissao", "nao_liga", True, False, "Alto", "Não",
      "Torno não liga e fusível queimado",
      "Fusível do painel queimou duas vezes seguidas ao ligar o motor.",
-     "Resolvida", "Substituídas as escovas do motor e o fusível; placa de controle testada.",
-     "Motor, polias e correia", 5),
+     "Resolvida", "Substituídas as escovas do motor e o fusível; placa de controle testada.", 5),
+    (0, 44, "15:20", "Ana Lima", "compensador", "vazamento", False, True, "Alto", "Não",
+     "Óleo na haste do compensador de peso",
+     "Gotejamento na haste do cilindro compensador; braço desce devagar com os freios soltos.",
+     "Resolvida", "Trocado o kit de vedação do cilindro compensador e refeita a pré-carga conforme manual ABB.", 8),
+    (3, 41, "11:45", "Marcos Pereira", "carro_transversal", "folga", False, False, "Médio", "Não",
+     "Folga no carro transversal",
+     "Volante do carro transversal com 0,2 mm de folga; acabamento com vibração.",
+     "Resolvida", "Ajustada a régua (gib) do carro transversal e lubrificado o fuso.", 2),
+    (1, 38, "08:15", "Juliana Rocha", "chicote", "intermitente", True, False, "Alto", "Sim",
+     "Encoder do RS-02 perdendo sinal novamente",
+     "Mesmo alarme 38103 da ocorrência anterior, agora no trecho do punho.",
+     "Resolvida", "Substituído o chicote de cabos do punho e instalada proteção espiral no eixo 4.", 10),
+    (2, 35, "13:00", "Carlos Souza", "base", "vibracao", False, False, "Médio", "Não",
+     "Robô de paletização vibrando na base",
+     "Vibração perceptível nos movimentos rápidos; chumbadores com sinais de folga.",
+     "Resolvida", "Reapertados os chumbadores da base e refeito o graute sob o pedestal.", 12),
+    (4, 33, "16:40", "Ana Lima", "placa", "folga", False, True, "Alto", "Não",
+     "Castanha da placa com folga",
+     "Peça escorregando na placa durante o desbaste.",
+     "Resolvida", "Limpa e lubrificada a espiral da placa e substituída a castanha 2 desgastada.", 3),
+    (0, 30, "07:20", "Marcos Pereira", "eixo4", "ruido", False, False, "Médio", "Não",
+     "Ruído no braço superior do RS-01",
+     "Ruído de engrenagem ao girar o eixo 4 em velocidade máxima.",
+     "Resolvida", "Completado o óleo do redutor do eixo 4 (nível abaixo do mínimo).", 4),
+    (3, 27, "09:50", "Juliana Rocha", "porta_ferramenta", "medida", False, False, "Médio", "Não",
+     "Acabamento ruim nas buchas",
+     "Rugosidade Ra 3,2 µm (especificado Ra 1,6 µm).",
+     "Resolvida", "Substituído o inserto e ajustada a altura do porta-ferramenta ao centro.", 1),
+    (1, 24, "10:05", "Carlos Souza", "eixo2", "aquecimento", True, False, "Alto", "Sim",
+     "Motor do eixo 2 do RS-02 sobreaquecendo",
+     "Alarme 50296 no fim do turno; ventilador do motor com acúmulo de respingos de solda.",
+     "Resolvida", "Limpo o ventilador do motor do eixo 2 e instalada proteção contra respingos.", 3),
+    (4, 21, "14:30", "Marcos Pereira", "emergencia", "nao_atua", False, True, "Alto", "Não",
+     "Botão de emergência do torno sem efeito",
+     "Ao pressionar o botão, o motor continuou girando por 2 s.",
+     "Resolvida", "Substituído o bloco de contatos do botão de emergência e testado o circuito.", 2),
+    (2, 18, "08:35", "Ana Lima", "eixo1", "ruido", False, False, "Baixo", "Não",
+     "Estalo no giro do carrossel",
+     "Estalo audível ao girar o eixo 1 no sentido anti-horário.",
+     "Resolvida", "Relubrificado o rolamento do eixo 1 conforme plano de manutenção ABB.", 4),
+    (3, 15, "11:10", "Juliana Rocha", "cabecote", "ruido", False, False, "Médio", "Não",
+     "Ruído no cabeçote em alta rotação",
+     "Ruído metálico acima de 1.800 rpm.",
+     "Resolvida", "Ajustada a pré-carga dos rolamentos da árvore e trocada a graxa.", 6),
+    (0, 12, "15:55", "Carlos Souza", "compensador", "vazamento", False, True, "Alto", "Sim",
+     "Novo vazamento no compensador do RS-01",
+     "Óleo na haste 30 dias após a troca de vedação; haste com riscos.",
+     "Resolvida", "Substituída a haste riscada e o kit de vedação do compensador.", 12),
     # Em andamento
-    (6, 4, "08:45", "Marcos Pereira", "Manutenção", "Alto", "Não",
-     "Ruído e folga no punho do robô",
+    (1, 6, "08:45", "Marcos Pereira", "eixo5", "folga", True, False, "Alto", "Não",
+     "Folga no punho do RS-02",
      "Ruído de engrenagem ao girar o eixo 5 e desvio de 1,5 mm no ponto de solda.",
-     "Em andamento", None, None, None),
-    (0, 8, "10:20", "Ana Lima", "Manutenção", "Alto", "Sim",
-     "Terceiro vazamento no cilindro da prensa em 60 dias",
-     "Óleo na base do cilindro e pressão caindo para 150 bar ao fim do turno.",
-     "Em andamento", None, None, None),
-    (5, 6, "13:40", "Juliana Rocha", "Produção", "Médio", "Não",
-     "Compressor não atinge a pressão de trabalho",
-     "Pressão máxima de 6,2 bar (set point 7,5 bar). Tempo em carga contínuo.",
-     "Em andamento", None, None, None),
-    (4, 5, "09:00", "Carlos Souza", "Qualidade", "Médio", "Não",
-     "Acabamento superficial ruim nos eixos",
-     "Rugosidade Ra 3,2 µm (especificado Ra 1,6 µm) nas peças do turno da noite.",
-     "Em andamento", None, None, None),
+     "Em andamento", None, None),
+    (4, 5, "13:40", "Ana Lima", "fuso", "travamento", True, False, "Médio", "Não",
+     "Avanço automático travando no torno",
+     "O carro para no meio do curso com o avanço engatado.",
+     "Em andamento", None, None),
     # Abertas
-    (1, 3, "06:50", "Marcos Pereira", "Manutenção", "Alto", "Sim",
-     "Motor da esteira desarmando por sobrecarga",
-     "Relé térmico atuando com corrente de 118 A (nominal 98 A). Carga da esteira normal.",
-     "Aberta", None, None, None),
-    (2, 2, "11:25", "Ana Lima", "Produção", "Médio", "Não",
-     "Duas válvulas do manifold sem acionamento",
-     "Válvulas 3 e 4 não comutam. LED do módulo de comunicação piscando em vermelho.",
-     "Aberta", None, None, None),
-    (3, 2, "16:05", "Juliana Rocha", "Manutenção", "Baixo", "Não",
-     "Indicador de posição da válvula VP-03 inconsistente",
-     "Sinal de fim de curso indica 'fechada' com a válvula parcialmente aberta.",
-     "Aberta", None, None, None),
-    (0, 1, "08:10", "Carlos Souza", "Segurança", "Alto", "Não",
-     "Botão de emergência da prensa com acionamento intermitente",
-     "Em 2 de 5 testes o botão não interrompeu o ciclo.",
-     "Aberta", None, None, None),
-    (5, 1, "14:20", "Marcos Pereira", "Manutenção", "Médio", "Não",
-     "Dreno automático do compressor não descarrega",
-     "Água acumulada no reservatório. Dreno eletrônico sem atuar.",
-     "Aberta", None, None, None),
-    (4, 0, "07:30", "Ana Lima", "Produção", "Alto", "Não",
-     "Torno CNC com erro de referência no eixo X",
-     "Alarme 1520 ao referenciar o eixo X. Máquina parada.",
-     "Aberta", None, None, None),
-    (6, 0, "10:05", "Carlos Souza", "Segurança", "Alto", "Não",
+    (0, 2, "10:05", "Carlos Souza", "compensador", "vazamento", False, True, "Alto", "Sim",
      "Vazamento no cilindro compensador do robô",
-     "Óleo escorrendo pela haste do compensador de peso; braço desce devagar com os freios soltos.",
-     "Aberta", None, None, None),
-    (7, 0, "11:20", "Juliana Rocha", "Manutenção", "Médio", "Não",
+     "Óleo escorrendo pela haste do compensador de peso; terceiro caso em 60 dias.",
+     "Aberta", None, None),
+    (2, 1, "16:05", "Juliana Rocha", "chicote", "cabo", False, False, "Médio", "Não",
+     "Capa do chicote rasgada no RP-01",
+     "Capa externa do chicote rasgada perto do eixo 3; condutores ainda protegidos.",
+     "Aberta", None, None),
+    (3, 0, "11:20", "Juliana Rocha", "carro_transversal", "folga", False, False, "Médio", "Sim",
      "Folga no carro transversal do torno",
      "Volante do carro transversal com 0,3 mm de folga; acabamento com vibração.",
-     "Aberta", None, None, None),
+     "Aberta", None, None),
+    (4, 0, "07:30", "Marcos Pereira", "painel", "nao_liga", True, False, "Alto", "Não",
+     "Torno TM-05 não liga",
+     "Painel sem o LED de energia; fusível aparentemente íntegro.",
+     "Aberta", None, None),
 ]
 
 def main() -> None:
@@ -273,20 +195,6 @@ def main() -> None:
         n3d = nexar.modelos_3d.sincronizar_componentes(conn, mid, cfg3d)
         if n3d:
             print(f"  modelo 3D '{cfg3d.get('familia') or cfg3d.get('modelo')}' com {n3d} componentes → {m['nome']}")
-        origem = None
-        if m.get("diagrama"):
-            origem = os.path.join("test_diagrams", m["diagrama"])
-        elif m.get("diagrama_static"):
-            origem = m["diagrama_static"]
-        if origem and os.path.exists(origem):
-            pasta = os.path.join(nexar.UPLOAD_FOLDER, str(mid))
-            os.makedirs(pasta, exist_ok=True)
-            destino = os.path.join(pasta, os.path.basename(origem))
-            shutil.copyfile(origem, destino)
-            conn.execute(
-                "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
-                (mid, os.path.basename(origem), destino, origem.rsplit(".", 1)[-1].upper()),
-            )
     conn.commit()
     print(f"✓ {len(ids)} máquinas cadastradas")
 
@@ -300,14 +208,18 @@ def main() -> None:
         print("! IA desligada ou GEMINI_API_KEY ausente — diagnósticos ficarão com o roteiro padrão.")
     agora = datetime.now()
     ordenadas = sorted(OCORRENCIAS, key=lambda o: -o[1])
-    for n, (mi, dias, hora, operador, tipo, impacto, recorrente, desc, det,
-            status, solucao, componente, horas) in enumerate(ordenadas, 1):
+    for n, (mi, dias, hora, operador, comp, sintoma, parada, risco, impacto, recorrente,
+            desc, det, status, solucao, horas) in enumerate(ordenadas, 1):
         h, mnt = map(int, hora.split(":"))
         quando = (agora - timedelta(days=dias)).replace(hour=h, minute=mnt, second=0, microsecond=0)
+        comp_nome = nexar._nome_componente(ids[mi], comp)
         campos = {
             "maquina_id": ids[mi], "data_ocorrencia": quando.strftime("%Y-%m-%d %H:%M"),
-            "setor_area": MAQUINAS[mi]["setor"], "descricao": desc, "tipo_ocorrencia": tipo,
+            "setor_area": MAQUINAS[mi]["setor"], "descricao": desc,
+            "tipo_ocorrencia": "Segurança" if risco else "Manutenção",
             "nivel_impacto": impacto, "problema_recorrente": recorrente, "detalhamento_tecnico": det,
+            "componente_apontado": comp, "componente_apontado_nome": comp_nome,
+            "sintoma": sintoma, "maquina_parada": parada, "risco_pessoas": risco,
         }
         diag = nexar.diagnosticar_ocorrencia(campos)
         if usar_ia:
@@ -320,14 +232,16 @@ def main() -> None:
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
                 resposta_ia, ia_status, anotacoes_ia, diagrama_url, status, data_registro,
-                solucao_aplicada, componente_real, data_resolucao, resolvido_por_id
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                solucao_aplicada, componente_real, data_resolucao, resolvido_por_id,
+                componente_apontado, sintoma, maquina_parada, risco_pessoas
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ids[mi], campos["data_ocorrencia"], operador, campos["setor_area"], desc,
-             tipo, impacto, recorrente, det,
+             campos["tipo_ocorrencia"], impacto, recorrente, det,
              diag["resposta_ia"], diag["ia_status"],
              json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
              diag["diagrama_url"], status, quando.strftime("%Y-%m-%d %H:%M:%S"),
-             solucao, componente, data_res, admin_id if resolvida else None),
+             solucao, comp_nome if resolvida else None, data_res, admin_id if resolvida else None,
+             comp, sintoma, int(parada), int(risco)),
         )
         conn.commit()
         conn.close()

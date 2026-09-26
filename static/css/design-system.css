@@ -847,7 +847,12 @@ textarea.form-control { resize: vertical; min-height: 90px; }
 /* ── Mobile: < 768px ─────────────────────────────── */
 @media (max-width: 767px) {
   /* Hamburger visible */
-  .hamburger-btn { display: flex; }
+  /* Fixo no canto, sobre a barra do topo (que reserva 54px à esquerda);
+     sem isso ele ocupava 36px do layout e empurrava todas as telas para a direita */
+  .hamburger-btn {
+    display: flex; position: fixed; top: 10px; left: 10px; z-index: 90;
+    background: var(--bg-card); border-color: var(--border); color: var(--text);
+  }
 
   /* Sidebar: off-canvas drawer — hidden by default */
   .sidebar {

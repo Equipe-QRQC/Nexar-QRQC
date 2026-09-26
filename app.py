@@ -27,6 +27,7 @@ from werkzeug.utils import secure_filename
 import sensor_visual
 import nexa_ia
 import modelos_3d
+import diagnostico_local
 
 load_dotenv()
 
@@ -712,6 +713,10 @@ def init_db():
         "resolvido_por_id":    "ALTER TABLE ocorrencias ADD COLUMN resolvido_por_id INTEGER",
         # Peça indicada pelo operador no modelo 3D ao registrar
         "componente_apontado": "ALTER TABLE ocorrencias ADD COLUMN componente_apontado TEXT",
+        # Registro guiado pelo 3D: sintoma escolhido e perguntas rápidas
+        "sintoma":             "ALTER TABLE ocorrencias ADD COLUMN sintoma TEXT",
+        "maquina_parada":      "ALTER TABLE ocorrencias ADD COLUMN maquina_parada INTEGER",
+        "risco_pessoas":       "ALTER TABLE ocorrencias ADD COLUMN risco_pessoas INTEGER",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -720,6 +725,13 @@ def init_db():
                 logger.info(f"Migração: coluna {col} adicionada em ocorrencias.")
             except Exception as e:
                 logger.warning(f"Migração de {col} falhou: {e}")
+
+    # Sensor Visual: ocorrência aberta a partir da inspeção e peça do 3D
+    cols_per = [r["name"] for r in c.execute("PRAGMA table_info(percepcoes)").fetchall()]
+    for col, tipo_col in (("ocorrencia_id", "INTEGER"), ("componente_3d", "TEXT")):
+        if col not in cols_per:
+            c.execute(f"ALTER TABLE percepcoes ADD COLUMN {col} {tipo_col}")
+            logger.info(f"Migração: coluna {col} adicionada em percepcoes.")
 
     # Máquinas: configuração do modelo 3D (JSON — ver modelos_3d.py)
     cols_maq = [r["name"] for r in c.execute("PRAGMA table_info(maquinas)").fetchall()]
@@ -1971,9 +1983,19 @@ def solicitacao():
 @app.route("/CadastroOcorrencia")
 @login_required
 def CadastroOcorrencia():
+    """
+    Nova ocorrência guiada pelo 3D: máquina → peça tocada no modelo CAD →
+    sintoma e perguntas rápidas → diagnóstico com as soluções que já funcionaram.
+    Só máquinas com CAD 3D aparecem (pré-requisito para registrar ocorrência).
+    """
     conn = get_db()
-    maquinas = conn.execute("SELECT id, nome, setor FROM maquinas ORDER BY nome").fetchall()
+    maquinas = maquinas_com_cad(conn)
+    abertas = {r["maquina_id"]: r["n"] for r in conn.execute(
+        "SELECT maquina_id, COUNT(*) AS n FROM ocorrencias "
+        "WHERE status IN ('Aberta', 'Em andamento') GROUP BY maquina_id")}
     conn.close()
+    for m in maquinas:
+        m["abertas"] = abertas.get(m["id"], 0)
     preselect = request.args.get("maquina", type=int)
     prefill = {}
 
@@ -1989,24 +2011,24 @@ def CadastroOcorrencia():
             except Exception:
                 anomalias = []
             preselect = p["maquina_id"] or preselect
-            rotulos = ", ".join(dict.fromkeys(a.get("rotulo", "") for a in anomalias if a.get("rotulo")))
             linhas = [f"Inspeção por foto nº {inspecao_id} — Índice de Saúde {p['score_saude']}/100."]
-            for i, a in enumerate(anomalias, 1):
+            for n, a in enumerate(anomalias, 1):
                 linhas.append(
-                    f"{i}. {a.get('rotulo', '')} ({a.get('severidade', '')}) em {a.get('componente', '—')}: "
+                    f"{n}. {a.get('rotulo', '')} ({a.get('severidade', '')}) em {a.get('componente', '—')}: "
                     f"{a.get('descricao', '')}"
                     + (f" Possível causa: {a['causa_provavel']}" if a.get("causa_provavel") else "")
                 )
-            if p["contexto"]:
-                linhas.append(f"Contexto informado: {p['contexto']}")
+            principal = anomalias[0] if anomalias else {}
             prefill = {
-                "descricao": f"Anomalia detectada em inspeção visual: {rotulos}." if rotulos
-                             else "Anomalia detectada em inspeção visual.",
-                "detalhamento": "\n".join(linhas),
-                "impacto": {"critico": "Alto", "atencao": "Médio", "info": "Baixo"}.get(p["severidade_max"], ""),
-                "tipo": "Manutenção",
+                "texto": "\n".join(linhas),
+                "componente": sensor_componente_3d(p["maquina_id"], anomalias),
+                "risco": p["severidade_max"] == "critico",
                 "inspecao_id": inspecao_id,
+                "imagem_url": p["imagem_url"],
+                "rotulo": principal.get("rotulo"),
             }
+    if preselect and preselect not in {m["id"] for m in maquinas}:
+        preselect = None
     return render_template("CadastroOcorrencia.html", maquinas=maquinas,
                            preselect_maquina=preselect, prefill=prefill)
 
@@ -2089,6 +2111,9 @@ DADOS DA OCORRÊNCIA:
 - Descrição: {campos.get('descricao') or ''}
 - Detalhamento técnico: {campos.get('detalhamento_tecnico') or '—'}
 {f"- Local indicado pelo operador no modelo 3D da máquina: {campos['componente_apontado_nome']} (considere-o ao formular a causa provável, sem descartar outras hipóteses)" if campos.get('componente_apontado_nome') else ''}
+{f"- Sintoma observado: {diagnostico_local.nome_sintoma(campos.get('sintoma'))}" if diagnostico_local.nome_sintoma(campos.get('sintoma')) else ''}
+{"- A máquina está PARADA." if campos.get('maquina_parada') else ''}
+{"- Há RISCO PARA PESSOAS: priorize isolamento e segurança." if campos.get('risco_pessoas') else ''}
 
 {"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
 
@@ -2107,59 +2132,98 @@ Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que in
 Use linguagem técnica em português. Foque em ações práticas imediatas. Seja DETALHADO em cada seção."""
 
     resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
+    if ia_status != "ok" and campos.get("componente_apontado_nome"):
+        # Sem IA: roteiro montado com a peça apontada, o sintoma e o que já funcionou nela
+        hist = solucoes_da_peca(maquina_id, campos.get("componente_apontado"))
+        resposta_ia = diagnostico_local.montar_diagnostico(
+            campos["componente_apontado_nome"], campos.get("sintoma"), hist["itens"],
+            parada=bool(campos.get("maquina_parada")), risco=bool(campos.get("risco_pessoas")))
+        ia_status = "local"
     logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
     return {"resposta_ia": resposta_ia, "anotacoes": anotacoes,
             "ia_status": ia_status, "diagrama_url": diagrama_url}
+
+
+def _sim(valor) -> bool:
+    return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
 
 
 @app.route("/registrar_ocorrencia", methods=["POST"])
 @login_required
 def registrar_ocorrencia():
     """
-    Registra uma ocorrência, gera diagnóstico via IA e renderiza solucao.html.
-    Em caso de erro, retorna JSON (se for fetch) ou re-renderiza o formulário
-    com mensagem clara — nunca silencia falhas.
+    Registra a ocorrência apontada no 3D, gera o diagnóstico e abre a página da
+    ocorrência. Exige máquina com CAD 3D e a peça tocada no modelo.
     """
-    # ── Validação dos campos ─────────────────────────────────────────────────
-    obrigatorios = ["nome_operador", "setor_area", "descricao",
-                    "tipo_ocorrencia", "nivel_impacto", "problema_recorrente",
-                    "detalhamento_tecnico"]
-    faltando = [c for c in obrigatorios if not (request.form.get(c) or "").strip()]
-    if faltando:
-        msg = f"Campos obrigatórios não preenchidos: {', '.join(faltando)}."
+    def erro(msg):
         logger.warning(f"[ocorrencia] {msg}")
         flash(msg, "danger")
-        return redirect(url_for("CadastroOcorrencia"))
+        destino = url_for("CadastroOcorrencia", maquina=request.form.get("maquina_id") or None)
+        return redirect(destino)
 
-    maquina_id           = request.form.get("maquina_id") or None
-    data_ocorrencia      = normalizar_data(request.form.get("data_ocorrencia", ""))
-    nome_operador        = request.form.get("nome_operador", "").strip()
-    setor_area           = request.form.get("setor_area", "").strip()
-    descricao            = request.form.get("descricao", "").strip()
-    tipo_ocorrencia      = request.form.get("tipo_ocorrencia", "").strip()
-    nivel_impacto        = request.form.get("nivel_impacto", "").strip()
-    problema_recorrente  = request.form.get("problema_recorrente", "").strip()
-    detalhamento_tecnico = request.form.get("detalhamento_tecnico", "").strip()
+    try:
+        maquina_id = int(request.form.get("maquina_id") or 0)
+    except ValueError:
+        maquina_id = 0
+    if not maquina_tem_cad(maquina_id):
+        return erro("Escolha uma máquina com modelo CAD 3D.")
 
-    # Peça indicada no 3D: só vale se existir no modelo da máquina
-    componente_apontado = (request.form.get("componente_apontado") or "").strip()[:60] or None
-    componente_apontado_nome = _nome_componente(maquina_id, componente_apontado)
-    if not componente_apontado_nome:
-        componente_apontado = None
+    componente = (request.form.get("componente_apontado") or "").strip()[:60]
+    componente_nome = _nome_componente(maquina_id, componente)
+    if not componente_nome:
+        return erro("Toque na peça do modelo 3D onde está o problema.")
 
-    diag = diagnosticar_ocorrencia({
-        "maquina_id": maquina_id, "data_ocorrencia": data_ocorrencia,
-        "setor_area": setor_area, "descricao": descricao,
-        "tipo_ocorrencia": tipo_ocorrencia, "nivel_impacto": nivel_impacto,
-        "problema_recorrente": problema_recorrente,
-        "detalhamento_tecnico": detalhamento_tecnico,
-        "componente_apontado_nome": componente_apontado_nome,
-    })
-    resposta_ia, anotacoes, ia_status = diag["resposta_ia"], diag["anotacoes"], diag["ia_status"]
-    diagrama_url = diag["diagrama_url"]
-    anotacoes_json = json.dumps(anotacoes, ensure_ascii=False) if anotacoes else None
+    sintoma = (request.form.get("sintoma") or "").strip()[:30]
+    sintoma_nome = diagnostico_local.nome_sintoma(sintoma)
+    if not sintoma_nome:
+        return erro("Escolha o que está acontecendo com a peça.")
+    texto = (request.form.get("texto") or "").strip()[:2000]
+    if sintoma == "outro" and len(texto) < 5:
+        return erro("Descreva o que você viu.")
 
-    # ── Persistência ─────────────────────────────────────────────────────────
+    parada = _sim(request.form.get("maquina_parada"))
+    risco = _sim(request.form.get("risco_pessoas"))
+    codigo_alarme = (request.form.get("codigo_alarme") or "").strip()[:40]
+    impacto = request.form.get("nivel_impacto") or ""
+    if impacto not in ("Alto", "Médio", "Baixo"):
+        impacto = "Alto" if (parada or risco) else "Médio"
+    tipo = "Segurança" if risco else ("Qualidade" if sintoma == "medida" else "Manutenção")
+
+    conn = get_db()
+    maq = conn.execute("SELECT setor FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    recorrente = conn.execute(
+        "SELECT COUNT(*) AS n FROM ocorrencias WHERE maquina_id = ? AND componente_apontado = ? "
+        "AND data_registro >= datetime('now', '-60 days')", (maquina_id, componente)).fetchone()["n"]
+    conn.close()
+
+    descricao = f"{sintoma_nome}: {componente_nome}"
+    if texto:
+        descricao += f" — {texto.splitlines()[0][:160]}"
+    detalhes = [f"Peça indicada no 3D: {componente_nome}", f"Sintoma: {sintoma_nome}",
+                f"Máquina parada: {'Sim' if parada else 'Não'}",
+                f"Risco para pessoas: {'Sim' if risco else 'Não'}"]
+    if codigo_alarme:
+        detalhes.append(f"Código de alarme: {codigo_alarme}")
+    if texto:
+        detalhes += ["", texto]
+
+    campos = {
+        "maquina_id": maquina_id,
+        "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "nome_operador": current_user.nome,
+        "setor_area": (maq["setor"] if maq else "") or "",
+        "descricao": descricao,
+        "tipo_ocorrencia": tipo,
+        "nivel_impacto": impacto,
+        "problema_recorrente": "Sim" if recorrente else "Não",
+        "detalhamento_tecnico": "\n".join(detalhes),
+        "componente_apontado": componente,
+        "componente_apontado_nome": componente_nome,
+        "sintoma": sintoma, "maquina_parada": parada, "risco_pessoas": risco,
+    }
+    diag = diagnosticar_ocorrencia(campos)
+    anotacoes_json = json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None
+
     try:
         conn = get_db()
         cursor = conn.execute(
@@ -2167,21 +2231,23 @@ def registrar_ocorrencia():
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
                 detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url,
-                componente_apontado, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
-            (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
-             tipo_ocorrencia, nivel_impacto, problema_recorrente,
-             detalhamento_tecnico, resposta_ia, ia_status, anotacoes_json, diagrama_url,
-             componente_apontado),
+                componente_apontado, sintoma, maquina_parada, risco_pessoas, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+            (maquina_id, campos["data_ocorrencia"], campos["nome_operador"], campos["setor_area"],
+             descricao, tipo, impacto, campos["problema_recorrente"], campos["detalhamento_tecnico"],
+             diag["resposta_ia"], diag["ia_status"], anotacoes_json, diag["diagrama_url"],
+             componente, sintoma, int(parada), int(risco)),
         )
         ocorrencia_id = cursor.lastrowid
+        inspecao_id = request.form.get("inspecao_id", type=int)
+        if inspecao_id:
+            conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (ocorrencia_id, inspecao_id))
         conn.commit()
         conn.close()
-        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={ia_status}")
-    except Exception as e:
+        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={diag['ia_status']}")
+    except Exception:
         logger.exception("Falha ao persistir a ocorrência")
-        flash("Não foi possível salvar a ocorrência. Tente novamente.", "danger")
-        return redirect(url_for("CadastroOcorrencia"))
+        return erro("Não foi possível salvar a ocorrência. Tente novamente.")
 
     # Post/Redirect/Get: recarregar a página não duplica a ocorrência.
     return redirect(url_for("ver_ocorrencia", oc_id=ocorrencia_id))
@@ -2210,8 +2276,12 @@ def ver_ocorrencia(oc_id: int):
     dados = dict(row)
     dados["status"] = row["status"] or "Aberta"
     ctx3d = contexto_3d(row)
+    sol = solucoes_da_peca(row["maquina_id"], row["componente_apontado"], limite=6)
+    solucoes_peca = [x for x in sol["itens"] if x["id"] != oc_id][:4]
     return render_template(
         "solucao.html",
+        solucoes_peca=solucoes_peca,
+        sintoma_nome=diagnostico_local.nome_sintoma(row["sintoma"]),
         dados=dados,
         resposta_ia=row["resposta_ia"],
         ia_status=row["ia_status"],
@@ -2226,6 +2296,22 @@ def ver_ocorrencia(oc_id: int):
 SENSOR_FOLDER = os.path.join("static", "uploads", "sensor")
 os.makedirs(SENSOR_FOLDER, exist_ok=True)
 _SENSOR_EXT = {"png", "jpg", "jpeg"}
+
+
+def sensor_componente_3d(maquina_id, anomalias: list[dict]) -> str | None:
+    """Peça do modelo 3D da máquina mais provável para as anomalias vistas na foto."""
+    if not maquina_id or not anomalias:
+        return None
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    for a in anomalias:   # a primeira anomalia é a mais grave
+        texto = " ".join(str(a.get(k) or "") for k in ("componente", "rotulo", "descricao"))
+        achados = modelos_3d.componentes_citados("1. Causa provavel\n" + texto, cfg, limite=1)
+        if achados:
+            return achados[0]["component_id"]
+    return None
 
 
 @app.route("/sensor")
@@ -2687,11 +2773,35 @@ def sensor_historico():
 
 # ── Máquinas ──────────────────────────────────────────────────────────────────
 
+def maquinas_com_cad(conn) -> list[dict]:
+    """
+    Máquinas aptas a receber ocorrências: só as que têm o modelo 3D do fabricante
+    (CAD). A ocorrência é registrada apontando a peça no 3D.
+    """
+    lista = []
+    for r in conn.execute("SELECT id, nome, setor, modelo, fabricante, modelo_3d FROM maquinas ORDER BY nome"):
+        cfg = modelos_3d.ler_config(r["modelo_3d"])
+        if modelos_3d.eh_cad(cfg):
+            lista.append({"id": r["id"], "nome": r["nome"], "setor": r["setor"], "modelo": r["modelo"],
+                          "fabricante": r["fabricante"], "modelo_3d_nome": cfg.get("nome") or "Modelo do fabricante"})
+    return lista
+
+
+def maquina_tem_cad(maquina_id) -> bool:
+    if not maquina_id:
+        return False
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    return bool(m) and modelos_3d.eh_cad(modelos_3d.ler_config(m["modelo_3d"]))
+
+
 @app.route("/maquinas")
 @login_required
 def maquinas():
     conn = get_db()
     lista = conn.execute("SELECT * FROM maquinas ORDER BY nome").fetchall()
+    cad_ids = {m["id"] for m in maquinas_com_cad(conn)}
     rows = conn.execute("""
         SELECT maquina_id,
                COUNT(*) AS total,
@@ -2702,7 +2812,7 @@ def maquinas():
     """).fetchall()
     conn.close()
     stats = {r["maquina_id"]: r for r in rows}
-    return render_template("maquinas.html", maquinas=lista, stats=stats)
+    return render_template("maquinas.html", maquinas=lista, stats=stats, cad_ids=cad_ids)
 
 
 def _config_3d_do_form(atual: str | None) -> dict | None:
@@ -2968,6 +3078,8 @@ def contexto_3d(oc) -> dict:
         ctx["destaques"] = [{"component_id": c["component_id"], "component_name": c["component_name"],
                              "severity": c["severity"], "reason": c["reason"],
                              "probability": c["probability"], "fonte": "agente"} for c in diag_comps]
+    elif oc["ia_status"] == "local" and oc["componente_apontado"]:
+        pass  # roteiro local: o destaque é a peça apontada pelo operador (abaixo)
     elif oc["ia_status"] == "ok":
         # Só quando o texto veio da IA (o roteiro padrão cita peças genéricas)
         ctx["destaques"] = modelos_3d.componentes_citados(oc["resposta_ia"] or "", cfg)
@@ -2975,6 +3087,9 @@ def contexto_3d(oc) -> dict:
     nome = next((c["name"] for c in ctx["catalogo"] if c["component_id"] == apontado), None)
     if nome:
         ctx["apontado"] = {"component_id": apontado, "component_name": nome}
+        if oc["ia_status"] == "local" and not diag_comps:
+            ctx["destaques"] = [{"component_id": apontado, "component_name": nome,
+                                 "severity": "high", "fonte": "historico"}]
     return ctx
 
 
@@ -3005,29 +3120,73 @@ def qrqc3d(oc_id: int):
     )
 
 
-@app.route("/api/maquinas/<int:mid>/componentes/<cid>/historico")
-@login_required
-def api_componente_historico(mid: int, cid: str):
-    """Ocorrências resolvidas desta máquina cuja peça que falhou é este componente."""
+def solucoes_da_peca(maquina_id, cid: str | None, limite: int = 5) -> dict:
+    """
+    Soluções que já funcionaram nesta peça: ocorrências resolvidas desta máquina e
+    das máquinas com o mesmo modelo CAD (um robô aprende com o outro). Casa pela
+    peça apontada no 3D ou pelo "componente que falhou" registrado na resolução.
+    """
+    vazio = {"componente": cid, "itens": [], "total": 0}
+    if not maquina_id or not cid:
+        return vazio
     conn = get_db()
-    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
     cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    if not cfg:
+        conn.close()
+        return vazio
+    irmas = [maquina_id]
+    if cfg.get("modelo"):
+        for r in conn.execute("SELECT id, modelo_3d FROM maquinas WHERE id != ?", (maquina_id,)):
+            c2 = modelos_3d.ler_config(r["modelo_3d"])
+            if c2 and c2.get("modelo") == cfg["modelo"]:
+                irmas.append(r["id"])
+    marcas = ",".join("?" * len(irmas))
     linhas = conn.execute(
-        "SELECT id, descricao, solucao_aplicada, componente_real, data_resolucao "
-        "FROM ocorrencias WHERE maquina_id = ? AND solucao_aplicada IS NOT NULL "
-        "ORDER BY data_resolucao DESC", (mid,)
+        "SELECT o.id, o.maquina_id, o.descricao, o.solucao_aplicada, o.componente_real, "
+        "o.componente_apontado, o.data_resolucao, m.nome AS maquina_nome "
+        f"FROM ocorrencias o JOIN maquinas m ON m.id = o.maquina_id WHERE o.maquina_id IN ({marcas}) "
+        "AND o.solucao_aplicada IS NOT NULL AND o.solucao_aplicada != '' "
+        "ORDER BY o.data_resolucao DESC", irmas
     ).fetchall()
     conn.close()
-    termos = modelos_3d.palavras_do_modelo(cfg).get(cid, [])
     nome = next((c["name"] for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), cid)
-    termos = termos + [modelos_3d._normalizar_texto(nome)]
+    termos = modelos_3d.palavras_do_modelo(cfg).get(cid, []) + [modelos_3d._normalizar_texto(nome)]
     itens = []
     for r in linhas:
         alvo = modelos_3d._normalizar_texto(r["componente_real"] or "")
-        if alvo and any(t in alvo for t in termos):
+        if r["componente_apontado"] == cid or (alvo and any(t in alvo for t in termos)):
             itens.append({"id": r["id"], "descricao": r["descricao"], "solucao": r["solucao_aplicada"],
-                          "componente": r["componente_real"], "data": data_br(r["data_resolucao"])})
-    return jsonify({"componente": nome, "itens": itens[:5], "total": len(itens)})
+                          "componente": r["componente_real"], "data": data_br(r["data_resolucao"]),
+                          "maquina": r["maquina_nome"], "mesma_maquina": r["maquina_id"] == int(maquina_id)})
+    # Primeiro as desta máquina, depois as das máquinas iguais (cada grupo do mais recente)
+    itens.sort(key=lambda x: not x["mesma_maquina"])
+    return {"componente": nome, "itens": itens[:limite], "total": len(itens)}
+
+
+@app.route("/api/maquinas/<int:mid>/componentes/<cid>/historico")
+@login_required
+def api_componente_historico(mid: int, cid: str):
+    """Soluções que já funcionaram neste componente (esta máquina e as de mesmo modelo)."""
+    return jsonify(solucoes_da_peca(mid, cid))
+
+
+@app.route("/api/maquinas/<int:mid>/componentes/<cid>/sintomas")
+@login_required
+def api_componente_sintomas(mid: int, cid: str):
+    """Sintomas possíveis para a peça (pelo tipo dela) + soluções que já funcionaram."""
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    comp = next((c for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), None)
+    if not comp:
+        return jsonify({"erro": "Peça não encontrada no modelo."}), 404
+    return jsonify({
+        "componente": {"id": cid, "nome": comp["name"], "tipo": comp["type"], "descricao": comp["description"]},
+        "sintomas": diagnostico_local.sintomas_do_tipo(comp["type"]),
+        "historico": solucoes_da_peca(mid, cid),
+    })
 
 
 @app.route("/api/ai/analisar/<int:oc_id>", methods=["POST"])
@@ -3288,12 +3447,11 @@ def mobile_login():
 @csrf.exempt
 @_mobile_auth
 def mobile_maquinas():
+    # Só máquinas com CAD 3D recebem ocorrências
     conn = get_db()
-    rows = conn.execute(
-        "SELECT id, nome, setor FROM maquinas ORDER BY nome"
-    ).fetchall()
+    lista = maquinas_com_cad(conn)
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([{"id": m["id"], "nome": m["nome"], "setor": m["setor"]} for m in lista])
 
 
 @app.route("/api/mobile/ocorrencias")
@@ -3335,6 +3493,13 @@ def mobile_ocorrencias_post():
     if not maq:
         conn.close()
         return jsonify({"erro": "Máquina não encontrada"}), 404
+    if not maquina_tem_cad(maquina_id):
+        conn.close()
+        return jsonify({"erro": "Esta máquina não tem modelo CAD 3D e não pode receber ocorrências."}), 422
+    componente = (data.get("componente_id") or "").strip()[:60] or None
+    componente_nome = _nome_componente(maquina_id, componente)
+    if not componente_nome:
+        componente = None
     campos = {
         "maquina_id": maquina_id,
         "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -3344,16 +3509,19 @@ def mobile_ocorrencias_post():
         "nivel_impacto": data.get("nivel_impacto") or "Médio",
         "problema_recorrente": data.get("problema_recorrente") or "Não informado",
         "detalhamento_tecnico": (data.get("detalhamento_tecnico") or "").strip(),
+        "componente_apontado": componente,
+        "componente_apontado_nome": componente_nome,
     }
     cur = conn.execute(
         """INSERT INTO ocorrencias
            (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
             tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
-            ia_status, status, data_registro)
-           VALUES (?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
+            componente_apontado, ia_status, status, data_registro)
+           VALUES (?,?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
         (maquina_id, campos["data_ocorrencia"], request.mobile_user["nome"],
          campos["setor_area"], descricao, campos["tipo_ocorrencia"],
-         campos["nivel_impacto"], campos["problema_recorrente"], campos["detalhamento_tecnico"]),
+         campos["nivel_impacto"], campos["problema_recorrente"], campos["detalhamento_tecnico"],
+         componente),
     )
     conn.commit()
     oc_id = cur.lastrowid

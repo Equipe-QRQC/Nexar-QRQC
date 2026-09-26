@@ -56,26 +56,17 @@
                      value="{{ maquina.ano if maquina else '' }}" />
             </div>
             <div class="form-group">
-              <label class="form-label">Modelo 3D</label>
+              <label class="form-label">Modelo CAD 3D <span style="color:var(--danger)">*</span></label>
               <select name="modelo_3d" class="form-select">
-                {% if cfg3d and cfg3d.fonte == 'glb' and not cfg3d.modelo %}
-                <option value="__manter__" selected>Modelo do fabricante (CAD importado)</option>
+                {% if cfg3d and not cfg3d.modelo %}
+                <option value="__manter__" selected>{{ 'CAD importado' if cfg3d.fonte == 'glb' else 'Modelo ilustrativo atual (não recebe ocorrências)' }}</option>
                 {% endif %}
                 <option value="" {% if not cfg3d %}selected{% endif %}>— Sem modelo 3D —</option>
-                {% if modelos_cad %}
-                <optgroup label="CAD do fabricante">
-                  {% for slug, nome in modelos_cad %}
-                  <option value="cad:{{ slug }}" {% if cfg3d and cfg3d.modelo == slug %}selected{% endif %}>{{ nome }}</option>
-                  {% endfor %}
-                </optgroup>
-                {% endif %}
-                <optgroup label="Modelo genérico por família">
-                  {% for chave, nome in familias_3d %}
-                  <option value="{{ chave }}" {% if cfg3d and cfg3d.fonte == 'familia' and cfg3d.familia == chave %}selected{% endif %}>{{ nome }}</option>
-                  {% endfor %}
-                </optgroup>
+                {% for slug, nome in modelos_cad %}
+                <option value="cad:{{ slug }}" {% if cfg3d and cfg3d.modelo == slug %}selected{% endif %}>{{ nome }}</option>
+                {% endfor %}
               </select>
-              <small style="font-size:11.5px; color:var(--text-muted);">Define os componentes que a Nexar IA pode apontar no 3D.</small>
+              <small style="font-size:11.5px; color:var(--text-muted);">Só máquinas com o CAD 3D do fabricante recebem ocorrências: o operador aponta a peça no modelo.</small>
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0;">

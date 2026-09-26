@@ -25,7 +25,7 @@
     {% endif %}
     {% if dados.status in ('Aberta', 'Em andamento') %}
     <button type="button" class="btn btn-success btn-sm" id="btnResolver"
-            onclick="OcorrenciaAcoes.abrirResolucao({{ dados.id }}, SUGESTOES_COMPONENTE, () => setTimeout(() => location.reload(), 600))">
+            onclick="OcorrenciaAcoes.abrirResolucao({{ dados.id }}, SUGESTOES_COMPONENTE, () => setTimeout(() => location.reload(), 600), {componente: {{ (ctx3d.apontado.component_name if ctx3d.apontado else '') | tojson | forceescape }}})">
       <i class="fas fa-check-circle"></i> Resolver
     </button>
     {% endif %}
@@ -112,6 +112,12 @@
               <div class="label-mini">Recorrente</div>
               <div class="value-mini">{{ dados.problema_recorrente or '—' }}</div>
             </div>
+            {% if sintoma_nome %}
+            <div>
+              <div class="label-mini">Sintoma</div>
+              <div class="value-mini">{{ sintoma_nome }}{% if dados.maquina_parada %} · <span style="color:#B91C1C;">máquina parada</span>{% endif %}{% if dados.risco_pessoas %} · <span style="color:#B91C1C;">risco para pessoas</span>{% endif %}</div>
+            </div>
+            {% endif %}
             {% if ctx3d.apontado %}
             <div>
               <div class="label-mini">Local indicado no 3D</div>
@@ -159,10 +165,13 @@
       <div class="card">
         <div class="card-header">
           <span class="card-title">
-            <i class="fas fa-robot"></i> {{ t.solucao }}
+            <i class="fas {{ 'fa-clipboard-list' if ia_status == 'local' else 'fa-robot' }}"></i>
+            {{ 'Roteiro de solução' if ia_status == 'local' else t.solucao }}
           </span>
           {% if ia_status == 'ok' %}
             <span class="badge badge-primary">Gerado por Nexar IA</span>
+          {% elif ia_status == 'local' %}
+            <span class="badge badge-info" title="Montado com a peça apontada, o sintoma e as soluções já registradas">Com base no histórico da peça</span>
           {% elif resposta_ia %}
             <span class="badge badge-warning">Roteiro padrão</span>
           {% endif %}
@@ -196,6 +205,31 @@
     <div style="display:flex; flex-direction:column; gap:16px;" class="{{ 'com-3d' if ctx3d.cfg3d else '' }}">
       {% if ctx3d.cfg3d %}
       <div id="card3dOcorrencia" class="card3d-ocorrencia"></div>
+      {% if solucoes_peca %}
+      <div class="card sol-peca">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-lightbulb" style="color:#D97706;"></i> Já funcionou nesta peça</span>
+          <span style="font-size:12px; color:var(--text-muted);">{{ ctx3d.apontado.component_name if ctx3d.apontado else '' }}</span>
+        </div>
+        <div class="card-body" style="display:flex; flex-direction:column; gap:10px;">
+          {% for x in solucoes_peca %}
+          <div class="sol-peca-item">
+            <div class="sol-peca-txt">
+              <b>{{ x.solucao }}</b>
+              <small>{{ x.descricao }} · {{ 'esta máquina' if x.mesma_maquina else x.maquina }} · {{ x.data }}
+                · <a href="{{ url_for('ver_ocorrencia', oc_id=x.id) }}">#{{ x.id }}</a></small>
+            </div>
+            {% if dados.status in ('Aberta', 'Em andamento') %}
+            <button type="button" class="btn btn-success btn-sm sol-usar"
+                    data-solucao="{{ x.solucao }}" data-componente="{{ ctx3d.apontado.component_name if ctx3d.apontado else (x.componente or '') }}">
+              <i class="fas fa-check"></i> Resolvi assim
+            </button>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
       {% if not ctx3d.destaques and not ctx3d.apontado %}
       <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
         <i class="fas fa-circle-info" style="color:var(--primary);"></i>
@@ -322,7 +356,7 @@
         <div id="ttDescricao" style="font-size:12px; opacity:.85;"></div>
       </div>
 
-      {% else %}
+      {% elif not ctx3d.cfg3d %}
       <div class="card diagram-sticky">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-drafting-compass"></i> {{ t.diagrama }}</span>
@@ -343,6 +377,13 @@
 
 <style>
   .diagram-sticky { position: sticky; top: 76px; }
+  .sol-peca { border-left: 3px solid #F59E0B; }
+  .sol-peca-item { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:10px 12px; background:#FFFBEB; border:1px solid #FDE68A; border-radius:var(--radius-sm); }
+  .sol-peca-txt { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .sol-peca-txt b { font-size:13.5px; font-weight:500; line-height:1.45; }
+  .sol-peca-txt small { font-size:11.5px; color:var(--text-muted); }
+  .sol-usar { flex-shrink:0; white-space:nowrap; }
+  @media (max-width: 767px) { .sol-peca-item { flex-direction:column; align-items:stretch; } .sol-usar { justify-content:center; min-height:42px; } }
   .com-3d .diagram-sticky { position: static; }
   .card3d-ocorrencia .v3d-stage { height: 440px; }
   @media (max-width: 767px) { .card3d-ocorrencia .v3d-stage { height: 340px; } }
@@ -403,7 +444,13 @@
 </script>
 {% endif %}
 <script>
-  const SUGESTOES_COMPONENTE = {{ (anotacoes or []) | map(attribute='titulo') | list | tojson }};
+  {% set sugestoes = ((anotacoes or []) | map(attribute='titulo') | list) + ([ctx3d.apontado.component_name] if ctx3d.apontado else []) %}
+  const SUGESTOES_COMPONENTE = {{ sugestoes | tojson }};
+  document.querySelectorAll('.sol-usar').forEach(b => b.addEventListener('click', () => {
+    OcorrenciaAcoes.abrirResolucao({{ dados.id }}, SUGESTOES_COMPONENTE,
+      () => setTimeout(() => location.reload(), 600),
+      { solucao: b.dataset.solucao, componente: b.dataset.componente });
+  }));
 
   // Renderiza markdown muito leve no diagnóstico: **negrito** e numeração 1./2./3./4.
   (function () {

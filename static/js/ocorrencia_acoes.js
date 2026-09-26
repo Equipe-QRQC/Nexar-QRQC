@@ -53,13 +53,13 @@
     atual = null;
   }
 
-  function abrirResolucao(id, sugestoes, onDone) {
+  function abrirResolucao(id, sugestoes, onDone, preenchido) {
     const ov = document.getElementById('resolverOverlay');
     if (!ov) return;
     atual = { id, onDone };
     document.getElementById('rsId').textContent = id;
-    document.getElementById('rsSolucao').value = '';
-    document.getElementById('rsComponente').value = '';
+    document.getElementById('rsSolucao').value = preenchido?.solucao || '';
+    document.getElementById('rsComponente').value = preenchido?.componente || '';
     document.getElementById('rsErro').hidden = true;
     const dl = document.getElementById('rsSugestoes');
     dl.innerHTML = '';

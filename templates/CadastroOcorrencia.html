@@ -1,391 +1,191 @@
 {% extends 'menu.html' %}
-{% block title %}Cadastro de Ocorrência — Nexar QRQC{% endblock %}
+{% block title %}Nova ocorrência — Nexar QRQC{% endblock %}
 
 {% block head %}
 {% include 'partials/three_importmap.html' %}
+<link rel="stylesheet" href="/static/css/viewer3d.css" />
+<link rel="stylesheet" href="/static/css/nova_ocorrencia.css" />
 {% endblock %}
 
 {% block content %}
 <div class="topbar">
   <div class="topbar-title">
-    <i class="fas fa-clipboard-list"></i> {{ t.cadastro_titulo }}
+    <i class="fas fa-cube" style="color:var(--primary);"></i> Nova ocorrência
   </div>
+  <ol class="no-passos" id="passos" aria-label="Etapas">
+    <li data-passo="1" class="atual"><span>1</span> Máquina</li>
+    <li data-passo="2"><span>2</span> Peça</li>
+    <li data-passo="3"><span>3</span> O que houve</li>
+  </ol>
 </div>
 
+{% if not maquinas %}
 <div class="page-body">
-  {% if prefill and prefill.inspecao_id %}
-  <div style="background:var(--primary-light); color:var(--primary-dark); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center; font-size:13px;">
-    <i class="fas fa-camera"></i>
-    <span>Campos preenchidos a partir da inspeção por foto nº {{ prefill.inspecao_id }}. Revise antes de registrar.</span>
-  </div>
-  {% endif %}
-  <form action="{{ url_for('registrar_ocorrencia') }}" method="POST" id="formOcorrencia">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <div class="grid-2">
-
-      <!-- Coluna 1 — Identificação -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fas fa-search"></i> {{ t.identificacao }}</span>
-        </div>
-        <div class="card-body">
-
-          <div class="form-group">
-            <label class="form-label">
-              <i class="fas fa-cogs" style="color:var(--primary); margin-right:5px;"></i>
-              {{ t.maquina }}
-            </label>
-            <select name="maquina_id" id="maquinaSelect" class="form-select">
-              <option value="">{{ t.selecione_maquina }}</option>
-              {% for m in maquinas %}
-              <option value="{{ m.id }}" data-setor="{{ m.setor or '' }}" {% if preselect_maquina == m.id %}selected{% endif %}>{{ m.nome }} {% if m.setor %}({{ m.setor }}){% endif %}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <i class="fas fa-calendar" style="color:var(--primary); margin-right:5px;"></i>
-              {{ t.data_hora }}
-            </label>
-            <input type="datetime-local" name="data_ocorrencia" id="dataOcorrencia" class="form-control" required />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <i class="fas fa-user-hard-hat" style="color:var(--primary); margin-right:5px;"></i>
-              {{ t.operador }}
-            </label>
-            <input type="text" name="nome_operador" class="form-control"
-                   value="{{ current_user.nome }}"
-                   placeholder="Nome completo do operador" required />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <i class="fas fa-map-marker-alt" style="color:var(--primary); margin-right:5px;"></i>
-              {{ t.setor }}
-            </label>
-            <input type="text" name="setor_area" id="setorInput" class="form-control"
-                   placeholder="Ex: Linha 3 — Montagem" required />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">
-              <i class="fas fa-comment-alt" style="color:var(--primary); margin-right:5px;"></i>
-              {{ t.descricao }}
-            </label>
-            <textarea name="descricao" class="form-control" rows="4"
-                      placeholder="Descreva o problema de forma clara e objetiva..." required>{{ prefill.descricao if prefill else '' }}</textarea>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- Coluna 2 — Classificação -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title"><i class="fas fa-tag"></i> {{ t.classificacao }}</span>
-        </div>
-        <div class="card-body">
-
-          <div class="form-group">
-            <label class="form-label">{{ t.tipo }}</label>
-            <select name="tipo_ocorrencia" class="form-select" required>
-              <option value="" selected disabled>— Selecione o tipo —</option>
-              <option value="Qualidade">{{ t.qualidade }}</option>
-              <option value="Segurança">{{ t.seguranca }}</option>
-              <option value="Produção">{{ t.producao }}</option>
-              <option value="Manutenção">{{ t.manutencao }}</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">{{ t.impacto }}</label>
-            <div class="impact-grid" id="impactoGroup">
-              <div class="impact-btn" data-value="Baixo" data-level="baixo" onclick="selImpacto(this)" style="
-                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                border:2px solid var(--border); font-size:12px; font-weight:600;
-                color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">{{ t.baixo }}</div>
-              <div class="impact-btn" data-value="Médio" data-level="medio" onclick="selImpacto(this)" style="
-                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                border:2px solid var(--border); font-size:12px; font-weight:600;
-                color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">{{ t.medio }}</div>
-              <div class="impact-btn" data-value="Alto" data-level="alto" onclick="selImpacto(this)" style="
-                text-align:center; padding:10px 6px; border-radius:var(--radius-sm);
-                border:2px solid var(--border); font-size:12px; font-weight:600;
-                color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">{{ t.alto }}</div>
-            </div>
-            <input type="hidden" name="nivel_impacto" id="nivelImpactoVal" value="" />
-            <small id="impactoErro" style="color:var(--danger); display:none; font-size:12px;">⚠ Selecione o nível de impacto</small>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">{{ t.recorrente }}</label>
-            <div style="display:flex; gap:8px;" id="recorrenteGroup">
-              <div class="toggle-opt" data-value="Sim" onclick="selRecorrente(this)" style="
-                flex:1; text-align:center; padding:10px; border-radius:var(--radius-sm);
-                border:2px solid var(--border); font-size:13px; font-weight:600;
-                color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">Sim</div>
-              <div class="toggle-opt" data-value="Não" onclick="selRecorrente(this)" style="
-                flex:1; text-align:center; padding:10px; border-radius:var(--radius-sm);
-                border:2px solid var(--border); font-size:13px; font-weight:600;
-                color:var(--text-muted); transition:var(--transition); cursor:pointer;
-              ">Não</div>
-            </div>
-            <input type="hidden" name="problema_recorrente" id="recorrenteVal" value="" />
-            <small id="recorrenteErro" style="color:var(--danger); display:none; font-size:12px;">⚠ Selecione se é recorrente</small>
-          </div>
-
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">{{ t.detalhamento }}</label>
-            <textarea name="detalhamento_tecnico" class="form-control" rows="5"
-                      placeholder="Forneça detalhes técnicos: códigos de erro, leituras de sensores, comportamento observado..."
-                      required>{{ prefill.detalhamento if prefill else '' }}</textarea>
-          </div>
-
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Onde está o problema? (modelo 3D da máquina, quando existir) -->
-    <input type="hidden" name="componente_apontado" id="componenteApontado" value="" />
-    <div id="card3dForm" class="card3d-form" hidden></div>
-
-    <!-- Ações -->
-    <div class="actions-row">
-      <a href="{{ url_for('dashboard') }}" class="btn btn-outline">
-        <i class="fas fa-arrow-left"></i> {{ t.cancelar }}
-      </a>
-      <button type="reset" class="btn btn-ghost">
-        <i class="fas fa-eraser"></i> {{ t.limpar }}
-      </button>
-      <button type="submit" class="btn btn-primary btn-lg">
-        <i class="fas fa-paper-plane"></i> {{ t.registrar }}
-      </button>
-    </div>
-
-  </form>
-</div>
-
-<!-- Loading overlay -->
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="loading-card">
-    <div class="loading-icon">
-      <i class="fas fa-robot"></i>
-    </div>
-    <p class="loading-title">Nexar IA processando</p>
-    <p class="loading-subtitle">Aguarde enquanto geramos o diagnóstico técnico</p>
-
-    <div class="loading-steps">
-      <div class="loading-step" id="step1">
-        <div class="step-icon"><i class="fas fa-check"></i></div>
-        <span>Dados da ocorrência validados</span>
-      </div>
-      <div class="loading-step" id="step2">
-        <div class="step-icon"><i class="fas fa-circle-notch fa-spin"></i></div>
-        <span>Consultando Nexar IA...</span>
-      </div>
-      <div class="loading-step" id="step3">
-        <div class="step-icon">3</div>
-        <span>Gerando diagnóstico técnico</span>
-      </div>
-      <div class="loading-step" id="step4">
-        <div class="step-icon">4</div>
-        <span>Localizando componentes no diagrama</span>
-      </div>
-    </div>
-
-    <span class="loading-timer" id="loadingTimer">0s</span>
+  <div class="card no-vazio">
+    <i class="fas fa-cube"></i>
+    <h3>Nenhuma máquina com modelo CAD 3D</h3>
+    <p>As ocorrências são registradas apontando a peça no modelo 3D da máquina.
+       Vincule o CAD do fabricante a uma máquina para começar.</p>
+    <a href="{{ url_for('maquinas') }}" class="btn btn-primary"><i class="fas fa-cogs"></i> Ir para Máquinas</a>
   </div>
 </div>
+{% else %}
+<form id="formOcorrencia" class="no-layout" method="POST" action="{{ url_for('registrar_ocorrencia') }}" novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+  <input type="hidden" name="maquina_id" id="fMaquina" />
+  <input type="hidden" name="componente_apontado" id="fComponente" />
+  <input type="hidden" name="sintoma" id="fSintoma" />
+  <input type="hidden" name="maquina_parada" id="fParada" />
+  <input type="hidden" name="risco_pessoas" id="fRisco" />
+  {% if prefill.inspecao_id %}<input type="hidden" name="inspecao_id" value="{{ prefill.inspecao_id }}" />{% endif %}
 
+  <!-- Palco 3D -->
+  <section class="no-palco" aria-label="Modelo 3D da máquina">
+    <div class="no-palco-barra" id="palcoBarra" hidden>
+      <span class="no-palco-titulo"><i class="fas fa-cube"></i> <span id="palcoTitulo"></span></span>
+      <span class="v3d-fonte cad">CAD do fabricante</span>
+      <button type="button" class="v3d-btn" id="btnEnquadrar" title="Enquadrar a máquina" aria-label="Enquadrar a máquina"><i class="fas fa-expand"></i></button>
+      <button type="button" class="v3d-btn" id="btnRaioX" title="Raio-X: ver peças internas"><i class="fas fa-x-ray"></i> Raio-X</button>
+    </div>
+    <div class="no-stage" id="stage">
+      <div class="no-stage-vazio" id="stageVazio">
+        <i class="fas fa-hand-pointer"></i>
+        <p>Escolha a máquina para abrir o modelo 3D</p>
+      </div>
+      <div class="no-stage-carregando" id="stageCarregando" hidden>
+        <i class="fas fa-circle-notch fa-spin"></i> Carregando o modelo 3D…
+      </div>
+      <div class="no-dica" id="dicaToque" hidden><i class="fas fa-hand-pointer"></i> Toque na peça onde está o problema</div>
+    </div>
+  </section>
+
+  <!-- Painel de etapas -->
+  <section class="no-painel" aria-live="polite">
+
+    <!-- 1. Máquina -->
+    <div class="no-etapa" id="etapaMaquina">
+      <div class="no-etapa-cab">
+        <h2>Qual máquina?</h2>
+        <button type="button" class="no-trocar" id="trocarMaquina" hidden><i class="fas fa-rotate"></i> Trocar</button>
+      </div>
+      <div class="no-maquina-escolhida" id="maquinaEscolhida" hidden></div>
+      <div class="no-maquinas" id="listaMaquinas">
+        {% if maquinas|length > 6 %}
+        <input type="search" class="form-control no-busca" id="buscaMaquina" placeholder="Buscar máquina ou setor…" aria-label="Buscar máquina" />
+        {% endif %}
+        {% for m in maquinas %}
+        <button type="button" class="no-maquina" data-id="{{ m.id }}" data-nome="{{ m.nome }}" data-setor="{{ m.setor or '' }}">
+          <span class="no-maquina-ic"><i class="fas {{ 'fa-robot' if 'rob' in (m.modelo_3d_nome|lower) else 'fa-gears' }}"></i></span>
+          <span class="no-maquina-txt">
+            <b>{{ m.nome }}</b>
+            <small>{{ m.setor or 'Sem setor' }} · {{ m.modelo_3d_nome }}</small>
+          </span>
+          {% if m.abertas %}<span class="no-maquina-abertas" title="Ocorrências em aberto">{{ m.abertas }}</span>{% endif %}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- 2. Peça -->
+    <div class="no-etapa" id="etapaPeca" hidden>
+      <div class="no-etapa-cab">
+        <h2>Onde está o problema?</h2>
+      </div>
+      <div class="no-peca" id="pecaEscolhida" hidden>
+        <div class="no-peca-ic"><i class="fas fa-location-dot"></i></div>
+        <div class="no-peca-txt">
+          <b id="pecaNome"></b>
+          <small id="pecaDescricao"></small>
+        </div>
+        <button type="button" class="no-trocar" id="trocarPeca"><i class="fas fa-rotate"></i> Trocar</button>
+      </div>
+      <div id="escolherPeca">
+        <p class="no-ajuda"><i class="fas fa-hand-pointer"></i> Toque na peça no modelo 3D, ou escolha na lista:</p>
+        <div class="no-chips" id="listaPecas"></div>
+      </div>
+    </div>
+
+    <!-- 3. O que houve -->
+    <div class="no-etapa" id="etapaSintoma" hidden>
+      <div class="no-etapa-cab"><h2>O que está acontecendo?</h2></div>
+      <div class="no-chips no-sintomas" id="listaSintomas" role="radiogroup" aria-label="Sintoma"></div>
+
+      <div class="no-perguntas">
+        <div class="no-pergunta">
+          <span>A máquina parou?</span>
+          <div class="no-simnao" data-campo="fParada">
+            <button type="button" data-v="1">Sim</button><button type="button" data-v="0">Não</button>
+          </div>
+        </div>
+        <div class="no-pergunta">
+          <span>Há risco para pessoas?</span>
+          <div class="no-simnao" data-campo="fRisco">
+            <button type="button" data-v="1">Sim</button><button type="button" data-v="0">Não</button>
+          </div>
+        </div>
+      </div>
+
+      <label class="form-label" for="fTexto">Conte o que você viu <span class="no-opc" id="textoOpc">(opcional)</span></label>
+      <textarea class="form-control" id="fTexto" name="texto" rows="3" maxlength="2000"
+                placeholder="Ex.: óleo escorrendo pela haste ao fim do ciclo">{{ prefill.texto or '' }}</textarea>
+
+      <details class="no-mais">
+        <summary>Mais detalhes (código de alarme, impacto)</summary>
+        <div class="no-mais-corpo">
+          <label class="form-label" for="fAlarme">Código de alarme no painel</label>
+          <input class="form-control" id="fAlarme" name="codigo_alarme" maxlength="40" placeholder="Ex.: 50296" />
+          <label class="form-label" for="fImpacto" style="margin-top:10px;">Impacto</label>
+          <select class="form-select" id="fImpacto" name="nivel_impacto">
+            <option value="">Automático (pelas respostas acima)</option>
+            <option>Alto</option><option>Médio</option><option>Baixo</option>
+          </select>
+        </div>
+      </details>
+
+      {% if prefill.imagem_url %}
+      <div class="no-inspecao">
+        <img src="{{ prefill.imagem_url }}" alt="Foto da inspeção" />
+        <span><i class="fas fa-camera"></i> Da inspeção por foto nº {{ prefill.inspecao_id }}{% if prefill.rotulo %}: {{ prefill.rotulo }}{% endif %}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Soluções que já funcionaram nesta peça -->
+    <div class="no-etapa no-historico" id="etapaHistorico" hidden>
+      <div class="no-etapa-cab">
+        <h2><i class="fas fa-lightbulb"></i> Já funcionou nesta peça</h2>
+      </div>
+      <div id="listaHistorico"></div>
+    </div>
+
+    <div class="no-enviar" id="barraEnviar" hidden>
+      <div class="no-resumo" id="resumo"></div>
+      <button type="submit" class="btn btn-primary no-btn-enviar" id="btnEnviar" disabled>
+        <i class="fas fa-paper-plane"></i> Registrar ocorrência
+      </button>
+    </div>
+  </section>
+</form>
+
+<div class="no-analisando" id="analisando" hidden role="status">
+  <div class="no-analisando-box">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <b>Registrando e analisando…</b>
+    <span>A Nexar IA está cruzando a peça, o sintoma e o histórico da máquina.</span>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
-<script type="module">
-  import { criarCard3D } from '/static/js/viewer3d/card3d.js';
-
-  const sel = document.getElementById('maquinaSelect');
-  const box = document.getElementById('card3dForm');
-  const campo = document.getElementById('componenteApontado');
-  let card = null;
-
-  async function atualizar3D() {
-    campo.value = '';
-    const id = sel.value;
-    if (!id) { box.hidden = true; return; }
-    const r = await fetch(`/api/maquinas/${id}/modelo3d`);
-    const info = r.ok ? await r.json() : null;
-    if (!info || !info.modelo) { box.hidden = true; return; }
-    box.hidden = false;
-    const opcoes = {
-      maquinaId: id, modo: 'marcar', titulo: 'Onde está o problema?',
-      onPick: (cid) => { campo.value = cid || ''; },
-    };
-    if (!card) card = await criarCard3D(box, opcoes);
-    else await card.trocarMaquina(id);
-  }
-  sel.addEventListener('change', atualizar3D);
-  atualizar3D();
-  document.getElementById('formOcorrencia').addEventListener('reset', () => {
-    campo.value = '';
-    if (card) { card.viewer.limparPonto(); card.viewer.selecionar(null); card.viewer.limparDestaques(); }
-    setTimeout(atualizar3D, 0);   // o select volta ao valor original
-  });
-</script>
+{% if maquinas %}
 <script>
-  const PREFILL = {{ (prefill or {}) | tojson }};
-  document.addEventListener('DOMContentLoaded', () => {
-    if (PREFILL.tipo) document.querySelector('select[name=tipo_ocorrencia]').value = PREFILL.tipo;
-    if (PREFILL.impacto) {
-      const b = document.querySelector(`.impact-btn[data-value="${PREFILL.impacto}"]`);
-      if (b) selImpacto(b);
-    }
-  });
+  window.NOVA_OCORRENCIA = {
+    preselect: {{ preselect_maquina | tojson }},
+    componente: {{ (prefill.componente or none) | tojson }},
+    risco: {{ (prefill.risco or false) | tojson }},
+  };
 </script>
-<script>
-  // Data/hora da ocorrência: preenche com o momento atual (fuso local)
-  function preencherAgora() {
-    const el = document.getElementById('dataOcorrencia');
-    if (el && !el.value) {
-      const d = new Date();
-      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-      el.value = d.toISOString().slice(0, 16);
-    }
-  }
-  preencherAgora();
-
-  // Setor: sugere o setor cadastrado da máquina (sem sobrescrever o que foi digitado)
-  (function () {
-    const sel = document.getElementById('maquinaSelect');
-    const setor = document.getElementById('setorInput');
-    let setorAuto = true;
-    setor.addEventListener('input', () => { setorAuto = !setor.value; });
-    function aplicarSetor() {
-      const opt = sel.options[sel.selectedIndex];
-      if (setorAuto && opt && opt.dataset.setor) setor.value = opt.dataset.setor;
-    }
-    sel.addEventListener('change', aplicarSetor);
-    aplicarSetor();
-  })();
-
-  // "Limpar": o reset nativo não conhece os seletores de impacto/recorrência
-  document.getElementById('formOcorrencia').addEventListener('reset', function () {
-    document.querySelectorAll('.impact-btn, .toggle-opt').forEach(b => {
-      b.style.borderColor = 'var(--border)';
-      b.style.color = 'var(--text-muted)';
-      b.style.background = 'transparent';
-    });
-    document.getElementById('nivelImpactoVal').value = '';
-    document.getElementById('recorrenteVal').value = '';
-    document.getElementById('impactoErro').style.display = 'none';
-    document.getElementById('recorrenteErro').style.display = 'none';
-    setTimeout(preencherAgora, 0);
-  });
-
-  // Impacto
-  function selImpacto(el) {
-    document.querySelectorAll('.impact-btn').forEach(b => {
-      b.style.borderColor = 'var(--border)';
-      b.style.color = 'var(--text-muted)';
-      b.style.background = 'transparent';
-    });
-    const colors = { baixo: 'var(--success)', medio: 'var(--warning)', alto: 'var(--danger)' };
-    const bgs   = { baixo: 'var(--success-light)', medio: 'var(--warning-light)', alto: 'var(--danger-light)' };
-    const level = el.dataset.level;
-    el.style.borderColor = colors[level];
-    el.style.color = colors[level];
-    el.style.background = bgs[level];
-    document.getElementById('nivelImpactoVal').value = el.dataset.value;
-    document.getElementById('impactoErro').style.display = 'none';
-  }
-
-  // Recorrente
-  function selRecorrente(el) {
-    document.querySelectorAll('.toggle-opt').forEach(o => {
-      o.style.borderColor = 'var(--border)';
-      o.style.color = 'var(--text-muted)';
-      o.style.background = 'transparent';
-    });
-    el.style.borderColor = 'var(--primary)';
-    el.style.color = 'var(--primary)';
-    el.style.background = 'var(--primary-light)';
-    document.getElementById('recorrenteVal').value = el.dataset.value;
-    document.getElementById('recorrenteErro').style.display = 'none';
-  }
-
-  // Submit com validação
-  document.getElementById('formOcorrencia').addEventListener('submit', function(e) {
-    let valido = true;
-
-    if (!document.getElementById('nivelImpactoVal').value) {
-      document.getElementById('impactoErro').style.display = 'block';
-      document.querySelectorAll('.impact-btn').forEach(b => {
-        b.style.borderColor = 'var(--danger)';
-      });
-      valido = false;
-    }
-
-    if (!document.getElementById('recorrenteVal').value) {
-      document.getElementById('recorrenteErro').style.display = 'block';
-      document.querySelectorAll('.toggle-opt').forEach(o => {
-        o.style.borderColor = 'var(--danger)';
-      });
-      valido = false;
-    }
-
-    if (!valido) {
-      e.preventDefault();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-
-    // Mostra overlay e anima os passos
-    document.getElementById('loadingOverlay').classList.add('show');
-
-    const steps = [
-      { id: 'step1', delay: 0 },
-      { id: 'step2', delay: 300 },
-      { id: 'step3', delay: 3500 },
-      { id: 'step4', delay: 7000 },
-    ];
-
-    function ativarPasso(idx) {
-      // Marca anterior como done
-      if (idx > 0) {
-        const prev = document.getElementById(steps[idx - 1].id);
-        prev.classList.remove('active');
-        prev.classList.add('done');
-        prev.querySelector('.step-icon').innerHTML = '<i class="fas fa-check"></i>';
-      }
-      // Ativa atual
-      if (idx < steps.length) {
-        const cur = document.getElementById(steps[idx].id);
-        cur.classList.add('active');
-        if (idx > 0) {
-          cur.querySelector('.step-icon').innerHTML =
-            '<i class="fas fa-circle-notch fa-spin"></i>';
-        }
-        if (idx + 1 < steps.length) {
-          setTimeout(() => ativarPasso(idx + 1), steps[idx + 1].delay - steps[idx].delay);
-        }
-      }
-    }
-
-    // Cronômetro
-    let seg = 0;
-    const timer = setInterval(() => {
-      seg++;
-      document.getElementById('loadingTimer').textContent = seg + 's';
-    }, 1000);
-
-    setTimeout(() => ativarPasso(0), steps[0].delay);
-  });
-</script>
+<script type="module" src="/static/js/nova_ocorrencia.js"></script>
+{% endif %}
 {% endblock %}

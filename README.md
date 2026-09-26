@@ -102,7 +102,7 @@ Acesse **http://localhost:5000** no navegador.
 
 ### Base de demonstração
 
-Para apresentações, popule o banco com 8 máquinas (incluindo o robô ABB e o torno com CAD real) e ~34 ocorrências dos últimos 60 dias
+Para apresentações, popule o banco com 5 máquinas com CAD 3D (robôs ABB e tornos) e 23 ocorrências dos últimos 60 dias
 (abertas, em andamento e resolvidas com a solução registrada):
 
 ```bash

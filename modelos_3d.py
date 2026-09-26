@@ -181,6 +181,11 @@ def _expandir_cad(slug: str) -> dict | None:
     }
 
 
+def eh_cad(cfg: dict | None) -> bool:
+    """A máquina tem modelo 3D do fabricante (CAD)? Pré-requisito para receber ocorrências."""
+    return bool(cfg and cfg.get("fonte") == "glb")
+
+
 def config_para_salvar(cfg: dict | None) -> str | None:
     """JSON gravado em maquinas.modelo_3d (modelo de fabricante vira só a referência)."""
     if not cfg:
