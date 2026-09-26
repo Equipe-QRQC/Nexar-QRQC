@@ -49,13 +49,30 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.getenv("DATABASE_PATH") or os.path.join(BASE_DIR, "qrqc.db")
 
 app = Flask(__name__)
-_secret = os.getenv("SECRET_KEY", "").strip()
-if not _secret:
-    # Sem SECRET_KEY definida, gera uma chave aleatória por execução: as sessões
-    # deixam de valer a cada reinício, mas ninguém consegue forjá-las.
-    _secret = secrets.token_hex(32)
-    logger.warning("SECRET_KEY não definida no .env — usando chave temporária (logins expiram ao reiniciar).")
-app.secret_key = _secret
+def _carregar_secret_key() -> str:
+    """
+    SECRET_KEY do .env; na falta dela, uma chave aleatória gerada uma única vez
+    e guardada em .secret_key (fora do git). Assim nenhuma chave fica no código
+    e reiniciar o servidor não derruba as sessões abertas.
+    """
+    chave = os.getenv("SECRET_KEY", "").strip()
+    if chave:
+        return chave
+    arquivo = os.path.join(BASE_DIR, ".secret_key")
+    try:
+        with open(arquivo, encoding="utf-8") as f:
+            chave = f.read().strip()
+    except FileNotFoundError:
+        chave = ""
+    if not chave:
+        chave = secrets.token_hex(32)
+        with open(arquivo, "w", encoding="utf-8") as f:
+            f.write(chave)
+        logger.warning(f"SECRET_KEY não definida no .env — chave gerada e guardada em {arquivo}.")
+    return chave
+
+
+app.secret_key = _carregar_secret_key()
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB por requisição
 app.config["SESSION_COOKIE_HTTPONLY"] = True

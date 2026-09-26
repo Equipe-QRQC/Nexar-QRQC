@@ -1,4 +1,6 @@
 .env
+.secret_key
+demo.db*
 qrqc.db
 f_err.log
 
