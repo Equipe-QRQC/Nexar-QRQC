@@ -1,5 +1,9 @@
 {% extends 'menu.html' %}
-{% block title %}Diagnóstico Técnico — Nexar QRQC{% endblock %}
+{% block title %}Ocorrência #{{ dados.id }} — Nexar QRQC{% endblock %}
+
+{% block head %}
+{% if ctx3d.cfg3d %}{% include 'partials/three_importmap.html' %}{% endif %}
+{% endblock %}
 
 {% block content %}
 <div class="topbar">
@@ -32,7 +36,7 @@
     {% endif %}
     {% if dados.id and dados.maquina_id %}
     <a href="{{ url_for('qrqc3d', oc_id=dados.id) }}" class="btn btn-outline btn-sm">
-      <i class="fas fa-cube"></i> Visualização 3D <span style="font-size:10px; opacity:.7;">(beta)</span>
+      <i class="fas fa-cube"></i> Visualização 3D
     </a>
     {% endif %}
     <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
@@ -108,6 +112,12 @@
               <div class="label-mini">Recorrente</div>
               <div class="value-mini">{{ dados.problema_recorrente or '—' }}</div>
             </div>
+            {% if ctx3d.apontado %}
+            <div>
+              <div class="label-mini">Local indicado no 3D</div>
+              <div class="value-mini"><i class="fas fa-hand-pointer" style="color:#0284C7;"></i> {{ ctx3d.apontado.component_name }}</div>
+            </div>
+            {% endif %}
           </div>
 
           <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
@@ -182,8 +192,17 @@
 
     </div>
 
-    <!-- Coluna 2 — Diagrama -->
-    <div>
+    <!-- Coluna 2 — Modelo 3D + Diagrama -->
+    <div style="display:flex; flex-direction:column; gap:16px;" class="{{ 'com-3d' if ctx3d.cfg3d else '' }}">
+      {% if ctx3d.cfg3d %}
+      <div id="card3dOcorrencia" class="card3d-ocorrencia"></div>
+      {% if not ctx3d.destaques and not ctx3d.apontado %}
+      <p style="font-size:12px; color:var(--text-muted); margin-top:-8px;">
+        <i class="fas fa-circle-info" style="color:var(--primary);"></i>
+        Nenhuma peça apontada ainda. Use <a href="{{ url_for('qrqc3d', oc_id=dados.id) }}">Investigar com Nexar IA</a> na visualização completa.
+      </p>
+      {% endif %}
+      {% endif %}
       {% if diagrama_url and diagrama_url.lower().endswith('.pdf') %}
       <div class="card diagram-sticky">
         <div class="card-header">
@@ -324,6 +343,9 @@
 
 <style>
   .diagram-sticky { position: sticky; top: 76px; }
+  .com-3d .diagram-sticky { position: static; }
+  .card3d-ocorrencia .v3d-stage { height: 440px; }
+  @media (max-width: 767px) { .card3d-ocorrencia .v3d-stage { height: 340px; } }
 
   @media (max-width: 767px) {
     .diagram-sticky { position: static; }
@@ -369,6 +391,17 @@
 {% block scripts %}
 {% include 'partials/modal_resolver.html' %}
 <script src="/static/js/ocorrencia_acoes.js"></script>
+{% if ctx3d.cfg3d %}
+<script type="module">
+  import { criarCard3D } from '/static/js/viewer3d/card3d.js';
+  criarCard3D(document.getElementById('card3dOcorrencia'), {
+    maquinaId: {{ dados.maquina_id }},
+    destaques: {{ ctx3d.destaques | tojson }},
+    apontado: {{ ctx3d.apontado | tojson }},
+    linkCompleto: "{{ url_for('qrqc3d', oc_id=dados.id) }}",
+  });
+</script>
+{% endif %}
 <script>
   const SUGESTOES_COMPONENTE = {{ (anotacoes or []) | map(attribute='titulo') | list | tojson }};
 

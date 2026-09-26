@@ -677,6 +677,8 @@ def init_db():
         "componente_real":     "ALTER TABLE ocorrencias ADD COLUMN componente_real TEXT",
         "data_resolucao":      "ALTER TABLE ocorrencias ADD COLUMN data_resolucao DATETIME",
         "resolvido_por_id":    "ALTER TABLE ocorrencias ADD COLUMN resolvido_por_id INTEGER",
+        # Peça indicada pelo operador no modelo 3D ao registrar
+        "componente_apontado": "ALTER TABLE ocorrencias ADD COLUMN componente_apontado TEXT",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -1976,6 +1978,18 @@ def CadastroOcorrencia():
                            preselect_maquina=preselect, prefill=prefill)
 
 
+def _nome_componente(maquina_id, component_id) -> str | None:
+    """Nome do componente no modelo 3D da máquina, ou None se não existir."""
+    if not maquina_id or not component_id:
+        return None
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    return next((c["name"] for c in modelos_3d.componentes_da_config(cfg)
+                 if c["component_id"] == component_id), None)
+
+
 def diagnosticar_ocorrencia(campos: dict) -> dict:
     """
     Monta o contexto da máquina (dados, diagrama, histórico e soluções já
@@ -2041,6 +2055,7 @@ DADOS DA OCORRÊNCIA:
 - Tipo: {campos.get('tipo_ocorrencia') or '—'} | Impacto: {campos.get('nivel_impacto') or '—'} | Recorrente: {campos.get('problema_recorrente') or '—'}
 - Descrição: {campos.get('descricao') or ''}
 - Detalhamento técnico: {campos.get('detalhamento_tecnico') or '—'}
+{f"- Local indicado pelo operador no modelo 3D da máquina: {campos['componente_apontado_nome']} (considere-o ao formular a causa provável, sem descartar outras hipóteses)" if campos.get('componente_apontado_nome') else ''}
 
 {"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
 
@@ -2093,12 +2108,19 @@ def registrar_ocorrencia():
     problema_recorrente  = request.form.get("problema_recorrente", "").strip()
     detalhamento_tecnico = request.form.get("detalhamento_tecnico", "").strip()
 
+    # Peça indicada no 3D: só vale se existir no modelo da máquina
+    componente_apontado = (request.form.get("componente_apontado") or "").strip()[:60] or None
+    componente_apontado_nome = _nome_componente(maquina_id, componente_apontado)
+    if not componente_apontado_nome:
+        componente_apontado = None
+
     diag = diagnosticar_ocorrencia({
         "maquina_id": maquina_id, "data_ocorrencia": data_ocorrencia,
         "setor_area": setor_area, "descricao": descricao,
         "tipo_ocorrencia": tipo_ocorrencia, "nivel_impacto": nivel_impacto,
         "problema_recorrente": problema_recorrente,
         "detalhamento_tecnico": detalhamento_tecnico,
+        "componente_apontado_nome": componente_apontado_nome,
     })
     resposta_ia, anotacoes, ia_status = diag["resposta_ia"], diag["anotacoes"], diag["ia_status"]
     diagrama_url = diag["diagrama_url"]
@@ -2111,11 +2133,13 @@ def registrar_ocorrencia():
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url,
+                componente_apontado, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
             (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
              tipo_ocorrencia, nivel_impacto, problema_recorrente,
-             detalhamento_tecnico, resposta_ia, ia_status, anotacoes_json, diagrama_url),
+             detalhamento_tecnico, resposta_ia, ia_status, anotacoes_json, diagrama_url,
+             componente_apontado),
         )
         ocorrencia_id = cursor.lastrowid
         conn.commit()
@@ -2152,6 +2176,7 @@ def ver_ocorrencia(oc_id: int):
         anotacoes = []
     dados = dict(row)
     dados["status"] = row["status"] or "Aberta"
+    ctx3d = contexto_3d(row)
     return render_template(
         "solucao.html",
         dados=dados,
@@ -2159,6 +2184,7 @@ def ver_ocorrencia(oc_id: int):
         ia_status=row["ia_status"],
         diagrama_url=row["diagrama_url"],
         anotacoes=anotacoes,
+        ctx3d=ctx3d,
     )
 
 
@@ -2878,6 +2904,43 @@ def enviar():
 
 # ── QRQC 3D AI ───────────────────────────────────────────────────────────────
 
+def contexto_3d(oc) -> dict:
+    """
+    Modelo 3D da máquina da ocorrência e o que destacar nele:
+    análise do agente (se houver) ou componentes citados no diagnóstico,
+    mais a peça que o operador indicou ao registrar.
+    """
+    ctx = {"cfg3d": None, "catalogo": [], "destaques": [], "apontado": None,
+           "diagnostico": None}
+    if not oc["maquina_id"]:
+        return ctx
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (oc["maquina_id"],)).fetchone()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    diag = conn.execute("SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc["id"],)).fetchone()
+    diag_comps = []
+    if diag:
+        ctx["diagnostico"] = dict(diag)
+        ctx["diagnostico"]["recommended_actions"] = json.loads(diag["recommended_actions"] or "[]")
+        diag_comps = [dict(r) for r in conn.execute(
+            "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)).fetchall()]
+    conn.close()
+    ctx["cfg3d"] = cfg
+    ctx["catalogo"] = modelos_3d.componentes_da_config(cfg)
+    if diag_comps:
+        ctx["destaques"] = [{"component_id": c["component_id"], "component_name": c["component_name"],
+                             "severity": c["severity"], "reason": c["reason"],
+                             "probability": c["probability"], "fonte": "agente"} for c in diag_comps]
+    elif oc["ia_status"] == "ok":
+        # Só quando o texto veio da IA (o roteiro padrão cita peças genéricas)
+        ctx["destaques"] = modelos_3d.componentes_citados(oc["resposta_ia"] or "", cfg)
+    apontado = oc["componente_apontado"] if "componente_apontado" in oc.keys() else None
+    nome = next((c["name"] for c in ctx["catalogo"] if c["component_id"] == apontado), None)
+    if nome:
+        ctx["apontado"] = {"component_id": apontado, "component_name": nome}
+    return ctx
+
+
 @app.route("/qrqc3d/<int:oc_id>")
 @login_required
 def qrqc3d(oc_id: int):
@@ -2889,42 +2952,19 @@ def qrqc3d(oc_id: int):
         return redirect(url_for("historico"))
 
     maquina = None
-    diagnostico = None
-    diag_componentes = []
-    cfg3d = None
-
     if oc["maquina_id"]:
         maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)).fetchone()
-        cfg3d = modelos_3d.ler_config(maquina["modelo_3d"]) if maquina else None
-
-    diag = conn.execute("SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)).fetchone()
-    if diag:
-        diagnostico = dict(diag)
-        diagnostico["recommended_actions"] = json.loads(diag["recommended_actions"] or "[]")
-        diag_componentes = [dict(r) for r in conn.execute(
-            "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)
-        ).fetchall()]
     conn.close()
-
-    # Destaques iniciais: análise do agente, se houver; senão, os componentes
-    # citados no diagnóstico em texto gerado no registro da ocorrência.
-    if diag_componentes:
-        destaques = [{"component_id": c["component_id"], "component_name": c["component_name"],
-                      "severity": c["severity"], "reason": c["reason"],
-                      "probability": c["probability"], "fonte": "agente"} for c in diag_componentes]
-    else:
-        # Só quando o texto veio da IA (o roteiro padrão cita peças genéricas)
-        destaques = (modelos_3d.componentes_citados(oc["resposta_ia"] or "", cfg3d)
-                     if oc["ia_status"] == "ok" else [])
-
+    ctx = contexto_3d(oc)
     return render_template(
         "qrqc3d.html",
         ocorrencia=oc,
         maquina=maquina,
-        cfg3d=cfg3d,
-        catalogo=modelos_3d.componentes_da_config(cfg3d),
-        diagnostico=diagnostico,
-        destaques=destaques,
+        cfg3d=ctx["cfg3d"],
+        catalogo=ctx["catalogo"],
+        diagnostico=ctx["diagnostico"],
+        destaques=ctx["destaques"],
+        apontado=ctx["apontado"],
     )
 
 

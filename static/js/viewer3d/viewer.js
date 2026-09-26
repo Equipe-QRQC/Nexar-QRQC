@@ -18,7 +18,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const COR_SEV = { high: 0xDC2626, medium: 0xD97706, low: 0x2563EB };
+const COR_SEV = { high: 0xDC2626, medium: 0xD97706, low: 0x2563EB, op: 0x0284C7 };
 const COR_SELECAO = 0x0EA5E9;
 const TAMANHO_ALVO = 5;          // o modelo é normalizado para caber em ~5 unidades
 
@@ -138,7 +138,13 @@ export class Viewer3D {
    * @param {Array<{component_id,name}>} catalogo componentes da máquina (nomes exibidos)
    */
   async carregar(modelo, catalogo = []) {
-    if (this.raiz) { this.scene.remove(this.raiz); this.componentes.clear(); }
+    if (this.raiz) {
+      this.limparDestaques();
+      this.limparPonto();
+      this.selecionado = null;
+      this.scene.remove(this.raiz);
+      this.componentes.clear();
+    }
     const nomes = Object.fromEntries(catalogo.map(c => [c.component_id, c.name]));
     let raiz;
 
@@ -233,7 +239,10 @@ export class Viewer3D {
     const caixa = new THREE.Box3().setFromObject(this.raiz);
     const centro = caixa.getCenter(new THREE.Vector3());
     const raio = caixa.getSize(new THREE.Vector3()).length() / 2;
-    const dist = raio / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) * 0.95;
+    // Ajusta pela menor abertura (vertical ou horizontal) para ocupar bem o palco
+    const fovV = THREE.MathUtils.degToRad(this.camera.fov / 2);
+    const fovH = Math.atan(Math.tan(fovV) * this.camera.aspect);
+    const dist = raio / Math.sin(Math.min(fovV, fovH)) * 0.78;
     const dir = new THREE.Vector3(0.75, 0.45, 1).normalize();
     this._voarPara(centro.clone().add(dir.multiplyScalar(dist)), centro, animar);
   }
@@ -271,7 +280,10 @@ export class Viewer3D {
   }
 
   // ── Destaques (diagnóstico) ─────────────────────────────────────────────
-  /** @param {Array<{id, severidade:'high'|'medium'|'low', numero?:number}>} lista */
+  /**
+   * @param {Array<{id, severidade:'high'|'medium'|'low'|'op', numero?:number|string, texto?:string}>} lista
+   *   severidade 'op' = peça indicada pelo operador (etiqueta com ícone de toque)
+   */
   destacar(lista) {
     this.limparDestaques();
     lista.forEach((d, i) => {
@@ -284,7 +296,7 @@ export class Viewer3D {
           m.material.emissiveIntensity = 0.55;
         }
       });
-      const label = this._criarEtiqueta(c, d.numero ?? i + 1, d.severidade);
+      const label = this._criarEtiqueta(c, d.numero ?? i + 1, d.severidade, d.texto);
       this.destaques.set(d.id, { cor, label });
     });
   }
@@ -299,13 +311,19 @@ export class Viewer3D {
     if (this.selecionado) this._aplicarSelecao(this.selecionado);
   }
 
-  _criarEtiqueta(c, numero, sev) {
+  _criarEtiqueta(c, numero, sev, texto) {
     const el = document.createElement('div');
     el.className = `v3d-tag v3d-sev-${sev || 'medium'}`;
     const n = document.createElement('b');
-    n.textContent = numero;
+    if (sev === 'op') {
+      const ic = document.createElement('i');
+      ic.className = 'fas fa-hand-pointer';
+      n.appendChild(ic);
+    } else {
+      n.textContent = numero;
+    }
     const t = document.createElement('span');
-    t.textContent = c.nome;
+    t.textContent = texto || c.nome;
     el.append(n, t);
     // O CSS2DRenderer controla o transform do elemento raiz; o deslocamento
     // anti-sobreposição vai no elemento interno.

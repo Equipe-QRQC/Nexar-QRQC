@@ -162,6 +162,7 @@
     modelo: {{ cfg3d | tojson }},
     catalogo: {{ catalogo | tojson }},
     destaques: {{ destaques | tojson }},
+    apontado: {{ apontado | tojson }},
     acoes: {{ (diagnostico.recommended_actions if diagnostico else []) | tojson }},
   };
 </script>

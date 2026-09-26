@@ -1,6 +1,10 @@
 {% extends 'menu.html' %}
 {% block title %}Cadastro de Ocorrência — Nexar QRQC{% endblock %}
 
+{% block head %}
+{% include 'partials/three_importmap.html' %}
+{% endblock %}
+
 {% block content %}
 <div class="topbar">
   <div class="topbar-title">
@@ -149,6 +153,10 @@
 
     </div>
 
+    <!-- Onde está o problema? (modelo 3D da máquina, quando existir) -->
+    <input type="hidden" name="componente_apontado" id="componenteApontado" value="" />
+    <div id="card3dForm" class="card3d-form" hidden></div>
+
     <!-- Ações -->
     <div class="actions-row">
       <a href="{{ url_for('dashboard') }}" class="btn btn-outline">
@@ -200,6 +208,37 @@
 {% endblock %}
 
 {% block scripts %}
+<script type="module">
+  import { criarCard3D } from '/static/js/viewer3d/card3d.js';
+
+  const sel = document.getElementById('maquinaSelect');
+  const box = document.getElementById('card3dForm');
+  const campo = document.getElementById('componenteApontado');
+  let card = null;
+
+  async function atualizar3D() {
+    campo.value = '';
+    const id = sel.value;
+    if (!id) { box.hidden = true; return; }
+    const r = await fetch(`/api/maquinas/${id}/modelo3d`);
+    const info = r.ok ? await r.json() : null;
+    if (!info || !info.modelo) { box.hidden = true; return; }
+    box.hidden = false;
+    const opcoes = {
+      maquinaId: id, modo: 'marcar', titulo: 'Onde está o problema?',
+      onPick: (cid) => { campo.value = cid || ''; },
+    };
+    if (!card) card = await criarCard3D(box, opcoes);
+    else await card.trocarMaquina(id);
+  }
+  sel.addEventListener('change', atualizar3D);
+  atualizar3D();
+  document.getElementById('formOcorrencia').addEventListener('reset', () => {
+    campo.value = '';
+    if (card) { card.viewer.limparPonto(); card.viewer.selecionar(null); card.viewer.limparDestaques(); }
+    setTimeout(atualizar3D, 0);   // o select volta ao valor original
+  });
+</script>
 <script>
   const PREFILL = {{ (prefill or {}) | tojson }};
   document.addEventListener('DOMContentLoaded', () => {

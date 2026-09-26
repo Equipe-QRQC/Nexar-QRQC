@@ -35,6 +35,7 @@
   cursor: pointer; transition: var(--transition);
 }
 .v3d-btn:hover { border-color: var(--primary); color: var(--primary); }
+a.v3d-btn { text-decoration: none; }
 .v3d-btn.ativo { background: var(--primary-light); border-color: var(--primary); color: var(--primary-dark); }
 .v3d-explodir { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
 .v3d-explodir input { width: 96px; accent-color: var(--primary); }
@@ -73,6 +74,8 @@
 .v3d-sev-high   { --sev: #DC2626; }
 .v3d-sev-medium { --sev: #D97706; }
 .v3d-sev-low    { --sev: #2563EB; }
+.v3d-sev-op     { --sev: #0284C7; }
+.v3d-tag b i    { font-size: 10px; }
 
 .v3d-tip {
   position: absolute; z-index: 5; pointer-events: none;
@@ -113,3 +116,10 @@
   .v3d-btn { height: 36px; }
   .v3d-explodir input { width: 80px; }
 }
+
+/* Formulário de ocorrência: cartão 3D para indicar a peça com problema */
+.card3d-form { margin-top: 16px; }
+.card3d-form[hidden] { display: none; }
+.card3d-form .v3d-stage { height: 420px; }
+.v3d-marcacao { align-items: center; font-size: 12.5px; color: var(--text); }
+@media (max-width: 767px) { .card3d-form .v3d-stage { height: 340px; } }

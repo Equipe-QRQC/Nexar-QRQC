@@ -50,7 +50,12 @@ function renderAcoes(acoes) {
 
 function aplicarDestaques() {
   if (!viewer) return;
-  viewer.destacar(destaques.map((d, i) => ({ id: d.component_id, severidade: d.severity, numero: i + 1 })));
+  const lista = destaques.map((d, i) => ({ id: d.component_id, severidade: d.severity, numero: i + 1 }));
+  const op = CFG.apontado;
+  if (op && !lista.some(d => d.id === op.component_id)) {
+    lista.push({ id: op.component_id, severidade: 'op', texto: `${op.component_name} (indicado pelo operador)` });
+  }
+  viewer.destacar(lista);
 }
 
 // ── Painel: componente selecionado + histórico de soluções ────────────────
