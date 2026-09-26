@@ -1,7 +1,7 @@
 """
 Popula o banco com uma base de demonstração realista para apresentações.
 
-Cria 6 máquinas (com diagramas de test_diagrams/), cerca de 30 ocorrências
+Cria 8 máquinas (com diagramas de test_diagrams/), cerca de 30 ocorrências
 distribuídas nos últimos 60 dias — abertas, em andamento e resolvidas com a
 solução aplicada registrada, incluindo casos recorrentes — e os componentes
 da Visualização 3D para a prensa hidráulica (modelo em código).
@@ -60,6 +60,16 @@ MAQUINAS = [
      "ano": "2016", "setor": "Utilidades",
      "descricao": "Compressor parafuso de 50 hp que abastece a rede de ar comprimido da planta.",
      "diagrama": None},
+    {"nome": "Robô de Solda RS-01", "modelo": "IRB 6700-235/2.65", "fabricante": "ABB",
+     "ano": "2022", "setor": "Soldagem",
+     "descricao": "Robô de 6 eixos da célula de solda a ponto da carroceria. Carga útil 235 kg.",
+     "diagrama": None,
+     "modelo_3d": {"fonte": "cad", "modelo": "robo-abb-irb6700"}},
+    {"nome": "Torno Mecânico TM-04", "modelo": "CX704", "fabricante": "Craftex",
+     "ano": "2020", "setor": "Ferramentaria",
+     "descricao": "Torno de bancada para reparo de peças e usinagem de buchas na ferramentaria.",
+     "diagrama": None,
+     "modelo_3d": {"fonte": "cad", "modelo": "torno-cx704"}},
 ]
 
 # (máquina, dias atrás, hora, operador, tipo, impacto, recorrente, descrição, detalhe,
@@ -155,7 +165,31 @@ OCORRENCIAS = [
      "Vibração de 5 mm/s no lado acoplado. Rolamento trocado há 27 dias.",
      "Resolvida", "Acoplamento com elemento elástico desgastado: trocado e realinhado a laser.",
      "Acoplamento", 6),
+    (6, 40, "09:30", "Juliana Rocha", "Manutenção", "Médio", "Não",
+     "Robô parando com alarme de sobreaquecimento no motor do eixo 2",
+     "Alarme 50296 após 3 horas de ciclo. Carcaça do motor do eixo 2 a 85 °C.",
+     "Resolvida", "Limpo o ventilador do motor do eixo 2 e reduzida a aceleração no trecho de retorno.",
+     "Braço inferior — eixo 2", 4),
+    (6, 20, "13:15", "Carlos Souza", "Manutenção", "Alto", "Não",
+     "Perda de sinal do encoder durante a solda",
+     "Alarme 38103 intermitente. Cabo do chicote roçando na carcaça do eixo 3.",
+     "Resolvida", "Substituído o trecho do chicote de cabos entre os eixos 3 e 4 e refeita a fixação.",
+     "Chicote de cabos", 9),
+    (7, 36, "10:40", "Marcos Pereira", "Qualidade", "Médio", "Não",
+     "Buchas saindo cônicas no torno da ferramentaria",
+     "Diferença de 0,05 mm entre as pontas em 80 mm de comprimento.",
+     "Resolvida", "Realinhado o contraponto e reapertada a fixação no barramento.",
+     "Contraponto", 3),
+    (7, 16, "15:30", "Ana Lima", "Manutenção", "Alto", "Não",
+     "Torno não liga e fusível queimado",
+     "Fusível do painel queimou duas vezes seguidas ao ligar o motor.",
+     "Resolvida", "Substituídas as escovas do motor e o fusível; placa de controle testada.",
+     "Motor, polias e correia", 5),
     # Em andamento
+    (6, 4, "08:45", "Marcos Pereira", "Manutenção", "Alto", "Não",
+     "Ruído e folga no punho do robô",
+     "Ruído de engrenagem ao girar o eixo 5 e desvio de 1,5 mm no ponto de solda.",
+     "Em andamento", None, None, None),
     (0, 8, "10:20", "Ana Lima", "Manutenção", "Alto", "Sim",
      "Terceiro vazamento no cilindro da prensa em 60 dias",
      "Óleo na base do cilindro e pressão caindo para 150 bar ao fim do turno.",
@@ -193,6 +227,14 @@ OCORRENCIAS = [
      "Torno CNC com erro de referência no eixo X",
      "Alarme 1520 ao referenciar o eixo X. Máquina parada.",
      "Aberta", None, None, None),
+    (6, 0, "10:05", "Carlos Souza", "Segurança", "Alto", "Não",
+     "Vazamento no cilindro compensador do robô",
+     "Óleo escorrendo pela haste do compensador de peso; braço desce devagar com os freios soltos.",
+     "Aberta", None, None, None),
+    (7, 0, "11:20", "Juliana Rocha", "Manutenção", "Médio", "Não",
+     "Folga no carro transversal do torno",
+     "Volante do carro transversal com 0,3 mm de folga; acabamento com vibração.",
+     "Aberta", None, None, None),
 ]
 
 def main() -> None:
@@ -220,17 +262,17 @@ def main() -> None:
     # ── Máquinas e diagramas ───────────────────────────────────────────────
     ids: list[int] = []
     for m in MAQUINAS:
-        cfg3d = m.get("modelo_3d")
+        cfg3d = nexar.modelos_3d.ler_config(json.dumps(m["modelo_3d"])) if m.get("modelo_3d") else None
         cur = conn.execute(
             "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao, modelo_3d) VALUES (?,?,?,?,?,?,?)",
             (m["nome"], m["modelo"], m["fabricante"], m["ano"], m["setor"], m["descricao"],
-             json.dumps(cfg3d) if cfg3d else None),
+             nexar.modelos_3d.config_para_salvar(cfg3d)),
         )
         mid = cur.lastrowid
         ids.append(mid)
         n3d = nexar.modelos_3d.sincronizar_componentes(conn, mid, cfg3d)
         if n3d:
-            print(f"  modelo 3D '{cfg3d['familia']}' com {n3d} componentes → {m['nome']}")
+            print(f"  modelo 3D '{cfg3d.get('familia') or cfg3d.get('modelo')}' com {n3d} componentes → {m['nome']}")
         origem = None
         if m.get("diagrama"):
             origem = os.path.join("test_diagrams", m["diagrama"])

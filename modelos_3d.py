@@ -6,6 +6,10 @@ Cada máquina pode ter um modelo 3D de uma de duas fontes:
 
 - "familia": modelo construído em código no navegador, por família de máquina
   (static/js/viewer3d/familias/<familia>.js). Usado quando não há CAD.
+- "cad": modelo do fabricante registrado em static/models3d/<slug>/ (GLB +
+  modelo.json com os componentes, os nós do CAD de cada um e as palavras que
+  os identificam no diagnóstico). A máquina guarda só {"fonte":"cad","modelo":slug};
+  ler_config() expande para a forma "glb" que o visualizador consome.
 - "glb": arquivo convertido do CAD do fabricante (STEP → GLB), com um mapa
   que liga as peças do CAD aos componentes do catálogo e, opcionalmente,
   peças internas acrescentadas em código (o CAD de fabricante costuma trazer
@@ -18,6 +22,10 @@ existem no modelo, e o visualizador usa os mesmos component_id.
 from __future__ import annotations
 
 import json
+import os
+from functools import lru_cache
+
+PASTA_MODELOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "models3d")
 
 # component_id: (nome exibido, tipo, descrição curta para a IA)
 FAMILIAS: dict[str, dict] = {
@@ -93,9 +101,9 @@ def componentes_citados(texto: str, cfg: dict | None, limite: int = 5) -> list[d
     mesmo sem a análise estruturada do agente.
     """
     import re
-    if not texto or not cfg or cfg.get("fonte") != "familia":
+    palavras = palavras_do_modelo(cfg)
+    if not texto or not palavras:
         return []
-    palavras = PALAVRAS.get(cfg["familia"], {})
     nomes = {c["component_id"]: c["name"] for c in componentes_da_config(cfg)}
     norm = _normalizar_texto(texto)
     # Seções pelo título (listas numeradas dentro do procedimento não contam)
@@ -128,6 +136,72 @@ def familias_disponiveis() -> list[tuple[str, str]]:
     return [(k, v["nome"]) for k, v in FAMILIAS.items()]
 
 
+@lru_cache(maxsize=None)
+def _ler_modelo_cad(slug: str) -> dict | None:
+    """Lê static/models3d/<slug>/modelo.json (cacheado: os arquivos só mudam no deploy)."""
+    if not slug or "/" in slug or "\\" in slug or slug.startswith("."):
+        return None
+    caminho = os.path.join(PASTA_MODELOS, slug, "modelo.json")
+    try:
+        with open(caminho, encoding="utf-8") as f:
+            dados = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not dados.get("arquivo") or not dados.get("componentes"):
+        return None
+    return dados
+
+
+def modelos_cad_disponiveis() -> list[tuple[str, str]]:
+    """(slug, nome) dos modelos de fabricante presentes em static/models3d."""
+    try:
+        slugs = sorted(os.listdir(PASTA_MODELOS))
+    except OSError:
+        return []
+    return [(s, d["nome"]) for s in slugs if (d := _ler_modelo_cad(s))]
+
+
+def _expandir_cad(slug: str) -> dict | None:
+    d = _ler_modelo_cad(slug)
+    if not d:
+        return None
+    return {
+        "fonte": "glb",
+        "modelo": slug,
+        "nome": d["nome"],
+        "arquivo": f"/static/models3d/{slug}/{d['arquivo']}",
+        "internos": d.get("internos"),
+        "rotacao": d.get("rotacao"),
+        "agrupar_soltas": bool(d.get("agrupar_soltas")),
+        "mapa": {c["id"]: {"nos": c.get("nos", []), "nome": c["nome"],
+                           "explode": c.get("explode", [0, 0, 0]), "casca": c.get("casca", False)}
+                 for c in d["componentes"]},
+        "componentes": [{k: c.get(k, "") for k in ("id", "nome", "tipo", "descricao")}
+                        for c in d["componentes"]],
+    }
+
+
+def config_para_salvar(cfg: dict | None) -> str | None:
+    """JSON gravado em maquinas.modelo_3d (modelo de fabricante vira só a referência)."""
+    if not cfg:
+        return None
+    if cfg.get("modelo") and _ler_modelo_cad(cfg["modelo"]):
+        return json.dumps({"fonte": "cad", "modelo": cfg["modelo"]})
+    return json.dumps(cfg)
+
+
+def palavras_do_modelo(cfg: dict | None) -> dict[str, list[str]]:
+    """Termos (normalizados) que identificam cada componente em texto livre."""
+    if not cfg:
+        return {}
+    if cfg.get("fonte") == "familia":
+        return PALAVRAS.get(cfg.get("familia", ""), {})
+    d = _ler_modelo_cad(cfg.get("modelo", ""))
+    if not d:
+        return {}
+    return {c["id"]: [_normalizar_texto(p) for p in c.get("palavras", [])] for c in d["componentes"]}
+
+
 def ler_config(valor: str | None) -> dict | None:
     """Lê a coluna maquinas.modelo_3d (JSON) com tolerância a lixo."""
     if not valor:
@@ -138,6 +212,8 @@ def ler_config(valor: str | None) -> dict | None:
         return None
     if cfg.get("fonte") == "familia" and cfg.get("familia") in FAMILIAS:
         return cfg
+    if cfg.get("fonte") == "cad":
+        return _expandir_cad(cfg.get("modelo", ""))
     if cfg.get("fonte") == "glb" and cfg.get("arquivo"):
         return cfg
     return None

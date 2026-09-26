@@ -2709,13 +2709,15 @@ def _config_3d_do_form(atual: str | None) -> dict | None:
     """
     Lê o campo 'modelo_3d' do formulário de máquina:
     '' = sem modelo, '__manter__' = mantém o atual (ex.: CAD já importado),
-    ou o nome de uma família de modelo em código.
+    o nome de uma família de modelo em código ou 'cad:<slug>' (modelo do fabricante).
     """
     escolha = (request.form.get("modelo_3d") or "").strip()
     if escolha == "__manter__":
         return modelos_3d.ler_config(atual)
     if escolha in modelos_3d.FAMILIAS:
         return {"fonte": "familia", "familia": escolha}
+    if escolha.startswith("cad:"):
+        return modelos_3d.ler_config(json.dumps({"fonte": "cad", "modelo": escolha[4:]}))
     return None
 
 
@@ -2739,7 +2741,7 @@ def cadastro_maquina():
             cfg3d = _config_3d_do_form(None)
             cursor = conn.execute(
                 "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao, modelo_3d) VALUES (?,?,?,?,?,?,?)",
-                (nome, modelo, fabricante, ano, setor, descricao, json.dumps(cfg3d) if cfg3d else None),
+                (nome, modelo, fabricante, ano, setor, descricao, modelos_3d.config_para_salvar(cfg3d)),
             )
             maquina_id = cursor.lastrowid
             modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
@@ -2772,7 +2774,8 @@ def cadastro_maquina():
             flash("Não foi possível cadastrar a máquina. Tente novamente.", "danger")
         return redirect(url_for("maquinas"))
 
-    return render_template("cadastro_maquina.html", familias_3d=modelos_3d.familias_disponiveis(), cfg3d=None)
+    return render_template("cadastro_maquina.html", familias_3d=modelos_3d.familias_disponiveis(),
+                           modelos_cad=modelos_3d.modelos_cad_disponiveis(), cfg3d=None)
 
 
 @app.route("/maquinas/<int:maquina_id>/editar", methods=["GET", "POST"])
@@ -2803,7 +2806,7 @@ def editar_maquina(maquina_id: int):
             conn.execute(
                 "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=?, modelo_3d=? WHERE id=?",
                 (nome, modelo, fabricante, ano, setor, descricao,
-                 json.dumps(cfg3d) if cfg3d else None, maquina_id),
+                 modelos_3d.config_para_salvar(cfg3d), maquina_id),
             )
             modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             arquivos = request.files.getlist("diagramas")
@@ -2834,6 +2837,7 @@ def editar_maquina(maquina_id: int):
     conn.close()
     return render_template("cadastro_maquina.html", maquina=maquina,
                            familias_3d=modelos_3d.familias_disponiveis(),
+                           modelos_cad=modelos_3d.modelos_cad_disponiveis(),
                            cfg3d=modelos_3d.ler_config(maquina["modelo_3d"]))
 
 
@@ -3014,7 +3018,7 @@ def api_componente_historico(mid: int, cid: str):
         "ORDER BY data_resolucao DESC", (mid,)
     ).fetchall()
     conn.close()
-    termos = modelos_3d.PALAVRAS.get((cfg or {}).get("familia", ""), {}).get(cid, [])
+    termos = modelos_3d.palavras_do_modelo(cfg).get(cid, [])
     nome = next((c["name"] for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), cid)
     termos = termos + [modelos_3d._normalizar_texto(nome)]
     itens = []

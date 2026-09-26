@@ -102,7 +102,7 @@ Acesse **http://localhost:5000** no navegador.
 
 ### Base de demonstração
 
-Para apresentações, popule o banco com 6 máquinas e ~27 ocorrências dos últimos 60 dias
+Para apresentações, popule o banco com 8 máquinas (incluindo o robô ABB e o torno com CAD real) e ~34 ocorrências dos últimos 60 dias
 (abertas, em andamento e resolvidas com a solução registrada):
 
 ```bash
@@ -113,6 +113,11 @@ DATABASE_PATH=demo.db python scripts/seed_demo.py   # em um banco separado
 
 Com `GEMINI_API_KEY` configurada, cada diagnóstico é gerado pela IA (leva ~2 minutos
 por causa do limite de requisições); sem chave, fica o roteiro padrão de inspeção.
+
+### Modelos 3D a partir do CAD
+
+Máquinas podem usar o CAD do fabricante (STEP convertido em GLB) no visualizador 3D.
+O passo a passo para acrescentar uma máquina está em [docs/CAD_3D.md](docs/CAD_3D.md).
 
 ## Estrutura
 

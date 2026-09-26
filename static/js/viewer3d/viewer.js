@@ -44,6 +44,22 @@ export class Viewer3D {
 
     this._criarCena();
     this._criarInteracao();
+
+    // Renderiza só quando algo muda (câmera, destaque, explosão...): modelos de CAD
+    // pesados não devem consumir GPU e bateria com a cena parada
+    this._sujo = true;
+    this._ultimoPulso = 0;
+    this.controls.addEventListener('change', () => { this._sujo = true; });
+    for (const nome of ['carregar', 'enquadrar', 'focar', 'destacar', 'limparDestaques', 'selecionar',
+                        'raioX', 'explodir', 'marcarPonto', 'limparPonto', '_redimensionar']) {
+      const original = this[nome];
+      this[nome] = (...args) => {
+        const r = original.apply(this, args);
+        this._sujo = true;
+        if (r instanceof Promise) r.then(() => { this._sujo = true; }, () => {});
+        return r;
+      };
+    }
     this._loop = this._loop.bind(this);
     this._raf = requestAnimationFrame(this._loop);
   }
@@ -206,15 +222,51 @@ export class Viewer3D {
     raiz.add(gltf.scene);
     gltf.scene.updateMatrixWorld(true);
 
-    // mapa: { componentId: { nos: ["Part_17", ...], nome, explode, casca } }
+    // CAD desenhado com outro eixo "para cima": rotação em graus [x, y, z]
+    if (modelo.rotacao) {
+      gltf.scene.rotation.set(...modelo.rotacao.map(g => THREE.MathUtils.degToRad(g)));
+      gltf.scene.updateMatrixWorld(true);
+    }
+
+    // mapa: { componentId: { nos: ["Part_17", "Screw M4*", ...], nome, explode, casca } }
+    // Nome terminado em * casa por prefixo (o CAD repete o nome em várias instâncias).
+    const malhas = [];
+    gltf.scene.traverse(o => { if (o.isMesh || o.name) malhas.push(o); });
+    const grupos = [];
     for (const [id, def] of Object.entries(modelo.mapa || {})) {
       const grupo = new THREE.Group();
       grupo.userData = { componentId: id, nome: def.nome, explode: def.explode, casca: def.casca };
       raiz.add(grupo);
+      grupos.push(grupo);
       for (const nomeNo of def.nos || []) {
-        const no = gltf.scene.getObjectByName(nomeNo);
-        if (no) grupo.attach(no);   // attach preserva a posição no mundo
-        else console.warn(`[3D] nó "${nomeNo}" não encontrado no GLB (${id})`);
+        // O GLTFLoader troca espaços e caracteres reservados nos nomes (sanitizeNodeName)
+        const alvo = THREE.PropertyBinding.sanitizeNodeName(nomeNo.replace(/\*$/, ''));
+        const achados = nomeNo.endsWith('*')
+          ? malhas.filter(o => o.name.startsWith(alvo) && o.parent)
+          : [gltf.scene.getObjectByName(alvo)].filter(Boolean);
+        if (!achados.length) console.warn(`[3D] nó "${nomeNo}" não encontrado no GLB (${id})`);
+        for (const no of achados) {
+          if (!grupos.some(gr => gr === no.parent || gr.getObjectById(no.id))) grupo.attach(no);   // attach preserva a posição no mundo
+        }
+      }
+    }
+
+    // Peças não mapeadas (parafusos, arruelas...) acompanham o componente mais próximo,
+    // para a vista explodida não deixar peças soltas no ar
+    if (modelo.agrupar_soltas && grupos.length) {
+      const caixas = grupos.map(gr => new THREE.Box3().setFromObject(gr));
+      const soltas = [];
+      gltf.scene.traverse(o => { if (o.isMesh) soltas.push(o); });
+      const p = new THREE.Vector3();
+      for (const m of soltas) {
+        new THREE.Box3().setFromObject(m).getCenter(p);
+        let melhor = -1, dist = Infinity;
+        caixas.forEach((cx, i) => {
+          if (cx.isEmpty()) return;
+          const d = cx.distanceToPoint(p);
+          if (d < dist) { dist = d; melhor = i; }
+        });
+        if (melhor >= 0) grupos[melhor].attach(m);
       }
     }
     return raiz;
@@ -242,7 +294,8 @@ export class Viewer3D {
     // Ajusta pela menor abertura (vertical ou horizontal) para ocupar bem o palco
     const fovV = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const fovH = Math.atan(Math.tan(fovV) * this.camera.aspect);
-    const dist = raio / Math.sin(Math.min(fovV, fovH)) * 0.78;
+    // Vista explodida ocupa mais espaço: enquadra com folga
+    const dist = raio / Math.sin(Math.min(fovV, fovH)) * (this.explosao > 0 ? 0.95 : 0.78);
     const dir = new THREE.Vector3(0.75, 0.45, 1).normalize();
     this._voarPara(centro.clone().add(dir.multiplyScalar(dist)), centro, animar);
   }
@@ -258,8 +311,12 @@ export class Viewer3D {
     const caixa = new THREE.Box3().setFromObject(c.obj);
     const centro = caixa.getCenter(new THREE.Vector3());
     const raio = Math.max(caixa.getSize(new THREE.Vector3()).length() / 2, 0.35);
-    const dist = Math.max(raio * 3.5, 3.0);
+    const dist = Math.max(raio * 3.5, 4.2);
     const dir = this.camera.position.clone().sub(this.controls.target).normalize();
+    // Olha a peça pelo lado em que ela está (evita a máquina inteira na frente)
+    const fora = centro.clone().sub(new THREE.Box3().setFromObject(this.raiz).getCenter(new THREE.Vector3()));
+    fora.y = 0;
+    if (fora.lengthSq() > 0.04) dir.add(fora.normalize().multiplyScalar(1.2)).normalize();
     dir.y = Math.max(dir.y, 0.25);
     dir.normalize();
     this._voarPara(centro.clone().add(dir.multiplyScalar(dist)), centro, true);
@@ -493,6 +550,7 @@ export class Viewer3D {
     const dt = this._relogio.getDelta();
     const t = this._relogio.getElapsed();
 
+    const voando = !!this._voo;
     if (this._voo) {
       const v = this._voo;
       v.t = Math.min(1, v.t + dt / v.dur);
@@ -502,14 +560,21 @@ export class Viewer3D {
       if (v.t >= 1) this._voo = null;
     }
 
-    // Pulso suave nos componentes destacados
-    const pulso = 0.4 + 0.25 * (Math.sin(t * 3) + 1) / 2;
-    for (const id of this.destaques.keys()) {
-      const c = this.componentes.get(id);
-      if (c) c.meshes.forEach(m => { if (m.material.emissive) m.material.emissiveIntensity = pulso; });
+    // Pulso suave nos componentes destacados (~20 quadros/s bastam para o efeito)
+    let pulsou = false;
+    if (this.destaques.size && t - this._ultimoPulso > 0.05) {
+      this._ultimoPulso = t;
+      pulsou = true;
+      const pulso = 0.4 + 0.25 * (Math.sin(t * 3) + 1) / 2;
+      for (const id of this.destaques.keys()) {
+        const c = this.componentes.get(id);
+        if (c) c.meshes.forEach(m => { if (m.material.emissive) m.material.emissiveIntensity = pulso; });
+      }
     }
 
-    this.controls.update();
+    const moveu = this.controls.update();   // true enquanto o amortecimento ainda gira a câmera
+    if (!(this._sujo || voando || moveu || pulsou)) return;
+    this._sujo = false;
     this.renderer.render(this.scene, this.camera);
     this.labelRenderer.render(this.scene, this.camera);
     this._afastarEtiquetas();
