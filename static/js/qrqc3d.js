@@ -1,5 +1,5 @@
 /**
- * qrqc3d.js — Three.js + painel de diagnóstico Nexa IA
+ * qrqc3d.js — Three.js + painel de diagnóstico Nexar IA
  *
  * Dependências (carregadas no template via CDN):
  *   three.min.js r128
@@ -375,6 +375,23 @@ function deselectComponent() {
 }
 
 /* ── Painel de hipóteses ─────────────────────────────────────── */
+/* Escapa texto vindo da IA/banco antes de inserir via innerHTML (evita XSS) */
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function sevClass(v) {
+  return ['high', 'medium', 'low'].includes(v) ? v : 'low';
+}
+
+/* Clique numa hipótese (lista renderizada no servidor ou via JS) */
+document.addEventListener('click', e => {
+  const item = e.target.closest('.hypothesis-item[data-cid]');
+  if (!item) return;
+  selectComponent(item.dataset.cid);
+  focusComponent(item.dataset.cid);
+});
+
 function renderHypotheses(components) {
   const container = document.getElementById('hypothesis-list');
   if (!container) return;
@@ -387,14 +404,13 @@ function renderHypotheses(components) {
   container.innerHTML = components
     .sort((a, b) => b.probability - a.probability)
     .map(c => `
-      <div class="hypothesis-item" data-cid="${c.component_id}"
-           onclick="selectComponent('${c.component_id}'); focusComponent('${c.component_id}')">
+      <div class="hypothesis-item" data-cid="${esc(c.component_id)}">
         <div class="hyp-header">
-          <span class="hyp-dot ${c.severity}"></span>
-          <span class="hyp-name">${c.component_name}</span>
-          <span class="hyp-prob">${Math.round(c.probability * 100)}%</span>
+          <span class="hyp-dot ${sevClass(c.severity)}"></span>
+          <span class="hyp-name">${esc(c.component_name)}</span>
+          <span class="hyp-prob">${Math.round((Number(c.probability) || 0) * 100)}%</span>
         </div>
-        <div class="hyp-reason">${c.reason}</div>
+        <div class="hyp-reason">${esc(c.reason)}</div>
       </div>
     `).join('');
 }
@@ -405,7 +421,7 @@ function renderActions(actions) {
   container.innerHTML = actions.map((a, i) => `
     <div class="action-item">
       <span class="action-num">${i + 1}</span>
-      <span>${a}</span>
+      <span>${esc(a)}</span>
     </div>
   `).join('');
 }
@@ -436,7 +452,7 @@ function showInvestigation(steps) {
   const stepEls = steps.map((s, i) => `
     <div class="inv-step" id="inv-step-${i}">
       <span class="inv-step-icon"><i class="fas fa-circle" style="font-size:8px;color:var(--primary)"></i></span>
-      ${STEP_LABELS[s] || s}
+      ${esc(STEP_LABELS[s] || s)}
     </div>
   `).join('');
 
@@ -468,7 +484,7 @@ function showAnalysisLoading() {
   const overlay = document.getElementById('investigation-overlay');
   if (!overlay) return;
   overlay.querySelector('.inv-steps').innerHTML =
-    `<div class="inv-step active"><span class="inv-step-icon"><i class="fas fa-spinner spin"></i></span>Conectando à Nexa IA...</div>`;
+    `<div class="inv-step active"><span class="inv-step-icon"><i class="fas fa-spinner spin"></i></span>Conectando à Nexar IA...</div>`;
   overlay.style.display = 'flex';
 }
 
@@ -492,7 +508,7 @@ async function startAnalysis(ocorrenciaId) {
     if (data.error) {
       hideInvestigation();
       showError(data.error);
-      btn.innerHTML = '<i class="fas fa-robot"></i> Iniciar Análise Nexa IA';
+      btn.innerHTML = '<i class="fas fa-robot"></i> Analisar com Nexar IA';
       btn.disabled = false;
       return;
     }
@@ -543,7 +559,7 @@ async function startAnalysis(ocorrenciaId) {
   } catch (err) {
     hideInvestigation();
     showError('Erro de comunicação: ' + err.message);
-    btn.innerHTML = '<i class="fas fa-robot"></i> Iniciar Análise Nexa IA';
+    btn.innerHTML = '<i class="fas fa-robot"></i> Analisar com Nexar IA';
     btn.disabled = false;
   }
 }
@@ -555,7 +571,7 @@ function renderStepChips(steps) {
   container.innerHTML = unique.map(s => `
     <div class="step-chip">
       <i class="fas fa-check-circle"></i>
-      ${STEP_LABELS[s] || s}
+      ${esc(STEP_LABELS[s] || s)}
     </div>
   `).join('');
   document.getElementById('steps-section').style.display = 'block';
@@ -581,7 +597,7 @@ function showError(msg) {
   }
   box.innerHTML = `
     <i class="fas fa-exclamation-triangle" style="color:#ef4444;margin-top:2px;flex-shrink:0"></i>
-    <span>${msg}</span>
+    <span>${esc(msg)}</span>
   `;
   box.style.display = 'flex';
   clearTimeout(box._timer);

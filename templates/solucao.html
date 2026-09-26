@@ -4,7 +4,7 @@
 {% block content %}
 <div class="topbar">
   <div class="topbar-title">
-    <i class="fas fa-check-circle" style="color:var(--success);"></i> {{ t.diagnostico }}
+    <i class="fas fa-clipboard-check" style="color:var(--primary);"></i> Ocorrência
     {% if dados.id %}
     <span style="font-size:13px; color:var(--text-muted); margin-left:10px;">#{{ dados.id }}</span>
     {% endif %}
@@ -18,9 +18,11 @@
       <i class="fas fa-file-pdf" style="color:#EF4444;"></i> Baixar PDF
     </a>
     {% endif %}
-    <a href="{{ url_for('solicitacao') }}" class="btn btn-outline btn-sm">
-      <i class="fas fa-headset"></i> {{ t.solicitar_suporte }}
+    {% if dados.id and dados.maquina_id %}
+    <a href="{{ url_for('qrqc3d', oc_id=dados.id) }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-cube"></i> Visualização 3D <span style="font-size:10px; opacity:.7;">(beta)</span>
     </a>
+    {% endif %}
     <a href="{{ url_for('CadastroOcorrencia') }}" class="btn btn-primary btn-sm">
       <i class="fas fa-plus"></i> Nova ocorrência
     </a>
@@ -29,15 +31,10 @@
 
 <div class="page-body">
 
-  {% if ia_status == 'erro' %}
-  <div style="background:var(--danger-light); color:var(--danger); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
-    <i class="fas fa-exclamation-triangle"></i>
-    <span style="font-size:13px;">A IA falhou ao gerar o diagnóstico — exibindo análise genérica de fallback. Verifique sua chave Gemini nos logs.</span>
-  </div>
-  {% elif ia_status == 'fallback' %}
+  {% if ia_status in ('erro', 'fallback') %}
   <div style="background:var(--warning-light); color:#9A6700; padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
     <i class="fas fa-circle-info"></i>
-    <span style="font-size:13px;">IA offline — diagnóstico genérico aplicado. Configure GEMINI_API_KEY no .env para análise personalizada.</span>
+    <span style="font-size:13px;">O diagnóstico automático não estava disponível no momento do registro. A ocorrência foi salva e abaixo está o roteiro padrão de inspeção.</span>
   </div>
   {% endif %}
 
@@ -50,27 +47,36 @@
       <div class="card">
         <div class="card-header">
           <span class="card-title"><i class="fas fa-file-alt"></i> Dados da Ocorrência</span>
-          {% if dados.nivel_impacto == 'Alto' %}
-            <span class="badge badge-danger">🔴 Impacto Alto</span>
-          {% elif dados.nivel_impacto == 'Médio' %}
-            <span class="badge badge-warning">🟡 Impacto Médio</span>
-          {% else %}
-            <span class="badge badge-success">🟢 Impacto Baixo</span>
-          {% endif %}
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            {% if dados.status in ('Resolvida', 'Fechada') %}
+              <span class="badge badge-success">{{ dados.status }}</span>
+            {% elif dados.status == 'Em andamento' %}
+              <span class="badge badge-warning">{{ dados.status }}</span>
+            {% elif dados.status %}
+              <span class="badge badge-info">{{ dados.status }}</span>
+            {% endif %}
+            {% if dados.nivel_impacto == 'Alto' %}
+              <span class="badge badge-danger">Impacto alto</span>
+            {% elif dados.nivel_impacto == 'Médio' %}
+              <span class="badge badge-warning">Impacto médio</span>
+            {% else %}
+              <span class="badge badge-success">Impacto baixo</span>
+            {% endif %}
+          </div>
         </div>
         <div class="card-body">
           <div class="grid-2" style="gap:12px;">
             <div>
               <div class="label-mini">Operador</div>
-              <div class="value-mini">{{ dados.nome_operador }}</div>
+              <div class="value-mini">{{ dados.nome_operador or '—' }}</div>
             </div>
             <div>
               <div class="label-mini">Data</div>
-              <div class="value-mini">{{ dados.data_ocorrencia }}</div>
+              <div class="value-mini">{{ dados.data_ocorrencia | data_br }}</div>
             </div>
             <div>
               <div class="label-mini">Setor</div>
-              <div class="value-mini">{{ dados.setor_area }}</div>
+              <div class="value-mini">{{ dados.setor_area or '—' }}</div>
             </div>
             <div>
               <div class="label-mini">Máquina</div>
@@ -78,11 +84,11 @@
             </div>
             <div>
               <div class="label-mini">Tipo</div>
-              <div class="value-mini">{{ dados.tipo_ocorrencia }}</div>
+              <div class="value-mini">{{ dados.tipo_ocorrencia or '—' }}</div>
             </div>
             <div>
               <div class="label-mini">Recorrente</div>
-              <div class="value-mini">{{ dados.problema_recorrente }}</div>
+              <div class="value-mini">{{ dados.problema_recorrente or '—' }}</div>
             </div>
           </div>
 
@@ -107,11 +113,9 @@
             <i class="fas fa-robot"></i> {{ t.solucao }}
           </span>
           {% if ia_status == 'ok' %}
-            <span class="badge badge-primary">✨ Nexar IA</span>
-          {% elif ia_status == 'fallback' %}
-            <span class="badge badge-warning">Fallback offline</span>
-          {% else %}
-            <span class="badge badge-danger">Erro IA</span>
+            <span class="badge badge-primary">Gerado por Nexar IA</span>
+          {% elif resposta_ia %}
+            <span class="badge badge-warning">Roteiro padrão</span>
           {% endif %}
         </div>
         <div class="card-body">
@@ -124,7 +128,7 @@
           ">{{ resposta_ia }}</div>
 
           <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-            <button class="btn btn-ghost btn-sm" onclick="copiarIA()" type="button">
+            <button class="btn btn-ghost btn-sm" onclick="copiarIA(this)" type="button">
               <i class="fas fa-copy"></i> Copiar diagnóstico
             </button>
           </div>
@@ -184,7 +188,6 @@
                     display:flex; align-items:center; justify-content:center;
                     font-size:13px; font-weight:700; color:#fff;
                     text-shadow:0 1px 2px rgba(0,0,0,.6);
-                    animation: pulse-{{ a.tipo }} 2s ease-in-out infinite;
                   ">{{ loop.index }}</div>
               {% endfor %}
             </div>
@@ -255,7 +258,7 @@
         </div>
         <div class="card-body" style="text-align:center; padding:48px 24px; color:var(--text-muted);">
           <i class="fas fa-image" style="font-size:40px; margin-bottom:12px; opacity:.3; display:block;"></i>
-          <p style="font-size:13px;">Nenhum diagrama disponível para esta máquina.</p>
+          <p style="font-size:13px;">Nenhum diagrama em imagem disponível para esta máquina.</p>
           <a href="{{ url_for('maquinas') }}" class="btn btn-outline btn-sm" style="margin-top:12px;">
             <i class="fas fa-upload"></i> Adicionar diagrama
           </a>
@@ -326,11 +329,10 @@
     el.innerHTML = html;
   })();
 
-  function copiarIA() {
+  function copiarIA(btn) {
     const el = document.getElementById('iaContent');
     if (!el) return;
     navigator.clipboard.writeText(el.innerText).then(() => {
-      const btn = event.currentTarget;
       const txt = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-check"></i> Copiado!';
       setTimeout(() => { btn.innerHTML = txt; }, 1800);

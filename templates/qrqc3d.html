@@ -1,5 +1,5 @@
 {% extends 'menu.html' %}
-{% block title %}QRQC 3D AI — Nexar{% endblock %}
+{% block title %}Visualização 3D — Nexar{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="/static/css/qrqc3d.css" />
@@ -9,12 +9,12 @@
 <div class="topbar">
   <div class="topbar-title">
     <i class="fas fa-cube" style="color:var(--primary)"></i>
-    QRQC 3D AI
-    <span class="demo-badge" style="margin-left:10px">NEXA IA</span>
+    Visualização 3D
+    <span class="demo-badge" style="margin-left:10px">BETA</span>
   </div>
   <div class="topbar-actions">
-    <a href="{{ url_for('historico') }}" class="btn btn-outline btn-sm">
-      <i class="fas fa-arrow-left"></i> Voltar
+    <a href="{{ url_for('ver_ocorrencia', oc_id=ocorrencia.id) }}" class="btn btn-outline btn-sm">
+      <i class="fas fa-arrow-left"></i> Voltar à ocorrência
     </a>
   </div>
 </div>
@@ -30,7 +30,7 @@
           <i class="fas fa-cogs" style="color:var(--primary);margin-right:6px"></i>
           {% if maquina %}{{ maquina.nome }}{% else %}Máquina{% endif %}
         </span>
-        <span class="demo-badge">MODELO DEMO</span>
+        <span class="demo-badge">MODELO ILUSTRATIVO</span>
         <button class="btn-3d" onclick="resetCamera()">
           <i class="fas fa-compress-arrows-alt"></i> Reset
         </button>
@@ -51,7 +51,7 @@
       <div class="investigation-overlay" id="investigation-overlay" style="display:none">
         <div class="inv-title">
           <i class="fas fa-robot" style="margin-right:8px"></i>
-          NEXA IA — INVESTIGAÇÃO
+          NEXAR IA — INVESTIGAÇÃO
         </div>
         <div class="inv-steps" id="inv-steps"></div>
       </div>
@@ -105,7 +105,7 @@
           <button class="btn-analyze" id="btn-analyze"
                   onclick="startAnalysis({{ ocorrencia.id }})">
             <i class="fas fa-robot"></i>
-            {% if diagnostico %}Reanalisar com Nexa IA{% else %}Iniciar Análise Nexa IA{% endif %}
+            {% if diagnostico %}Reanalisar com Nexar IA{% else %}Analisar com Nexar IA{% endif %}
           </button>
         {% endif %}
       </div>
@@ -146,8 +146,7 @@
           <div class="hypothesis-list" id="hypothesis-list">
             {% if diag_componentes %}
               {% for c in diag_componentes | sort(attribute='probability', reverse=True) %}
-              <div class="hypothesis-item" data-cid="{{ c.component_id }}"
-                   onclick="selectComponent('{{ c.component_id }}'); focusComponent('{{ c.component_id }}')">
+              <div class="hypothesis-item" data-cid="{{ c.component_id }}">
                 <div class="hyp-header">
                   <span class="hyp-dot {{ c.severity }}"></span>
                   <span class="hyp-name">{{ c.component_name }}</span>
@@ -190,7 +189,7 @@
       <div id="empty-state" style="{{ 'display:none' if diagnostico else '' }}">
         <div class="empty-state">
           <i class="fas fa-robot"></i>
-          <p>Inicie a análise para que a Nexa IA investigue a ocorrência e destaque os componentes suspeitos no modelo 3D.</p>
+          <p>Inicie a análise para que a Nexar IA investigue a ocorrência e destaque os componentes suspeitos no modelo 3D.</p>
         </div>
       </div>
 
@@ -198,7 +197,7 @@
       <div id="tech-warning-section" style="{{ '' if diagnostico else 'display:none' }}">
         <div class="tech-warning">
           <i class="fas fa-shield-alt" style="margin-right:4px"></i>
-          O diagnóstico é sugestão baseada em dados históricos. A inspeção deve ser realizada por técnico qualificado. A Nexa IA não controla equipamentos.
+          O diagnóstico é sugestão baseada em dados históricos. A inspeção deve ser realizada por técnico qualificado. A Nexar IA não controla equipamentos.
         </div>
       </div>
 
@@ -209,7 +208,7 @@
   <!-- ── Etapas de investigação ─────────────────── -->
   <div id="steps-section" style="{{ '' if (diagnostico and diagnostico.steps_used) else 'display:none' }}; margin-top:16px;">
     <div class="panel-steps">
-      <div class="panel-section-title">Ferramentas Utilizadas pela Nexa IA</div>
+      <div class="panel-section-title">Ferramentas Utilizadas pela Nexar IA</div>
       <div class="steps-grid" id="steps-chips">
         {% if diagnostico and diagnostico.steps_used %}
           {% set steps = diagnostico.steps_used | tojson | safe %}
@@ -220,9 +219,9 @@
 
 </div><!-- /page-body -->
 
-<!-- Three.js via CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<!-- Three.js (auto-hospedado em static/vendor) -->
+<script src="/static/vendor/three/three.min.js"></script>
+<script src="/static/vendor/three/OrbitControls.js"></script>
 <script src="/static/js/qrqc3d.js"></script>
 
 <script>

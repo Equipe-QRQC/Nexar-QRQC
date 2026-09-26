@@ -36,6 +36,7 @@ proprietário que aumenta a precisão do modelo ao longo do tempo.
 - **Pillow** — processamento de imagens dos diagramas
 - **Twilio** — envio de mensagens WhatsApp
 - **HTML + CSS + JS** — frontend com templates Jinja2
+- Bibliotecas de frontend (Font Awesome, Chart.js, Three.js, fonte Inter) auto-hospedadas em `static/vendor/` — o sistema funciona sem acesso a CDNs externos
 
 ## Pré-requisitos
 
@@ -65,24 +66,15 @@ pip install -r requirements.txt
 
 ## Variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Copie `.env.example` para `.env` e preencha. As principais:
 
-```env
-# Obtenha sua chave gratuita em https://aistudio.google.com/apikey
-GEMINI_API_KEY=sua_chave_gemini_aqui
-
-# Opcional: troque o modelo (padrão: gemini-2.0-flash)
-GEMINI_MODEL=gemini-2.0-flash
-
-# Twilio (opcional, só se for usar a funcionalidade de suporte WhatsApp)
-TWILIO_ACCOUNT_SID=seu_account_sid
-TWILIO_AUTH_TOKEN=seu_auth_token
-TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
-TWILIO_DESTINATARIO=whatsapp:+55119XXXXXXXX
-
-# Sessão Flask
-SECRET_KEY=alguma_string_secreta_aqui
-```
+| Variável | Obrigatória | Uso |
+|---|---|---|
+| `SECRET_KEY` | sim | Assinatura das sessões. Sem ela, uma chave temporária é gerada e os logins expiram a cada reinício. |
+| `ADMIN_PASSWORD` | sim | Senha do administrador (aplicada a cada inicialização). |
+| `GEMINI_API_KEY` | sim | Diagnóstico da ocorrência, marcações no diagrama e assistente. |
+| `OPENAI_API_KEY` | sim | Sensor Visual, Visualização 3D e inspeção de documento (app mobile). |
+| `SMTP_*`, `SUPORTE_EMAIL_*` | não | Envio de e-mail dos chamados de suporte. |
 
 > O arquivo `.env` está no `.gitignore` e nunca deve ser commitado.
 
@@ -106,7 +98,7 @@ python app.py
 
 Acesse **http://localhost:5000** no navegador.
 
-**Login padrão:** `admin@nexar.com` / `nexar2026`
+**Login:** `admin@nexar.com` com a senha definida em `ADMIN_PASSWORD`.
 
 ## Estrutura
 

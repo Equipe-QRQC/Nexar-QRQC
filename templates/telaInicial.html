@@ -18,7 +18,7 @@
   <!-- ── Saudação ─────────────────────────────────────────────────────────── -->
   <div style="margin-bottom:18px;">
     <h2 style="font-size:20px; font-weight:700; color:var(--text); margin-bottom:4px;">
-      Olá, {{ current_user.nome.split()[0] }} 👋
+      Olá, {{ current_user.nome.split()[0] }}
     </h2>
     <p style="color:var(--text-muted); font-size:13px;">
       Aqui está o panorama atual das ocorrências e máquinas.
@@ -32,7 +32,7 @@
       ('Total',      kpis.total,        'fa-clipboard-list', 'var(--primary)'),
       ('Abertas',    kpis.abertas,      'fa-folder-open',    'var(--warning)'),
       ('Resolvidas', kpis.resolvidas,   'fa-check-circle',   'var(--success)'),
-      ('Alto Imp.',  kpis.alto_impacto, 'fa-exclamation-triangle','var(--danger)'),
+      ('Críticas em aberto', kpis.alto_impacto, 'fa-exclamation-triangle','var(--danger)'),
       ('Máquinas',   kpis.maquinas,     'fa-cogs',           '#8B5CF6'),
     ] %}
 
@@ -152,14 +152,13 @@
             <th>Operador</th>
             <th>Tipo</th>
             <th>Impacto</th>
-            <th>IA</th>
             <th>Status</th>
             <th>Quando</th>
           </tr>
         </thead>
         <tbody>
           {% for o in ultimas %}
-          <tr>
+          <tr class="row-link" onclick="location.href='{{ url_for('ver_ocorrencia', oc_id=o.id) }}'" style="cursor:pointer;">
             <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
             <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
             <td style="font-size:13px;">{{ o.nome_operador }}</td>
@@ -170,14 +169,9 @@
               {% else %}<span class="badge badge-info">{{ o.tipo_ocorrencia or '—' }}</span>{% endif %}
             </td>
             <td>
-              {% if o.nivel_impacto == 'Alto' %}<span class="badge badge-danger">🔴 Alto</span>
-              {% elif o.nivel_impacto == 'Médio' %}<span class="badge badge-warning">🟡 Médio</span>
-              {% else %}<span class="badge badge-success">🟢 Baixo</span>{% endif %}
-            </td>
-            <td>
-              {% if o.ia_status == 'ok' %}<span class="badge badge-success">✓</span>
-              {% elif o.ia_status == 'fallback' %}<span class="badge badge-warning">offline</span>
-              {% else %}<span class="badge badge-danger">erro</span>{% endif %}
+              {% if o.nivel_impacto == 'Alto' %}<span class="badge badge-danger">Alto</span>
+              {% elif o.nivel_impacto == 'Médio' %}<span class="badge badge-warning">Médio</span>
+              {% elif o.nivel_impacto %}<span class="badge badge-success">Baixo</span>{% else %}—{% endif %}
             </td>
             <td>
               {% if o.status in ('Resolvida','Fechada') %}<span class="badge badge-success">{{ o.status }}</span>
@@ -185,7 +179,7 @@
               {% else %}<span class="badge badge-info">{{ o.status or 'Aberta' }}</span>{% endif %}
             </td>
             <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
-              {{ o.data_registro[:16] if o.data_registro else '—' }}
+              {{ (o.data_ocorrencia or o.data_registro) | data_br }}
             </td>
           </tr>
           {% endfor %}

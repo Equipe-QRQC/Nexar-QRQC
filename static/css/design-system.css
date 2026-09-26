@@ -3,7 +3,7 @@
    Paleta baseada na identidade visual Nexar
    ═══════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('../vendor/inter/inter.css');
 
 :root {
   /* Cores principais */
@@ -273,6 +273,9 @@ body {
   flex-direction: column;
   transition: var(--transition);
   min-height: 100vh;
+  /* Sem isso, tabelas largas empurram a largura da página (item flex) e o
+     overflow-x do .table-wrapper nunca atua — quebra o layout no celular. */
+  min-width: 0;
 }
 
 .main-content.expanded { margin-left: var(--sidebar-collapsed); }
@@ -831,7 +834,7 @@ textarea.form-control { resize: vertical; min-height: 90px; }
     gap: 6px;
   }
   .topbar-title { font-size: 14px; gap: 6px; padding: 10px 0; }
-  .topbar-actions { gap: 5px; padding: 6px 0; }
+  .topbar-actions { gap: 5px; padding: 6px 0; flex-wrap: wrap; max-width: 100%; }
   .topbar-actions .btn { padding: 6px 10px; font-size: 12px; gap: 4px; }
   .topbar-actions .btn i { font-size: 11px; }
   .topbar-actions .btn-lg { padding: 6px 10px; font-size: 12px; }
@@ -864,6 +867,13 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   /* Chat */
   .chat-window { width: calc(100vw - 24px); right: 12px; bottom: 72px; }
   .chat-fab { bottom: 14px; right: 14px; width: 48px; height: 48px; font-size: 18px; }
+  /* Em formulários o botão flutuante cobre campos e botões: fica oculto */
+  .page-CadastroOcorrencia .chat-fab,
+  .page-registrar_ocorrencia .chat-fab,
+  .page-solicitacao .chat-fab,
+  .page-cadastro_maquina .chat-fab,
+  .page-editar_maquina .chat-fab,
+  .page-sensor .chat-fab { display: none; }
 
   /* Actions row: wrap buttons, submit full width */
   .actions-row { justify-content: stretch; gap: 8px; }

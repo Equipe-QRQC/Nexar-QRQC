@@ -44,9 +44,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexar.qrqc")
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.getenv("DATABASE_PATH") or os.path.join(BASE_DIR, "qrqc.db")
+
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
+_secret = os.getenv("SECRET_KEY", "").strip()
+if not _secret:
+    # Sem SECRET_KEY definida, gera uma chave aleatória por execução: as sessões
+    # deixam de valer a cada reinício, mas ninguém consegue forjá-las.
+    _secret = secrets.token_hex(32)
+    logger.warning("SECRET_KEY não definida no .env — usando chave temporária (logins expiram ao reiniciar).")
+app.secret_key = _secret
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB por requisição
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 csrf = CSRFProtect(app)
 limiter = Limiter(
     key_func=lambda: str(current_user.id) if current_user.is_authenticated else get_remote_address(),
@@ -55,8 +67,19 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.errorhandler(413)
+def too_large_handler(e):
+    msg = "Arquivo muito grande. O limite é de 10 MB por envio."
+    if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/") or request.is_json:
+        return jsonify({"ok": False, "erro": msg}), 413
+    flash(msg, "danger")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
 @app.errorhandler(429)
 def rate_limit_handler(e):
+    if request.path == "/login":
+        return render_template("login.html", erro="Muitas tentativas de acesso. Aguarde um minuto e tente novamente."), 429
     return jsonify({"erro": "Muitas tentativas. Aguarde um momento e tente novamente."}), 429
 
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
@@ -221,7 +244,7 @@ TRANSLATIONS = {
         "sem_dados": "Sem dados ainda",
         "sem_dados_sub": "Registre ocorrências para visualizar a análise de falhas.",
         "total_kpi": "Total", "abertas_kpi": "Abertas", "resolvidas_kpi": "Resolvidas",
-        "taxa_resolucao": "Taxa de Resolução", "alto_impacto_kpi": "Alto Impacto",
+        "taxa_resolucao": "Taxa de Resolução", "alto_impacto_kpi": "Críticas em aberto",
         "ocorrencias_label": "ocorrências", "pendentes_label": "pendentes",
         "concluidas_label": "concluídas", "do_total": "do total",
         "criticas_abertas": "abertas críticas",
@@ -353,8 +376,35 @@ def content_is_valid(stream, ext: str) -> bool:
     return header == magic
 
 
+def pdf_texto(texto, markdown: bool = False) -> str:
+    """
+    Prepara texto livre (usuário ou IA) para um Paragraph do ReportLab:
+    escapa &, < e > (senão '<img ...>' ou '<b>' quebram o PDF com erro 500),
+    remove caracteres que a Helvetica não desenha (emojis viram quadrados),
+    converte **negrito** opcionalmente e preserva quebras de linha.
+    """
+    from xml.sax.saxutils import escape
+    t = str(texto or "")
+    t = "".join(ch for ch in t if _cabe_na_helvetica(ch))
+    t = escape(t)
+    if markdown:
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", t)
+    return t.replace("\r\n", "\n").replace("\n", "<br/>")
+
+
+def _cabe_na_helvetica(ch: str) -> bool:
+    if ch in "\n\r\t":
+        return True
+    try:
+        ch.encode("cp1252")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def get_db():
-    conn = sqlite3.connect("qrqc.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -383,6 +433,10 @@ def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) ->
     if not (SMTP_USER and SMTP_PASSWORD and SUPORTE_EMAIL_DESTINO):
         logger.warning("[suporte] SMTP não configurado — pulando envio de email")
         return False
+
+    import html as _html
+    raw_ticket = ticket
+    ticket = {k: _html.escape(str(v or "")) for k, v in ticket.items()}
 
     cor_pri = {
         "Baixa": "#10B981", "Média": "#F59E0B",
@@ -420,8 +474,8 @@ def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) ->
         msg = MIMEMultipart()
         msg["From"]     = SUPORTE_EMAIL_FROM
         msg["To"]       = SUPORTE_EMAIL_DESTINO
-        msg["Reply-To"] = ticket["email"]
-        msg["Subject"]  = f"[{ticket['prioridade']}] {ticket['protocolo']} — {ticket['assunto']}"
+        msg["Reply-To"] = raw_ticket["email"]
+        msg["Subject"]  = f"[{raw_ticket['prioridade']}] {raw_ticket['protocolo']} — {raw_ticket['assunto']}"
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
         for path in (anexos_paths or []):
@@ -606,12 +660,21 @@ def init_db():
             except Exception as e:
                 logger.warning(f"Migração de {col} falhou: {e}")
 
-    admin = c.execute("SELECT id FROM usuarios WHERE email = 'admin@nexar.com'").fetchone()
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower()
+    admin_senha = os.getenv("ADMIN_PASSWORD", "").strip()
+    admin = c.execute("SELECT id FROM usuarios WHERE email = ?", (admin_email,)).fetchone()
     if not admin:
+        if not admin_senha:
+            admin_senha = "nexar2026"
+            logger.warning("ADMIN_PASSWORD não definida — admin criado com a senha padrão. Troque antes de usar.")
         c.execute(
             "INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",
-            ("Administrador", "admin@nexar.com", generate_password_hash("nexar2026"), "admin"),
+            ("Administrador", admin_email, generate_password_hash(admin_senha), "admin"),
         )
+    elif admin_senha:
+        # Permite redefinir a senha do admin pelo .env (ex.: antes de uma demo)
+        c.execute("UPDATE usuarios SET senha_hash = ? WHERE id = ?",
+                  (generate_password_hash(admin_senha), admin["id"]))
     conn.commit()
     conn.close()
 
@@ -639,26 +702,49 @@ def load_user(user_id):
     return None
 
 
+@app.template_filter("data_br")
+def data_br(valor) -> str:
+    """'2026-09-25 10:30[:ss]' ou ISO → '25/09/2026 10:30'. Vazio → '—'."""
+    if not valor:
+        return "—"
+    txt = str(valor).strip().replace("T", " ")
+    try:
+        dt = datetime.fromisoformat(txt[:19])
+        return dt.strftime("%d/%m/%Y %H:%M") if len(txt) > 10 else dt.strftime("%d/%m/%Y")
+    except ValueError:
+        return txt[:16]
+
+
+# EN/ES ainda cobrem só parte das telas: ficam desligados até a tradução estar
+# completa. Defina ENABLE_I18N=1 no .env para reativar o seletor de idioma.
+I18N_ATIVO = os.getenv("ENABLE_I18N", "").strip() == "1"
+
+
+def idioma_atual() -> str:
+    return session.get("lang", "pt") if I18N_ATIVO else "pt"
+
+
 @app.context_processor
 def inject_globals():
-    lang = session.get("lang", "pt")
+    lang = idioma_atual()
     return {"t": TRANSLATIONS.get(lang, TRANSLATIONS["pt"]), "lang": lang}
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         senha = request.form.get("senha", "")
         conn = get_db()
         u = conn.execute(
-            "SELECT * FROM usuarios WHERE email = ? AND ativo = 1", (email,)
+            "SELECT * FROM usuarios WHERE LOWER(email) = ? AND ativo = 1", (email.lower(),)
         ).fetchone()
         conn.close()
         if u and check_password_hash(u["senha_hash"], senha):
             login_user(User(u["id"], u["nome"], u["email"], u["perfil"]))
             return redirect(url_for("dashboard"))
-        lang = session.get("lang", "pt")
+        lang = idioma_atual()
         erro = {"pt": "E-mail ou senha incorretos.", "en": "Invalid email or password.", "es": "Correo o contraseña incorrectos."}.get(lang)
         return render_template("login.html", erro=erro)
     return render_template("login.html")
@@ -701,7 +787,7 @@ def _historico_para_gemini(historico: list[dict]) -> list[dict]:
 @limiter.limit("15 per minute")
 def chat():
     if not gemini_client:
-        return jsonify({"resposta": "⚠️ IA offline — configure GEMINI_API_KEY no .env."}), 503
+        return jsonify({"resposta": MSG_IA_INDISPONIVEL}), 503
     data = request.get_json(silent=True) or {}
     mensagem = (data.get("mensagem") or "").strip()
     historico = data.get("historico") or []
@@ -729,19 +815,21 @@ def chat():
             logger.exception(f"[chat/{modelo}] erro")
             break
 
-    if ultimo_erro and _should_try_next_model(ultimo_erro):
-        msg = ("⚠️ Todos os modelos da IA falharam (cota, indisponibilidade ou modelo descontinuado). "
-               "Aguarde alguns minutos ou configure uma nova chave em outra conta Google.")
-        return jsonify({"resposta": msg}), 503
-    return jsonify({"resposta": f"Erro ao consultar a IA: {ultimo_erro}"}), 500
+    logger.warning(f"[chat] todos os modelos falharam: {ultimo_erro}")
+    return jsonify({"resposta": MSG_IA_INDISPONIVEL}), 503
 
 
 # ── AI Response (com fallback robusto) ────────────────────────────────────────
 
+MSG_IA_INDISPONIVEL = (
+    "O assistente de IA está indisponível no momento. Tente novamente em alguns minutos."
+)
+
+
 def _fallback_response(prompt: str) -> str:
     """Resposta gerada localmente quando a IA está indisponível."""
     return (
-        "⚠️ IA temporariamente indisponível — diagnóstico genérico:\n\n"
+        "Diagnóstico automático indisponível no momento — roteiro padrão de inspeção:\n\n"
         "1. **Causa provável:** verificar histórico recente da máquina, possíveis falhas mecânicas, "
         "elétricas ou de processo.\n"
         "2. **Componentes a verificar:** sensores principais, atuadores, sistema de refrigeração e "
@@ -752,8 +840,7 @@ def _fallback_response(prompt: str) -> str:
         "   • Verificar leituras dos sensores e parâmetros do CLP.\n"
         "   • Conferir últimos planos de manutenção preventiva.\n"
         "4. **Quando escalar:** caso o problema persista após inspeção inicial ou represente risco "
-        "à segurança, escalar imediatamente para o engenheiro de manutenção/fabricante.\n\n"
-        "Por favor, configure GEMINI_API_KEY no arquivo .env para diagnósticos personalizados."
+        "à segurança, escalar imediatamente para o engenheiro de manutenção/fabricante."
     )
 
 
@@ -1051,19 +1138,9 @@ def get_ai_response(
 
     # Se nenhum modelo respondeu o diagnóstico → erro
     if not texto_diagnostico:
-        err_str = str(ultimo_erro) if ultimo_erro else ""
-        is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
-        if ultimo_erro and is_quota:
-            msg = (
-                "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
-                "**Soluções possíveis:**\n"
-                "1. Aguarde alguns minutos e tente novamente\n"
-                "2. Crie uma **nova chave em outra conta Google**: https://aistudio.google.com/apikey\n"
-                "3. Use um projeto Google Cloud que **nunca teve billing ativado**\n\n"
-            )
-        else:
-            msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
-        return (msg + _fallback_response(prompt), [], "erro")
+        # Detalhe técnico só no log; o usuário vê o roteiro padrão de inspeção.
+        logger.error(f"[ia] nenhum modelo gerou diagnóstico: {ultimo_erro}")
+        return (_fallback_response(prompt), [], "erro")
 
     # ── 2ª chamada: detecção de componentes (bounding boxes) ──────────────────
     anotacoes: list[dict] = []
@@ -1106,10 +1183,16 @@ def index():
 def dashboard():
     """Dashboard com KPIs, gráfico de tipo e últimas ocorrências."""
     conn = get_db()
-    total       = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias").fetchone()["n"]
-    abertas     = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status = 'Aberta'").fetchone()["n"]
-    resolvidas  = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status IN ('Resolvida','Fechada')").fetchone()["n"]
-    alto_imp    = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE nivel_impacto = 'Alto' AND status = 'Aberta'").fetchone()["n"]
+    # Mesma definição de "aberta" usada em /analise: tudo que não foi resolvido/fechado.
+    k = conn.execute("""
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS abertas,
+               COALESCE(SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS resolvidas,
+               COALESCE(SUM(CASE WHEN nivel_impacto = 'Alto'
+                        AND COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS alto_imp
+        FROM ocorrencias
+    """).fetchone()
+    total, abertas, resolvidas, alto_imp = k["total"], k["abertas"], k["resolvidas"], k["alto_imp"]
     total_maq   = conn.execute("SELECT COUNT(*) AS n FROM maquinas").fetchone()["n"]
 
     por_tipo = conn.execute("""
@@ -1149,10 +1232,10 @@ def analise():
     kpis = conn.execute("""
         SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as abertas,
-            SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as resolvidas,
-            SUM(CASE WHEN nivel_impacto = 'Alto'
-                     AND status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as alto_aberto
+            COALESCE(SUM(CASE WHEN COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as abertas,
+            COALESCE(SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as resolvidas,
+            COALESCE(SUM(CASE WHEN nivel_impacto = 'Alto'
+                     AND COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as alto_aberto
         FROM ocorrencias
     """).fetchone()
 
@@ -1450,7 +1533,6 @@ def ocorrencia_pdf(oc_id: int):
     imp = row["nivel_impacto"] or "Baixo"
     imp_color = C_RED if imp == "Alto" else (C_AMB if imp == "Médio" else C_GRN)
     imp_bg    = C_REDBG if imp == "Alto" else (C_AMBBG if imp == "Médio" else C_GRNBG)
-    imp_icon  = "🔴" if imp == "Alto" else ("🟡" if imp == "Médio" else "🟢")
 
     # ── Estilos ──────────────────────────────────────────────────────────────
     base = getSampleStyleSheet()
@@ -1549,7 +1631,7 @@ def ocorrencia_pdf(oc_id: int):
         val_color = color if color else C_DARK
         return [
             Paragraph(label.upper(), s_label),
-            Paragraph(f"<font color='#{val_color.hexval()[2:]}'><b>{value}</b></font>", s_value)
+            Paragraph(f"<font color='#{val_color.hexval()[2:]}'><b>{pdf_texto(value)}</b></font>", s_value)
         ]
 
     data_fmt = fmt_data(row["data_ocorrencia"])
@@ -1561,7 +1643,7 @@ def ocorrencia_pdf(oc_id: int):
         [info_cell("Setor",     row["setor_area"] or "—"),info_cell("Data",         data_fmt)],
         [info_cell("Tipo",      row["tipo_ocorrencia"] or "—"),
          info_cell("Recorrente",row["problema_recorrente"] or "—")],
-        [info_cell("Impacto",   f"{imp_icon} {imp}", imp_color),
+        [info_cell("Impacto",   imp, imp_color),
          info_cell("Status",    status, st_color)],
     ]
 
@@ -1584,11 +1666,7 @@ def ocorrencia_pdf(oc_id: int):
 
     # ── Texto limpo (remove marcações básicas) ───────────────────────────────
     def limpar(texto):
-        import re
-        t = texto or ""
-        t = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', t)
-        t = re.sub(r'\*(.+?)\*', r'<i>\1</i>', t)
-        return t
+        return pdf_texto(texto, markdown=True)
 
     # ── Monta documento ──────────────────────────────────────────────────────
     buf = BytesIO()
@@ -1700,8 +1778,8 @@ def ocorrencia_pdf(oc_id: int):
                        ("ROUNDEDCORNERS",(0,0),(-1,-1),9)],
             )
             txt = Table(
-                [[Paragraph(f"<b>{a.get('titulo','')}</b>", s_ann_t)],
-                 [Paragraph(a.get('descricao',''), s_ann_d)]],
+                [[Paragraph(f"<b>{pdf_texto(a.get('titulo',''))}</b>", s_ann_t)],
+                 [Paragraph(pdf_texto(a.get('descricao','')), s_ann_d)]],
                 colWidths=[pw - 2 * margin - 40],
                 style=[("TOPPADDING",(0,0),(-1,-1),0),
                        ("BOTTOMPADDING",(0,0),(-1,-1),0),
@@ -1781,7 +1859,7 @@ def resolver_ocorrencia(ocorrencia_id: int):
         })
     except Exception as e:
         logger.exception("[ocorrencia] falha ao resolver")
-        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"ok": False, "erro": "Não foi possível salvar. Tente novamente."}), 500
 
 
 @app.route("/suporte")
@@ -1919,27 +1997,41 @@ Use linguagem técnica em português. Foque em ações práticas imediatas. Seja
         logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={ia_status}")
     except Exception as e:
         logger.exception("Falha ao persistir a ocorrência")
-        flash(f"Erro ao salvar a ocorrência: {e}", "danger")
+        flash("Não foi possível salvar a ocorrência. Tente novamente.", "danger")
         return redirect(url_for("CadastroOcorrencia"))
 
-    dados = {
-        "id": ocorrencia_id,
-        "maquina_nome": maquina_nome,
-        "data_ocorrencia": data_ocorrencia,
-        "nome_operador": nome_operador,
-        "setor_area": setor_area,
-        "descricao": descricao,
-        "tipo_ocorrencia": tipo_ocorrencia,
-        "nivel_impacto": nivel_impacto,
-        "problema_recorrente": problema_recorrente,
-        "detalhamento_tecnico": detalhamento_tecnico,
-    }
+    # Post/Redirect/Get: recarregar a página não duplica a ocorrência.
+    return redirect(url_for("ver_ocorrencia", oc_id=ocorrencia_id))
+
+
+@app.route("/ocorrencia/<int:oc_id>")
+@login_required
+def ver_ocorrencia(oc_id: int):
+    """Página de detalhe da ocorrência (diagnóstico IA + diagrama anotado)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome "
+        "FROM ocorrencias o "
+        "LEFT JOIN maquinas m ON o.maquina_id = m.id "
+        "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
+        "WHERE o.id = ?", (oc_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash("Ocorrência não encontrada.", "danger")
+        return redirect(url_for("historico"))
+    try:
+        anotacoes = json.loads(row["anotacoes_ia"] or "[]")
+    except Exception:
+        anotacoes = []
+    dados = dict(row)
+    dados["status"] = row["status"] or "Aberta"
     return render_template(
         "solucao.html",
         dados=dados,
-        resposta_ia=resposta_ia,
-        ia_status=ia_status,
-        diagrama_url=diagrama_url,
+        resposta_ia=row["resposta_ia"],
+        ia_status=row["ia_status"],
+        diagrama_url=row["diagrama_url"],
         anotacoes=anotacoes,
     )
 
@@ -1970,7 +2062,7 @@ def sensor():
         maquinas=maquinas_lista,
         recentes=recentes,
         taxonomia=sensor_visual.TAXONOMIA_DEFEITOS,
-        ia_online=gemini_client is not None,
+        ia_online=nexa_ia._get_client() is not None,
     )
 
 
@@ -1981,7 +2073,7 @@ def sensor_analisar():
     """Recebe uma foto, roda a detecção de anomalias e registra a percepção."""
     _sensor_client = nexa_ia._get_client()
     if not _sensor_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
@@ -2046,7 +2138,7 @@ def sensor_analisar():
         conn.close()
     except Exception as e:
         logger.exception("[sensor] erro ao salvar percepção")
-        return jsonify({"erro": f"Erro ao salvar percepção: {e}"}), 500
+        return jsonify({"erro": "Não foi possível salvar a inspeção. Tente novamente."}), 500
 
     return jsonify({
         "id": percepcao_id,
@@ -2204,7 +2296,7 @@ def sensor_laudo_pdf(percepcao_id: int):
 
     def info_cell(label, value):
         return [Paragraph(label.upper(), s_label),
-                Paragraph(f"<b>{value}</b>", s_value)]
+                Paragraph(f"<b>{pdf_texto(value)}</b>", s_value)]
 
     buf = BytesIO()
     pw, ph = A4
@@ -2218,7 +2310,7 @@ def sensor_laudo_pdf(percepcao_id: int):
         canvas.setFont("Helvetica", 8)
         now_str = dt_mod.datetime.now().strftime("%d/%m/%Y %H:%M")
         canvas.drawString(margin, 5 * mm, f"Nexar QRQC · Sensor Visual · Gerado em {now_str}")
-        canvas.drawRightString(pw - margin, 5 * mm, f"Percepção #{percepcao_id} · Página {doc.page}")
+        canvas.drawRightString(pw - margin, 5 * mm, f"Inspeção nº {percepcao_id} · Página {doc.page}")
         canvas.setFillColor(score_color)
         canvas.rect(0, 13.5 * mm, pw, 1.5 * mm, fill=1, stroke=0)
         canvas.restoreState()
@@ -2298,18 +2390,18 @@ def sensor_laudo_pdf(percepcao_id: int):
                        ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")],
             )
             linhas = [[Paragraph(
-                f"<b>{a.get('rotulo', '')}</b> &nbsp;"
+                f"<b>{pdf_texto(a.get('rotulo', ''))}</b> &nbsp;"
                 f"<font color='{SEV_COR.get(sev)}' size=7><b>{SEV_LABEL.get(sev, sev.upper())} · {conf}%</b></font>",
                 s_ann_t)]]
             if a.get("componente") or a.get("descricao"):
                 linhas.append([Paragraph(
-                    f"<b>{a.get('componente', '')}:</b> {a.get('descricao', '')}", s_ann_d)])
+                    f"<b>{pdf_texto(a.get('componente', ''))}:</b> {pdf_texto(a.get('descricao', ''))}", s_ann_d)])
             if a.get("causa_provavel"):
                 linhas.append([Paragraph(
-                    f"<font color='#B45309'><b>Possível causa:</b></font> {a['causa_provavel']}", s_ann_d)])
+                    f"<font color='#B45309'><b>Possível causa:</b></font> {pdf_texto(a['causa_provavel'])}", s_ann_d)])
             if a.get("recomendacao"):
                 linhas.append([Paragraph(
-                    f"<font color='#1D4ED8'><b>Ação:</b></font> {a['recomendacao']}", s_ann_d)])
+                    f"<font color='#1D4ED8'><b>Ação:</b></font> {pdf_texto(a['recomendacao'])}", s_ann_d)])
             txt = Table(linhas, colWidths=[pw - 2 * margin - 40],
                         style=[("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
                                ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)])
@@ -2476,7 +2568,7 @@ def cadastro_maquina():
             flash(f"Máquina '{nome}' cadastrada com sucesso.", "success")
         except Exception as e:
             logger.exception("Erro ao cadastrar máquina")
-            flash(f"Erro ao cadastrar máquina: {e}", "danger")
+            flash("Não foi possível cadastrar a máquina. Tente novamente.", "danger")
         return redirect(url_for("maquinas"))
 
     return render_template("cadastro_maquina.html")
@@ -2531,7 +2623,7 @@ def editar_maquina(maquina_id: int):
             flash(f"Máquina '{nome}' atualizada com sucesso.", "success")
         except Exception as e:
             logger.exception("Erro ao editar máquina")
-            flash(f"Erro ao atualizar: {e}", "danger")
+            flash("Não foi possível atualizar a máquina. Tente novamente.", "danger")
         conn.close()
         return redirect(url_for("maquinas"))
 
@@ -2614,7 +2706,7 @@ def enviar():
         logger.info(f"[suporte] ticket criado — protocolo={protocolo} prioridade={prioridade}")
     except Exception as e:
         logger.exception("[suporte] falha ao persistir ticket")
-        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"ok": False, "erro": "Não foi possível salvar. Tente novamente."}), 500
 
     # Notificação por email (best-effort — não bloqueia o sucesso)
     email_ok = enviar_email_suporte(ticket, anexos_paths)
@@ -2676,7 +2768,7 @@ def qrqc3d(oc_id: int):
 
     conn.close()
 
-    lang = session.get("lang", "pt")
+    lang = idioma_atual()
     t = TRANSLATIONS.get(lang, TRANSLATIONS["pt"])
     return render_template(
         "qrqc3d.html",
@@ -3010,7 +3102,7 @@ _DOC_SCHEMA = (
 def mobile_inspecao_documento():
     openai_client = nexa_ia._get_client()
     if not openai_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo:
@@ -3067,9 +3159,10 @@ def mobile_inspecao_documento():
     except Exception as e:
         err = str(e)
         if "credit_balance_exhausted" in err or "insufficient_quota" in err:
-            return jsonify({"erro": "Créditos OpenAI esgotados."}), 200
+            logger.error("[mobile/doc] créditos OpenAI esgotados")
+            return jsonify({"erro": "A análise por IA está indisponível no momento."}), 503
         logger.exception("[mobile/doc] erro OpenAI")
-        return jsonify({"erro": f"Falha na análise: {err[:200]}"}), 502
+        return jsonify({"erro": "Não foi possível analisar o documento. Tente novamente."}), 502
 
     result.setdefault("modelo", "gpt-4o")
     result.setdefault("score", 100 if not result.get("problemas") else max(
@@ -3089,7 +3182,7 @@ def mobile_inspecao_documento():
 def mobile_sensor_analisar():
     _sensor_client = nexa_ia._get_client()
     if not _sensor_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
@@ -3150,7 +3243,7 @@ def mobile_sensor_analisar():
         conn.close()
     except Exception as e:
         logger.exception("[mobile/sensor] erro ao salvar percepção")
-        return jsonify({"erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"erro": "Não foi possível salvar. Tente novamente."}), 500
 
     return jsonify({
         "id": percepcao_id,

@@ -195,15 +195,30 @@ def test_detectar_offline_sem_client():
     assert r["score"] is None
 
 
-class _FakeResp:
-    def __init__(self, parsed): self.parsed = parsed; self.text = ""
+class _FakeMsg:
+    def __init__(self, content): self.content = content
 
-class _FakeModels:
-    def __init__(self, parsed): self._parsed = parsed
-    def generate_content(self, **kw): return _FakeResp(self._parsed)
+class _FakeChoice:
+    def __init__(self, content): self.message = _FakeMsg(content)
+
+class _FakeResp:
+    def __init__(self, content): self.choices = [_FakeChoice(content)]
+
+class _FakeCompletions:
+    def __init__(self, content): self._content = content
+    def create(self, **kw): return _FakeResp(self._content)
+
+class _FakeChat:
+    def __init__(self, content): self.completions = _FakeCompletions(content)
 
 class _FakeClient:
-    def __init__(self, parsed): self.models = _FakeModels(parsed)
+    """Imita o cliente OpenAI: client.chat.completions.create(...).choices[0].message.content"""
+    def __init__(self, parsed): self.chat = _FakeChat(parsed.model_dump_json())
+
+
+def _img():
+    from PIL import Image
+    return Image.new("RGB", (64, 64), "gray")
 
 
 def test_detectar_fluxo_ok():
@@ -213,8 +228,8 @@ def test_detectar_fluxo_ok():
                              descricao="óleo escorrendo", recomendacao="trocar junta"),
     ])
     r = sv.detectar_anomalias(
-        client=_FakeClient(parsed), img_obj=object(),
-        modelos=["gemini-x"], should_try_next=lambda e: True,
+        client=_FakeClient(parsed), img_obj=_img(),
+        modelos=["gpt-x"], should_try_next=lambda e: True,
     )
     assert r["status"] == "ok"
     assert r["severidade_max"] == "critico"
@@ -224,8 +239,8 @@ def test_detectar_fluxo_ok():
 
 def test_detectar_sem_anomalia():
     r = sv.detectar_anomalias(
-        client=_FakeClient(sv.DeteccaoAnomalias(anomalias=[])), img_obj=object(),
-        modelos=["gemini-x"], should_try_next=lambda e: True,
+        client=_FakeClient(sv.DeteccaoAnomalias(anomalias=[])), img_obj=_img(),
+        modelos=["gpt-x"], should_try_next=lambda e: True,
     )
     assert r["status"] == "sem_anomalia"
     assert r["score"] == 100

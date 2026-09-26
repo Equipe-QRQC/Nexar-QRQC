@@ -2,7 +2,11 @@
 {% block title %}{{ t.analise_titulo }} — Nexar QRQC{% endblock %}
 
 {% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chartjs/chart.umd.min.js"></script>
+<style>
+  .analise-grid { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:16px; align-items:start; }
+  @media (max-width: 1023px) { .analise-grid { grid-template-columns:minmax(0,1fr); } }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -60,7 +64,7 @@
   </div>
 
   <!-- Gráficos -->
-  <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;align-items:start;">
+  <div class="analise-grid">
 
     <!-- Pareto por máquina -->
     <div class="card">
@@ -98,6 +102,7 @@
 
   {% endif %}
 </div>
+{% endblock %}
 
 {% block scripts %}
 <script>
@@ -247,5 +252,4 @@ new Chart(document.getElementById('chartImpacto'), {
 
 {% endif %}
 </script>
-{% endblock %}
 {% endblock %}

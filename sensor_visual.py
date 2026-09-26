@@ -224,7 +224,7 @@ def detectar_anomalias(
     if client is None or img_obj is None:
         return {
             "anomalias": [], "score": None, "severidade_max": "ok",
-            "resumo": "IA indisponível — configure OPENAI_API_KEY.",
+            "resumo": "A análise por IA está indisponível no momento.",
             "modelo": None, "status": "offline",
         }
 
@@ -291,7 +291,7 @@ def detectar_anomalias(
 
     return {
         "anomalias": [], "score": None, "severidade_max": "ok",
-        "resumo": f"Falha na análise: {ultimo_erro}" if ultimo_erro else "Falha na análise.",
+        "resumo": "Não foi possível analisar a foto agora. Tente novamente em alguns minutos.",
         "modelo": None, "status": "erro",
     }
 
