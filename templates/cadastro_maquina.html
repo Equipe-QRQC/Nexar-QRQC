@@ -55,6 +55,19 @@
               <input type="text" name="ano" class="form-control" placeholder="Ex: 2018"
                      value="{{ maquina.ano if maquina else '' }}" />
             </div>
+            <div class="form-group">
+              <label class="form-label">Modelo 3D</label>
+              <select name="modelo_3d" class="form-select">
+                {% if cfg3d and cfg3d.fonte == 'glb' %}
+                <option value="__manter__" selected>Modelo do fabricante (CAD importado)</option>
+                {% endif %}
+                <option value="" {% if not cfg3d %}selected{% endif %}>— Sem modelo 3D —</option>
+                {% for chave, nome in familias_3d %}
+                <option value="{{ chave }}" {% if cfg3d and cfg3d.fonte == 'familia' and cfg3d.familia == chave %}selected{% endif %}>{{ nome }}</option>
+                {% endfor %}
+              </select>
+              <small style="font-size:11.5px; color:var(--text-muted);">Define os componentes que a Nexar IA pode apontar no 3D.</small>
+            </div>
           </div>
           <div class="form-group" style="margin-bottom:0;">
             <label class="form-label">Descrição / Observações</label>

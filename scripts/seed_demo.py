@@ -4,7 +4,7 @@ Popula o banco com uma base de demonstração realista para apresentações.
 Cria 6 máquinas (com diagramas de test_diagrams/), cerca de 30 ocorrências
 distribuídas nos últimos 60 dias — abertas, em andamento e resolvidas com a
 solução aplicada registrada, incluindo casos recorrentes — e os componentes
-da Visualização 3D para o motor do transportador.
+da Visualização 3D para a prensa hidráulica (modelo em código).
 
 Os diagnósticos são gerados pela IA de verdade (Gemini) quando GEMINI_API_KEY
 está configurada; sem chave, fica o roteiro padrão de inspeção. Nenhum texto
@@ -38,7 +38,8 @@ MAQUINAS = [
     {"nome": "Prensa Hidráulica PH-200", "modelo": "PH-200/40T", "fabricante": "Schuler",
      "ano": "2019", "setor": "Estamparia",
      "descricao": "Prensa hidráulica de 40 t para estampagem de chapas. Pressão nominal 180 bar.",
-     "diagrama": "diagrama_prensa_hidraulica.png"},
+     "diagrama": "diagrama_prensa_hidraulica.png",
+     "modelo_3d": {"fonte": "familia", "familia": "prensa_hidraulica"}},
     {"nome": "Motor do Transportador MT-75", "modelo": "W22 75 cv", "fabricante": "WEG",
      "ano": "2020", "setor": "Montagem",
      "descricao": "Motor de indução trifásico que aciona a esteira principal da linha de montagem.",
@@ -194,21 +195,6 @@ OCORRENCIAS = [
      "Aberta", None, None, None),
 ]
 
-# Componentes da Visualização 3D (modelo ilustrativo) para o motor do transportador
-COMPONENTES_3D = [
-    ("base", "Base de fixação", "estrutura"),
-    ("carcaca", "Carcaça do motor", "estrutura"),
-    ("tampa_traseira", "Tampa traseira", "estrutura"),
-    ("estator", "Estator / bobinado", "elétrico"),
-    ("rolamento_la", "Rolamento lado acoplado (6316)", "mecânico"),
-    ("eixo", "Eixo do rotor", "mecânico"),
-    ("acoplamento", "Acoplamento elástico", "mecânico"),
-    ("ventilador", "Ventilador de refrigeração", "mecânico"),
-    ("caixa_ligacao", "Caixa de ligação", "elétrico"),
-    ("redutor", "Redutor da esteira", "mecânico"),
-]
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--forcar", action="store_true", help="apaga ocorrências e máquinas existentes")
@@ -234,12 +220,17 @@ def main() -> None:
     # ── Máquinas e diagramas ───────────────────────────────────────────────
     ids: list[int] = []
     for m in MAQUINAS:
+        cfg3d = m.get("modelo_3d")
         cur = conn.execute(
-            "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao) VALUES (?,?,?,?,?,?)",
-            (m["nome"], m["modelo"], m["fabricante"], m["ano"], m["setor"], m["descricao"]),
+            "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao, modelo_3d) VALUES (?,?,?,?,?,?,?)",
+            (m["nome"], m["modelo"], m["fabricante"], m["ano"], m["setor"], m["descricao"],
+             json.dumps(cfg3d) if cfg3d else None),
         )
         mid = cur.lastrowid
         ids.append(mid)
+        n3d = nexar.modelos_3d.sincronizar_componentes(conn, mid, cfg3d)
+        if n3d:
+            print(f"  modelo 3D '{cfg3d['familia']}' com {n3d} componentes → {m['nome']}")
         origem = None
         if m.get("diagrama"):
             origem = os.path.join("test_diagrams", m["diagrama"])
@@ -257,15 +248,7 @@ def main() -> None:
     conn.commit()
     print(f"✓ {len(ids)} máquinas cadastradas")
 
-    motor_id = ids[1]
-    for cid, nome, tipo in COMPONENTES_3D:
-        conn.execute(
-            "INSERT INTO machine_components (maquina_id, component_id, name, type, description) VALUES (?,?,?,?,?)",
-            (motor_id, cid, nome, tipo, ""),
-        )
-    conn.commit()
     conn.close()
-    print(f"✓ {len(COMPONENTES_3D)} componentes 3D para '{MAQUINAS[1]['nome']}'")
 
     # ── Ocorrências (em ordem cronológica, para o histórico alimentar a IA) ─
     if args.sem_ia:

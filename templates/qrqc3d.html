@@ -1,7 +1,8 @@
 {% extends 'menu.html' %}
-{% block title %}Visualização 3D — Nexar{% endblock %}
+{% block title %}Visualização 3D — Nexar QRQC{% endblock %}
 
 {% block head %}
+{% include 'partials/three_importmap.html' %}
 <link rel="stylesheet" href="/static/css/qrqc3d.css" />
 {% endblock %}
 
@@ -10,7 +11,7 @@
   <div class="topbar-title">
     <i class="fas fa-cube" style="color:var(--primary)"></i>
     Visualização 3D
-    <span class="demo-badge" style="margin-left:10px">BETA</span>
+    <span style="font-size:13px; color:var(--text-muted); margin-left:6px;">Ocorrência #{{ ocorrencia.id }}</span>
   </div>
   <div class="topbar-actions">
     <a href="{{ url_for('ver_ocorrencia', oc_id=ocorrencia.id) }}" class="btn btn-outline btn-sm">
@@ -19,230 +20,150 @@
   </div>
 </div>
 
-<div class="page-body" style="padding:0 24px 24px; overflow:hidden;">
-
+<div class="page-body">
   <div class="qrqc3d-layout">
 
-    <!-- ── Viewer 3D ──────────────────────────────── -->
-    <div class="viewer-card">
-      <div class="viewer-toolbar">
-        <span class="viewer-title">
-          <i class="fas fa-cogs" style="color:var(--primary);margin-right:6px"></i>
-          {% if maquina %}{{ maquina.nome }}{% else %}Máquina{% endif %}
-        </span>
-        <span class="demo-badge">MODELO ILUSTRATIVO</span>
-        <button class="btn-3d" onclick="resetCamera()">
-          <i class="fas fa-compress-arrows-alt"></i> Reset
-        </button>
-        <button class="btn-3d" onclick="clearHighlights()">
-          <i class="fas fa-times"></i> Limpar
-        </button>
+    <!-- ── Visualizador ─────────────────────────────── -->
+    <div class="v3d-card viewer-card">
+      <div class="v3d-toolbar">
+        <span class="v3d-titulo"><i class="fas fa-cogs"></i> {{ maquina.nome if maquina else 'Máquina' }}</span>
+        {% if cfg3d %}
+          {% if cfg3d.fonte == 'glb' %}
+            <span class="v3d-fonte cad">Modelo do fabricante</span>
+          {% else %}
+            <span class="v3d-fonte">Modelo ilustrativo</span>
+          {% endif %}
+          <button class="v3d-btn" id="btnEnquadrar" title="Enquadrar a máquina"><i class="fas fa-expand"></i> Enquadrar</button>
+          <button class="v3d-btn" id="btnRaioX" title="Deixa a carcaça translúcida para ver peças internas"><i class="fas fa-x-ray"></i> Raio-X</button>
+          <label class="v3d-explodir" title="Vista explodida">
+            <i class="fas fa-object-ungroup"></i>
+            <input type="range" id="sliderExplodir" min="0" max="100" value="0" aria-label="Vista explodida" />
+          </label>
+        {% endif %}
       </div>
 
-      <canvas id="three-canvas"></canvas>
+      <div class="v3d-stage" id="v3dStage">
+        {% if not maquina %}
+          <div class="v3d-vazio">
+            <i class="fas fa-link-slash"></i>
+            Esta ocorrência não tem máquina associada.
+          </div>
+        {% elif not cfg3d %}
+          <div class="v3d-vazio">
+            <i class="fas fa-cube"></i>
+            <div><b>{{ maquina.nome }}</b> ainda não tem modelo 3D.</div>
+            <a href="{{ url_for('editar_maquina', maquina_id=maquina.id) }}" class="btn btn-outline btn-sm">
+              <i class="fas fa-pen"></i> Configurar modelo 3D da máquina
+            </a>
+          </div>
+        {% else %}
+          <div class="v3d-carregando" id="v3dCarregando"><i class="fas fa-circle-notch fa-spin"></i> Carregando modelo 3D…</div>
+        {% endif %}
 
-      <!-- Tooltip hover -->
-      <div class="component-tooltip" id="component-tooltip">
-        <div class="ct-name"></div>
-        <div class="ct-prob"></div>
-      </div>
-
-      <!-- Overlay de investigação -->
-      <div class="investigation-overlay" id="investigation-overlay" style="display:none">
-        <div class="inv-title">
-          <i class="fas fa-robot" style="margin-right:8px"></i>
-          NEXAR IA — INVESTIGAÇÃO
+        <!-- Investigação do agente -->
+        <div class="investigation-overlay" id="investigation-overlay" style="display:none">
+          <div class="inv-title"><i class="fas fa-robot" style="margin-right:8px"></i> NEXAR IA — INVESTIGAÇÃO</div>
+          <div class="inv-steps" id="inv-steps"></div>
         </div>
-        <div class="inv-steps" id="inv-steps"></div>
       </div>
+
+      {% if cfg3d %}
+      <div class="v3d-legenda">
+        <span><i style="background:#DC2626"></i> Causa provável</span>
+        <span><i style="background:#D97706"></i> Verificar</span>
+        <span><i style="background:#2563EB"></i> Referência</span>
+        <span style="margin-left:auto;"><i class="fas fa-hand-pointer" style="width:auto;height:auto;background:none;"></i> Clique numa peça para ver detalhes e histórico</span>
+      </div>
+      {% endif %}
     </div>
 
-    <!-- ── Painel direito ──────────────────────────── -->
+    <!-- ── Painel ───────────────────────────────────── -->
     <div class="panel-info">
 
-      <!-- Ocorrência -->
       <div>
         <div class="panel-section-title">Ocorrência #{{ ocorrencia.id }}</div>
         <div class="occ-info">
-          <div class="occ-info-row">
-            <span class="occ-info-label">Operador</span>
-            <span class="occ-info-value">{{ ocorrencia.nome_operador or '—' }}</span>
-          </div>
-          <div class="occ-info-row">
-            <span class="occ-info-label">Tipo</span>
-            <span class="occ-info-value">{{ ocorrencia.tipo_ocorrencia or '—' }}</span>
-          </div>
-          <div class="occ-info-row">
-            <span class="occ-info-label">Impacto</span>
+          <div class="occ-info-row"><span class="occ-info-label">Tipo</span><span class="occ-info-value">{{ ocorrencia.tipo_ocorrencia or '—' }}</span></div>
+          <div class="occ-info-row"><span class="occ-info-label">Impacto</span>
             <span class="occ-info-value">
-              {% if ocorrencia.nivel_impacto == 'Alto' %}
-                <span class="severity-badge severity-high">Alto</span>
-              {% elif ocorrencia.nivel_impacto == 'Médio' %}
-                <span class="severity-badge severity-medium">Médio</span>
-              {% else %}
-                <span class="severity-badge severity-low">{{ ocorrencia.nivel_impacto or '—' }}</span>
-              {% endif %}
+              {% if ocorrencia.nivel_impacto == 'Alto' %}<span class="severity-badge severity-high">Alto</span>
+              {% elif ocorrencia.nivel_impacto == 'Médio' %}<span class="severity-badge severity-medium">Médio</span>
+              {% else %}<span class="severity-badge severity-low">{{ ocorrencia.nivel_impacto or '—' }}</span>{% endif %}
             </span>
           </div>
-          <div class="occ-info-row">
-            <span class="occ-info-label">Status</span>
-            <span class="occ-info-value">{{ ocorrencia.status }}</span>
-          </div>
+          <div class="occ-info-row"><span class="occ-info-label">Status</span><span class="occ-info-value">{{ ocorrencia.status or 'Aberta' }}</span></div>
         </div>
-        <div style="margin-top:10px; padding:10px; background:var(--bg-input); border-radius:var(--radius-sm); font-size:12px; color:var(--text-muted); line-height:1.5;">
-          {{ ocorrencia.descricao or '' }}
-        </div>
+        <div class="summary-box" style="margin-top:10px;">{{ ocorrencia.descricao or '' }}</div>
       </div>
 
-      <!-- Botão de análise -->
+      <!-- Componente selecionado -->
+      <div class="selected-comp-panel" id="compPanel">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span class="scp-name" id="compNome"></span>
+          <span class="severity-badge" id="compSev" style="display:none;"></span>
+          <button class="v3d-btn" id="compFocar" style="margin-left:auto; height:28px;"><i class="fas fa-crosshairs"></i> Focar</button>
+        </div>
+        <div class="scp-reason" id="compMotivo"></div>
+        <div id="compHistorico" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- Componentes apontados -->
+      <div id="secDestaques" style="{{ '' if destaques else 'display:none' }}">
+        <div class="panel-section-title" id="tituloDestaques">
+          {% if destaques and destaques[0].fonte == 'agente' %}Hipóteses da Nexar IA{% else %}Componentes citados no diagnóstico{% endif %}
+        </div>
+        <div class="hypothesis-list" id="hypothesis-list"></div>
+      </div>
+
+      {% if maquina and cfg3d %}
       <div>
-        {% if not ocorrencia.maquina_id %}
-          <div class="tech-warning">
-            <i class="fas fa-exclamation-triangle"></i>
-            Esta ocorrência não tem máquina associada. Associe uma máquina para habilitar a análise 3D.
-          </div>
-        {% else %}
-          <button class="btn-analyze" id="btn-analyze"
-                  onclick="startAnalysis({{ ocorrencia.id }})">
-            <i class="fas fa-robot"></i>
-            {% if diagnostico %}Reanalisar com Nexar IA{% else %}Analisar com Nexar IA{% endif %}
-          </button>
-        {% endif %}
-      </div>
-
-      <!-- Resultado — hidden até análise -->
-      <div id="result-sections" style="{{ 'display:block' if diagnostico else 'display:none' }}">
-
-        <!-- Severidade geral + summary -->
-        <div>
-          <div class="panel-section-title" style="display:flex;align-items:center;gap:8px">
-            Diagnóstico
-            <span class="severity-badge severity-{{ diagnostico.severity if diagnostico else 'low' }}"
-                  id="overall-severity">
-              {% if diagnostico %}
-                {{ {'high':'Alta','medium':'Média','low':'Baixa'}.get(diagnostico.severity, diagnostico.severity) }}
-              {% endif %}
-            </span>
-          </div>
-          <div class="summary-box" id="summary-box">
-            {{ diagnostico.summary if diagnostico else '' }}
-          </div>
-        </div>
-
-        <!-- Componente selecionado -->
-        <div class="selected-comp-panel" id="selected-comp-panel">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <span class="scp-name" style="font-weight:600;font-size:14px;color:var(--text)"></span>
-            <span class="severity-badge scp-sev"></span>
-            <span class="scp-prob" style="margin-left:auto;font-weight:700;color:var(--primary);font-size:13px"></span>
-          </div>
-          <div class="scp-id" style="font-size:11px;color:var(--text-muted);margin-bottom:4px"></div>
-          <div class="scp-reason" style="font-size:12px;color:var(--text-muted);line-height:1.5"></div>
-        </div>
-
-        <!-- Hipóteses -->
-        <div>
-          <div class="panel-section-title">Hipóteses</div>
-          <div class="hypothesis-list" id="hypothesis-list">
-            {% if diag_componentes %}
-              {% for c in diag_componentes | sort(attribute='probability', reverse=True) %}
-              <div class="hypothesis-item" data-cid="{{ c.component_id }}">
-                <div class="hyp-header">
-                  <span class="hyp-dot {{ c.severity }}"></span>
-                  <span class="hyp-name">{{ c.component_name }}</span>
-                  <span class="hyp-prob">{{ (c.probability * 100)|int }}%</span>
-                </div>
-                <div class="hyp-reason">{{ c.reason }}</div>
-              </div>
-              {% endfor %}
-            {% endif %}
-          </div>
-        </div>
-
-        <!-- Análise de padrão -->
-        <div id="pattern-section" style="{{ 'display:none' if not (diagnostico and diagnostico.pattern_analysis) else '' }}">
-          <div class="panel-section-title">Padrão Histórico</div>
-          <div class="summary-box" id="pattern-analysis"
-               style="border-left:3px solid var(--info);background:var(--info-light);color:var(--info)">
-            {{ diagnostico.pattern_analysis if diagnostico and diagnostico.pattern_analysis else '' }}
-          </div>
-        </div>
-
-        <!-- Ações recomendadas -->
-        <div>
-          <div class="panel-section-title">Ações Recomendadas</div>
-          <div class="action-list" id="action-list">
-            {% if diagnostico and diagnostico.recommended_actions %}
-              {% for a in diagnostico.recommended_actions %}
-              <div class="action-item">
-                <span class="action-num">{{ loop.index }}</span>
-                <span>{{ a }}</span>
-              </div>
-              {% endfor %}
-            {% endif %}
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Empty state -->
-      <div id="empty-state" style="{{ 'display:none' if diagnostico else '' }}">
-        <div class="empty-state">
+        <button class="btn-analyze" id="btn-analyze">
           <i class="fas fa-robot"></i>
-          <p>Inicie a análise para que a Nexar IA investigue a ocorrência e destaque os componentes suspeitos no modelo 3D.</p>
+          {% if diagnostico %}Reanalisar com Nexar IA{% else %}Investigar com Nexar IA{% endif %}
+        </button>
+        <p style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">
+          O agente consulta o histórico da máquina e as soluções já aplicadas para apontar as peças mais prováveis.
+        </p>
+      </div>
+      {% endif %}
+
+      <div id="result-sections" style="{{ '' if diagnostico else 'display:none' }}">
+        <div class="panel-section-title" style="display:flex;align-items:center;gap:8px">
+          Diagnóstico
+          <span class="severity-badge severity-{{ diagnostico.severity if diagnostico else 'low' }}" id="overall-severity">
+            {% if diagnostico %}{{ {'high':'Alta','medium':'Média','low':'Baixa'}.get(diagnostico.severity, diagnostico.severity) }}{% endif %}
+          </span>
+        </div>
+        <div class="summary-box" id="summary-box">{{ diagnostico.summary if diagnostico else '' }}</div>
+        <div id="pattern-section" style="{{ '' if (diagnostico and diagnostico.pattern_analysis) else 'display:none' }}; margin-top:12px;">
+          <div class="panel-section-title">Padrão histórico</div>
+          <div class="summary-box" id="pattern-analysis">{{ diagnostico.pattern_analysis if diagnostico and diagnostico.pattern_analysis else '' }}</div>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="panel-section-title">Ações recomendadas</div>
+          <div class="action-list" id="action-list"></div>
         </div>
       </div>
 
-      <!-- Aviso técnico -->
-      <div id="tech-warning-section" style="{{ '' if diagnostico else 'display:none' }}">
-        <div class="tech-warning">
-          <i class="fas fa-shield-alt" style="margin-right:4px"></i>
-          O diagnóstico é sugestão baseada em dados históricos. A inspeção deve ser realizada por técnico qualificado. A Nexar IA não controla equipamentos.
-        </div>
-      </div>
-
-    </div><!-- /panel-info -->
-
-  </div><!-- /qrqc3d-layout -->
-
-  <!-- ── Etapas de investigação ─────────────────── -->
-  <div id="steps-section" style="{{ '' if (diagnostico and diagnostico.steps_used) else 'display:none' }}; margin-top:16px;">
-    <div class="panel-steps">
-      <div class="panel-section-title">Ferramentas Utilizadas pela Nexar IA</div>
-      <div class="steps-grid" id="steps-chips">
-        {% if diagnostico and diagnostico.steps_used %}
-          {% set steps = diagnostico.steps_used | tojson | safe %}
-        {% endif %}
+      <div class="tech-warning">
+        <i class="fas fa-shield-alt" style="margin-right:4px"></i>
+        As indicações são sugestões da IA com base na descrição e no histórico. A inspeção deve ser feita por técnico qualificado.
       </div>
     </div>
   </div>
+</div>
+{% endblock %}
 
-</div><!-- /page-body -->
-
-<!-- Three.js (auto-hospedado em static/vendor) -->
-<script src="/static/vendor/three/three.min.js"></script>
-<script src="/static/vendor/three/OrbitControls.js"></script>
-<script src="/static/js/qrqc3d.js"></script>
-
+{% block scripts %}
 <script>
-  // Dados passados do backend para o JS
-  const QRQC3D_CONFIG = {
+  window.QRQC3D = {
     ocorrenciaId: {{ ocorrencia.id }},
-    components: {{ componentes | tojson }},
-    diagnosis: {% if diagnostico %}{{ diagnostico | tojson }}{% else %}null{% endif %},
-    diagComponents: {{ diag_componentes | tojson }},
+    maquinaId: {{ maquina.id if maquina else 'null' }},
+    modelo: {{ cfg3d | tojson }},
+    catalogo: {{ catalogo | tojson }},
+    destaques: {{ destaques | tojson }},
+    acoes: {{ (diagnostico.recommended_actions if diagnostico else []) | tojson }},
   };
-
-  // Inicia após DOM + Three.js carregar
-  window.addEventListener('DOMContentLoaded', () => {
-    initQRQC3D(QRQC3D_CONFIG);
-
-    // Renderiza steps chips se há diagnóstico
-    {% if diagnostico and diagnostico.steps_used %}
-      const savedSteps = {{ diagnostico.steps_used | tojson }};
-      if (Array.isArray(savedSteps)) renderStepChips(savedSteps);
-    {% endif %}
-  });
 </script>
-
+<script type="module" src="/static/js/qrqc3d_app.js"></script>
 {% endblock %}

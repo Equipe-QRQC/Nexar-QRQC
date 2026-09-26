@@ -1,0 +1,115 @@
+/* ═══════════════════════════════════════════════════
+   Visualizador 3D de máquinas (static/js/viewer3d)
+   ═══════════════════════════════════════════════════ */
+
+.v3d-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm);
+}
+
+.v3d-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+.v3d-titulo { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 8px; margin-right: auto; min-width: 0; }
+.v3d-titulo i { color: var(--primary); }
+.v3d-fonte {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--radius-full);
+  background: var(--bg-page); color: var(--text-muted); border: 1px solid var(--border);
+}
+.v3d-fonte.cad { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+
+.v3d-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); color: var(--text); font-size: 12.5px; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+}
+.v3d-btn:hover { border-color: var(--primary); color: var(--primary); }
+.v3d-btn.ativo { background: var(--primary-light); border-color: var(--primary); color: var(--primary-dark); }
+.v3d-explodir { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+.v3d-explodir input { width: 96px; accent-color: var(--primary); }
+
+.v3d-stage {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  background: #EEF2F6;
+  touch-action: none;
+}
+.v3d-canvas { display: block; width: 100%; height: 100%; outline: none; }
+.v3d-labels { position: absolute; inset: 0; pointer-events: none; }
+
+.v3d-tag {
+  --sev: #D97706;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px 4px 4px;
+  background: rgba(255, 255, 255, .96);
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--sev);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .18);
+  font: 600 12px/1.2 var(--font);
+  color: var(--text);
+  white-space: nowrap;
+}
+/* Elemento posicionado pelo CSS2DRenderer (centro no ponto 3D); a etiqueta
+   fica acima do ponto, com uma pequena haste. */
+.v3d-tag-wrap { position: relative; width: 0; height: 0; }
+.v3d-tag-wrap .v3d-tag { position: absolute; bottom: 10px; left: 0; transform: translateX(-50%); }
+.v3d-tag b {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--sev); color: #fff; font-size: 11px;
+}
+.v3d-sev-high   { --sev: #DC2626; }
+.v3d-sev-medium { --sev: #D97706; }
+.v3d-sev-low    { --sev: #2563EB; }
+
+.v3d-tip {
+  position: absolute; z-index: 5; pointer-events: none;
+  padding: 5px 9px; border-radius: 6px;
+  background: rgba(15, 23, 42, .9); color: #fff; font-size: 12px;
+}
+.v3d-tip[hidden] { display: none; }
+
+.v3d-aviso {
+  position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  padding: 7px 12px; border-radius: var(--radius-full);
+  background: rgba(15, 23, 42, .85); color: #fff; font-size: 12.5px;
+  display: flex; align-items: center; gap: 8px; z-index: 4;
+}
+.v3d-aviso[hidden] { display: none; }
+
+.v3d-vazio {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;
+}
+.v3d-vazio i { font-size: 34px; opacity: .35; }
+.v3d-carregando {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  gap: 10px; color: var(--text-muted); font-size: 13px; background: #EEF2F6; z-index: 3;
+}
+
+.v3d-legenda {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  padding: 8px 14px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--text-muted); background: var(--bg-page);
+}
+.v3d-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.v3d-legenda i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+@media (max-width: 767px) {
+  .v3d-stage { min-height: 300px; }
+  .v3d-btn { height: 36px; }
+  .v3d-explodir input { width: 80px; }
+}

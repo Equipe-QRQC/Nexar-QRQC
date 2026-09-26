@@ -26,6 +26,7 @@ from werkzeug.utils import secure_filename
 
 import sensor_visual
 import nexa_ia
+import modelos_3d
 
 load_dotenv()
 
@@ -684,6 +685,12 @@ def init_db():
                 logger.info(f"Migração: coluna {col} adicionada em ocorrencias.")
             except Exception as e:
                 logger.warning(f"Migração de {col} falhou: {e}")
+
+    # Máquinas: configuração do modelo 3D (JSON — ver modelos_3d.py)
+    cols_maq = [r["name"] for r in c.execute("PRAGMA table_info(maquinas)").fetchall()]
+    if "modelo_3d" not in cols_maq:
+        c.execute("ALTER TABLE maquinas ADD COLUMN modelo_3d TEXT")
+        logger.info("Migração: coluna modelo_3d adicionada em maquinas.")
 
     admin_email = os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower()
     admin_senha = os.getenv("ADMIN_PASSWORD", "").strip()
@@ -2639,6 +2646,20 @@ def maquinas():
     return render_template("maquinas.html", maquinas=lista, stats=stats)
 
 
+def _config_3d_do_form(atual: str | None) -> dict | None:
+    """
+    Lê o campo 'modelo_3d' do formulário de máquina:
+    '' = sem modelo, '__manter__' = mantém o atual (ex.: CAD já importado),
+    ou o nome de uma família de modelo em código.
+    """
+    escolha = (request.form.get("modelo_3d") or "").strip()
+    if escolha == "__manter__":
+        return modelos_3d.ler_config(atual)
+    if escolha in modelos_3d.FAMILIAS:
+        return {"fonte": "familia", "familia": escolha}
+    return None
+
+
 @app.route("/maquinas/cadastro", methods=["GET", "POST"])
 @login_required
 def cadastro_maquina():
@@ -2656,11 +2677,13 @@ def cadastro_maquina():
 
         try:
             conn = get_db()
+            cfg3d = _config_3d_do_form(None)
             cursor = conn.execute(
-                "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao) VALUES (?,?,?,?,?,?)",
-                (nome, modelo, fabricante, ano, setor, descricao),
+                "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao, modelo_3d) VALUES (?,?,?,?,?,?,?)",
+                (nome, modelo, fabricante, ano, setor, descricao, json.dumps(cfg3d) if cfg3d else None),
             )
             maquina_id = cursor.lastrowid
+            modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             conn.commit()
 
             arquivos = request.files.getlist("diagramas")
@@ -2690,7 +2713,7 @@ def cadastro_maquina():
             flash("Não foi possível cadastrar a máquina. Tente novamente.", "danger")
         return redirect(url_for("maquinas"))
 
-    return render_template("cadastro_maquina.html")
+    return render_template("cadastro_maquina.html", familias_3d=modelos_3d.familias_disponiveis(), cfg3d=None)
 
 
 @app.route("/maquinas/<int:maquina_id>/editar", methods=["GET", "POST"])
@@ -2717,10 +2740,13 @@ def editar_maquina(maquina_id: int):
             return redirect(url_for("editar_maquina", maquina_id=maquina_id))
 
         try:
+            cfg3d = _config_3d_do_form(maquina["modelo_3d"])
             conn.execute(
-                "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=? WHERE id=?",
-                (nome, modelo, fabricante, ano, setor, descricao, maquina_id),
+                "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=?, modelo_3d=? WHERE id=?",
+                (nome, modelo, fabricante, ano, setor, descricao,
+                 json.dumps(cfg3d) if cfg3d else None, maquina_id),
             )
+            modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             arquivos = request.files.getlist("diagramas")
             pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
             os.makedirs(pasta, exist_ok=True)
@@ -2747,7 +2773,9 @@ def editar_maquina(maquina_id: int):
         return redirect(url_for("maquinas"))
 
     conn.close()
-    return render_template("cadastro_maquina.html", maquina=maquina)
+    return render_template("cadastro_maquina.html", maquina=maquina,
+                           familias_3d=modelos_3d.familias_disponiveis(),
+                           cfg3d=modelos_3d.ler_config(maquina["modelo_3d"]))
 
 
 @app.route("/enviar", methods=["POST"])
@@ -2861,44 +2889,68 @@ def qrqc3d(oc_id: int):
         return redirect(url_for("historico"))
 
     maquina = None
-    componentes = []
     diagnostico = None
     diag_componentes = []
+    cfg3d = None
 
     if oc["maquina_id"]:
-        maquina = conn.execute(
-            "SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)
-        ).fetchone()
-        componentes = conn.execute(
-            "SELECT * FROM machine_components WHERE maquina_id = ?", (oc["maquina_id"],)
-        ).fetchall()
+        maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)).fetchone()
+        cfg3d = modelos_3d.ler_config(maquina["modelo_3d"]) if maquina else None
 
-    diag = conn.execute(
-        "SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)
-    ).fetchone()
+    diag = conn.execute("SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)).fetchone()
     if diag:
         diagnostico = dict(diag)
-        diagnostico["recommended_actions"] = json.loads(
-            diag["recommended_actions"] or "[]"
-        )
-        diag_componentes = conn.execute(
+        diagnostico["recommended_actions"] = json.loads(diag["recommended_actions"] or "[]")
+        diag_componentes = [dict(r) for r in conn.execute(
             "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)
-        ).fetchall()
-
+        ).fetchall()]
     conn.close()
 
-    lang = idioma_atual()
-    t = TRANSLATIONS.get(lang, TRANSLATIONS["pt"])
+    # Destaques iniciais: análise do agente, se houver; senão, os componentes
+    # citados no diagnóstico em texto gerado no registro da ocorrência.
+    if diag_componentes:
+        destaques = [{"component_id": c["component_id"], "component_name": c["component_name"],
+                      "severity": c["severity"], "reason": c["reason"],
+                      "probability": c["probability"], "fonte": "agente"} for c in diag_componentes]
+    else:
+        # Só quando o texto veio da IA (o roteiro padrão cita peças genéricas)
+        destaques = (modelos_3d.componentes_citados(oc["resposta_ia"] or "", cfg3d)
+                     if oc["ia_status"] == "ok" else [])
+
     return render_template(
         "qrqc3d.html",
         ocorrencia=oc,
         maquina=maquina,
-        componentes=[dict(c) for c in componentes],
+        cfg3d=cfg3d,
+        catalogo=modelos_3d.componentes_da_config(cfg3d),
         diagnostico=diagnostico,
-        diag_componentes=[dict(c) for c in diag_componentes],
-        t=t,
-        lang=lang,
+        destaques=destaques,
     )
+
+
+@app.route("/api/maquinas/<int:mid>/componentes/<cid>/historico")
+@login_required
+def api_componente_historico(mid: int, cid: str):
+    """Ocorrências resolvidas desta máquina cuja peça que falhou é este componente."""
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    linhas = conn.execute(
+        "SELECT id, descricao, solucao_aplicada, componente_real, data_resolucao "
+        "FROM ocorrencias WHERE maquina_id = ? AND solucao_aplicada IS NOT NULL "
+        "ORDER BY data_resolucao DESC", (mid,)
+    ).fetchall()
+    conn.close()
+    termos = modelos_3d.PALAVRAS.get((cfg or {}).get("familia", ""), {}).get(cid, [])
+    nome = next((c["name"] for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), cid)
+    termos = termos + [modelos_3d._normalizar_texto(nome)]
+    itens = []
+    for r in linhas:
+        alvo = modelos_3d._normalizar_texto(r["componente_real"] or "")
+        if alvo and any(t in alvo for t in termos):
+            itens.append({"id": r["id"], "descricao": r["descricao"], "solucao": r["solucao_aplicada"],
+                          "componente": r["componente_real"], "data": data_br(r["data_resolucao"])})
+    return jsonify({"componente": nome, "itens": itens[:5], "total": len(itens)})
 
 
 @app.route("/api/ai/analisar/<int:oc_id>", methods=["POST"])
@@ -2916,6 +2968,9 @@ def api_ai_analisar(oc_id: int):
 
     oc_dict = dict(oc)
     machine_id = oc["maquina_id"]
+    m3d = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (machine_id,)).fetchone()
+    if m3d and modelos_3d.sincronizar_componentes(conn, machine_id, modelos_3d.ler_config(m3d["modelo_3d"])):
+        conn.commit()
     conn.close()
 
     logger.info(f"[qrqc3d] iniciando análise Nexa IA — oc={oc_id} maquina={machine_id}")
@@ -2995,6 +3050,23 @@ def api_ai_diagnostico(oc_id: int):
     result["components"] = [dict(c) for c in comps]
     conn.close()
     return jsonify(result)
+
+
+@app.route("/api/maquinas/<int:mid>/modelo3d")
+@login_required
+def api_modelo3d(mid: int):
+    """Configuração do modelo 3D + catálogo de componentes, consumidos pelo visualizador."""
+    conn = get_db()
+    m = conn.execute("SELECT id, nome, modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    if not m:
+        return jsonify({"erro": "Máquina não encontrada."}), 404
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    return jsonify({
+        "maquina": {"id": m["id"], "nome": m["nome"]},
+        "modelo": cfg,
+        "componentes": modelos_3d.componentes_da_config(cfg),
+    })
 
 
 @app.route("/api/machines/<int:mid>/components", methods=["GET"])
