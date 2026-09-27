@@ -785,6 +785,8 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   display: flex; align-items: center; justify-content: center; padding: 16px;
 }
 .rs-overlay[hidden] { display: none; }
+/* O atributo hidden sempre vence o display dos componentes */
+.btn[hidden], .badge[hidden], .card[hidden] { display: none !important; }
 .rs-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .rs-box {
   background: var(--bg-card); border-radius: var(--radius);

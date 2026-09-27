@@ -40,6 +40,11 @@
 
       {% if pode('manutencao', 'operador') %}
       <span class="nav-label">Chão de fábrica</span>
+      <a href="{{ url_for('mapa_fabrica') }}"
+         class="nav-item {% if request.endpoint == 'mapa_fabrica' %}active{% endif %}">
+        <i class="fas fa-map-location-dot"></i>
+        <span>Mapa da fábrica</span>
+      </a>
       <a href="{{ url_for('CadastroOcorrencia') }}"
          class="nav-item {% if request.endpoint == 'CadastroOcorrencia' or request.endpoint == 'registrar_ocorrencia' %}active{% endif %}">
         <i class="fas fa-plus-circle"></i>

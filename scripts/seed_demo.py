@@ -38,23 +38,23 @@ TORNO = {"fonte": "cad", "modelo": "torno-cx704"}
 
 # Só máquinas com CAD 3D: a ocorrência é registrada apontando a peça no modelo.
 MAQUINAS = [
-    {"nome": "Robô de Solda RS-01", "modelo": "IRB 6700-235/2.65", "fabricante": "ABB",
+    {"nome": "Robô de Solda RS-01", "mapa": (18, 34), "modelo": "IRB 6700-235/2.65", "fabricante": "ABB",
      "ano": "2022", "setor": "Soldagem",
      "descricao": "Robô de 6 eixos da célula 1 de solda a ponto da carroceria. Carga útil 235 kg.",
      "modelo_3d": ROBO},
-    {"nome": "Robô de Solda RS-02", "modelo": "IRB 6700-200/2.60", "fabricante": "ABB",
+    {"nome": "Robô de Solda RS-02", "mapa": (38, 34), "modelo": "IRB 6700-200/2.60", "fabricante": "ABB",
      "ano": "2022", "setor": "Soldagem",
      "descricao": "Robô de 6 eixos da célula 2 de solda a ponto. Carga útil 200 kg.",
      "modelo_3d": ROBO},
-    {"nome": "Robô de Paletização RP-01", "modelo": "IRB 6700-150/3.20", "fabricante": "ABB",
+    {"nome": "Robô de Paletização RP-01", "mapa": (80, 34), "modelo": "IRB 6700-150/3.20", "fabricante": "ABB",
      "ano": "2021", "setor": "Expedição",
      "descricao": "Robô de paletização de caixas no fim da linha. Alcance de 3,2 m.",
      "modelo_3d": ROBO},
-    {"nome": "Torno Mecânico TM-04", "modelo": "CX704", "fabricante": "Craftex",
+    {"nome": "Torno Mecânico TM-04", "mapa": (22, 76), "modelo": "CX704", "fabricante": "Craftex",
      "ano": "2020", "setor": "Ferramentaria",
      "descricao": "Torno de bancada para reparo de peças e usinagem de buchas na ferramentaria.",
      "modelo_3d": TORNO},
-    {"nome": "Torno Mecânico TM-05", "modelo": "CX704", "fabricante": "Craftex",
+    {"nome": "Torno Mecânico TM-05", "mapa": (70, 76), "modelo": "CX704", "fabricante": "Craftex",
      "ano": "2021", "setor": "Manutenção Central",
      "descricao": "Torno de bancada da oficina de manutenção para usinagem de pinos e eixos.",
      "modelo_3d": TORNO},
@@ -148,7 +148,7 @@ OCORRENCIAS = [
     (2, 1, "16:05", "Juliana Rocha", "chicote", "cabo", False, False, "Médio", "Não",
      "Capa do chicote rasgada no RP-01",
      "Capa externa do chicote rasgada perto do eixo 3; condutores ainda protegidos.",
-     "Aberta", None, None),
+     "Resolvida", "Substituída a capa do chicote no trecho do eixo 3 e refeita a fixação com abraçadeiras.", 3),
     (3, 0, "11:20", "Juliana Rocha", "carro_transversal", "folga", False, False, "Médio", "Sim",
      "Folga no carro transversal do torno",
      "Volante do carro transversal com 0,3 mm de folga; acabamento com vibração.",
@@ -255,6 +255,8 @@ def main() -> None:
         )
         mid = cur.lastrowid
         ids.append(mid)
+        if m.get("mapa"):
+            conn.execute("UPDATE maquinas SET mapa_x = ?, mapa_y = ? WHERE id = ?", (*m["mapa"], mid))
         n3d = nexar.modelos_3d.sincronizar_componentes(conn, mid, cfg3d)
         if n3d:
             print(f"  modelo 3D '{cfg3d.get('familia') or cfg3d.get('modelo')}' com {n3d} componentes → {m['nome']}")

@@ -2401,6 +2401,82 @@ def ver_ocorrencia(oc_id: int):
     )
 
 
+# ── Mapa da fábrica ───────────────────────────────────────────────────────────
+
+def _posicoes_padrao(maquinas: list[dict]) -> None:
+    """Máquinas sem posição: agrupa por setor em uma grade (o gestor ajusta arrastando)."""
+    sem = [m for m in maquinas if m["x"] is None or m["y"] is None]
+    if not sem:
+        return
+    setores = sorted({m["setor"] or "Sem setor" for m in sem})
+    cols = min(3, len(setores)) or 1
+    linhas_grade = -(-len(setores) // cols)
+    for i, setor in enumerate(setores):
+        cx, cy = i % cols, i // cols
+        grupo = [m for m in sem if (m["setor"] or "Sem setor") == setor]
+        for j, m in enumerate(grupo):
+            m["x"] = round((cx + 0.5) / cols * 100 + (j - (len(grupo) - 1) / 2) * 11, 1)
+            m["y"] = round((cy + 0.55) / linhas_grade * 100, 1)
+
+
+def dados_mapa_fabrica() -> list[dict]:
+    conn = get_db()
+    lista = []
+    for r in conn.execute("SELECT id, nome, setor, modelo, fabricante, modelo_3d, mapa_x, mapa_y FROM maquinas ORDER BY nome"):
+        abertas = conn.execute(
+            "SELECT id, descricao, nivel_impacto, maquina_parada, risco_pessoas, "
+            "COALESCE(data_ocorrencia, data_registro) AS quando, status FROM ocorrencias "
+            "WHERE maquina_id = ? AND status IN ('Aberta', 'Em andamento') ORDER BY quando DESC", (r["id"],)).fetchall()
+        parada = any(o["maquina_parada"] for o in abertas)
+        status = "parada" if parada else ("atencao" if abertas else "ok")
+        lista.append({
+            "id": r["id"], "nome": r["nome"], "setor": r["setor"], "modelo": r["modelo"], "fabricante": r["fabricante"],
+            "cad": modelos_3d.eh_cad(modelos_3d.ler_config(r["modelo_3d"])),
+            "x": r["mapa_x"], "y": r["mapa_y"], "status": status,
+            "risco": any(o["risco_pessoas"] for o in abertas),
+            "abertas": [{"id": o["id"], "descricao": o["descricao"], "impacto": o["nivel_impacto"],
+                         "parada": bool(o["maquina_parada"]), "quando": data_br(o["quando"]), "status": o["status"]}
+                        for o in abertas[:4]],
+            "total_abertas": len(abertas),
+        })
+    conn.close()
+    _posicoes_padrao(lista)
+    return lista
+
+
+@app.route("/fabrica")
+@login_required
+def mapa_fabrica():
+    return render_template("fabrica.html", maquinas=dados_mapa_fabrica(),
+                           pode_editar=current_user.perfil in ("admin", "manutencao"))
+
+
+@app.route("/api/fabrica")
+@login_required
+def api_mapa_fabrica():
+    return jsonify(dados_mapa_fabrica())
+
+
+@app.route("/api/fabrica/posicoes", methods=["POST"])
+@perfil_requerido("manutencao")
+def api_mapa_posicoes():
+    dados = request.get_json(silent=True) or {}
+    conn = get_db()
+    n = 0
+    for mid, pos in (dados.get("posicoes") or {}).items():
+        try:
+            x, y = float(pos[0]), float(pos[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if 0 <= x <= 100 and 0 <= y <= 100:
+            n += conn.execute("UPDATE maquinas SET mapa_x = ?, mapa_y = ? WHERE id = ?",
+                              (round(x, 2), round(y, 2), int(mid))).rowcount
+    conn.commit()
+    conn.close()
+    registrar_auditoria("mapa_fabrica_alterado", "maquina", None, f"{n} posição(ões)")
+    return jsonify({"ok": True, "salvas": n})
+
+
 # ── Mapa de calor: falhas por peça no modelo 3D ───────────────────────────────
 
 def _maquinas_mesmo_modelo(conn, maquina_id: int, cfg: dict | None) -> list[int]:
