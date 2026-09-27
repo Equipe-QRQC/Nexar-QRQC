@@ -1,0 +1,278 @@
+{% extends 'menu.html' %}
+{% block title %}Inspeção de Documento — Nexar QRQC{% endblock %}
+
+{% block head %}
+<style>
+  .dc-grid { display:grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap:18px; align-items:start; }
+  @media (max-width: 900px) { .dc-grid { grid-template-columns: 1fr; } }
+  .dc-card { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:18px; min-width:0; }
+  .dc-card h4 { font-size:15px; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .dc-card h4 i { color:var(--primary); }
+
+  .dc-stats { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; margin-bottom:16px; }
+  .dc-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; }
+  .dc-stat span { font-size:11.5px; color:var(--text-muted); display:block; }
+  .dc-stat b { font-size:20px; }
+
+  .dc-tipos { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+  .dc-tipo { min-height:38px; padding:7px 12px; border-radius:var(--radius-full); border:1px solid var(--border);
+    background:var(--bg-card); font:500 12.5px var(--font); color:var(--text); cursor:pointer; }
+  .dc-tipo.ativo { background:var(--primary); border-color:var(--primary); color:#fff; }
+
+  .dc-drop { border:2px dashed var(--border); border-radius:var(--radius); padding:26px 16px; text-align:center;
+    cursor:pointer; background:var(--bg-input); color:var(--text-muted); transition:.15s; }
+  .dc-drop:hover, .dc-drop.drag { border-color:var(--primary); color:var(--primary); background:var(--primary-light); }
+  .dc-drop i { font-size:32px; display:block; margin-bottom:8px; }
+  .dc-drop img { max-width:100%; max-height:220px; border-radius:6px; display:block; margin:0 auto 8px; }
+  .dc-field { margin:14px 0 0; }
+  .dc-field label { display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:5px; }
+
+  .dc-result-top { display:flex; gap:16px; align-items:center; margin-bottom:14px; }
+  .dc-gauge { --val:100; width:74px; height:74px; border-radius:50%; flex-shrink:0; display:grid; place-items:center;
+    font-weight:700; font-size:20px; background: conic-gradient(var(--gc) calc(var(--val)*1%), var(--border) 0); }
+  .dc-gauge span { background:var(--bg-card); width:56px; height:56px; border-radius:50%; display:grid; place-items:center; }
+  .dc-foto { width:100%; max-height:420px; object-fit:contain; background:#0F172A; border-radius:var(--radius-sm); display:block; }
+
+  .dc-prob { border:1px solid var(--border); border-left:3px solid var(--danger); border-radius:var(--radius-sm);
+    padding:11px 13px; margin-top:10px; }
+  .dc-prob[data-sev="medio"] { border-left-color:var(--warning); }
+  .dc-prob[data-sev="baixo"] { border-left-color:var(--primary); }
+  .dc-prob-cab { display:flex; justify-content:space-between; gap:8px; align-items:center; font-weight:600; font-size:13.5px; }
+  .dc-prob-cab small { font-weight:600; font-size:11px; padding:2px 8px; border-radius:var(--radius-full); background:var(--danger-light); color:#B91C1C; white-space:nowrap; }
+  .dc-prob[data-sev="medio"] .dc-prob-cab small { background:var(--warning-light); color:#92400E; }
+  .dc-prob[data-sev="baixo"] .dc-prob-cab small { background:var(--primary-light); color:var(--primary-dark); }
+  .dc-prob p { font-size:12.5px; color:var(--text-muted); margin:5px 0 0; }
+  .dc-prob .sug { color:var(--text); }
+  .dc-prob .sug b { color:var(--success); }
+  .dc-ok { text-align:center; padding:24px 10px; color:var(--text-muted); }
+  .dc-ok i { font-size:38px; color:var(--success); display:block; margin-bottom:8px; }
+
+  .dc-hist { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px; }
+  .dc-hist a { border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; text-decoration:none; color:inherit; background:var(--bg-card); }
+  .dc-hist a:hover { border-color:var(--primary); }
+  .dc-hist img { width:100%; height:92px; object-fit:cover; display:block; background:#E2E8F0; }
+  .dc-hist div { padding:7px 9px; font-size:11.5px; color:var(--text-muted); }
+  .dc-hist b { display:block; color:var(--text); font-size:12px; margin-bottom:2px; }
+  .dc-vazio { color:var(--text-muted); font-size:13px; text-align:center; padding:26px 10px; }
+  .dc-spinner { display:inline-block; width:15px; height:15px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
+    border-radius:50%; animation:dc-gira .7s linear infinite; vertical-align:-2px; }
+  @keyframes dc-gira { to { transform:rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-file-circle-check"></i> Inspeção de Documento</div>
+  <div class="topbar-actions">
+    {% if ia_online %}
+    <span class="badge badge-success"><i class="fas fa-circle" style="font-size:7px"></i> IA ativa</span>
+    {% else %}
+    <span class="badge" style="background:var(--warning-light); color:#9A6700;"><i class="fas fa-triangle-exclamation"></i> IA offline</span>
+    {% endif %}
+  </div>
+</div>
+
+<div class="page-body">
+  <p style="color:var(--text-muted); font-size:13px; margin:0 0 16px; max-width:760px;">
+    Fotografe uma ordem de serviço, checklist ou relatório. A IA confere cálculos, campos obrigatórios,
+    assinaturas e inconsistências antes do documento seguir adiante.
+  </p>
+
+  <div class="dc-stats">
+    <div class="dc-stat"><span>Documentos inspecionados</span><b>{{ stats.n }}</b></div>
+    <div class="dc-stat"><span>Problemas encontrados</span><b>{{ stats.p }}</b></div>
+    <div class="dc-stat"><span>Nota média</span><b>{{ stats.media|int if stats.n else '—' }}</b></div>
+  </div>
+
+  <div class="dc-grid">
+    <div class="dc-card">
+      <h4><i class="fas fa-camera"></i> Nova inspeção</h4>
+      <label class="form-label">Tipo de documento</label>
+      <div class="dc-tipos" id="dcTipos" role="radiogroup" aria-label="Tipo de documento">
+        {% for t in tipos %}
+        <button type="button" class="dc-tipo{{ ' ativo' if loop.first }}" role="radio" aria-checked="{{ 'true' if loop.first else 'false' }}" data-tipo="{{ t }}">{{ t }}</button>
+        {% endfor %}
+      </div>
+
+      <div class="dc-drop" id="dcDrop" tabindex="0" role="button" aria-label="Tirar foto ou escolher arquivo">
+        <i class="fas fa-file-image"></i>
+        <div><b>Tirar foto</b> ou clicar para enviar</div>
+        <div style="font-size:11px; margin-top:4px;">PNG ou JPG · a câmera abre no celular · documento inteiro e legível</div>
+      </div>
+      <input id="dcArquivo" type="file" accept="image/png,image/jpeg" capture="environment" hidden />
+
+      {% if maquinas %}
+      <div class="dc-field">
+        <label for="dcMaquina">Máquina relacionada (opcional)</label>
+        <select id="dcMaquina" class="form-select">
+          <option value="">— Nenhuma —</option>
+          {% for m in maquinas %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+        </select>
+      </div>
+      {% endif %}
+
+      <button id="dcAnalisar" class="btn btn-primary" style="width:100%; margin-top:14px; min-height:46px; justify-content:center;" disabled>
+        <i class="fas fa-wand-magic-sparkles"></i> Analisar documento
+      </button>
+      <p id="dcErro" style="color:var(--danger); font-size:12.5px; margin:10px 0 0;" hidden></p>
+    </div>
+
+    <div class="dc-card" id="dcResultado">
+      <h4><i class="fas fa-clipboard-check"></i> Resultado</h4>
+      <div id="dcResultadoCorpo" class="dc-vazio">
+        <i class="fas fa-file-lines" style="font-size:32px; opacity:.35; display:block; margin-bottom:8px;"></i>
+        Envie a foto de um documento para ver a análise aqui.
+      </div>
+    </div>
+  </div>
+
+  <div class="dc-card" style="margin-top:18px;">
+    <h4><i class="fas fa-clock-rotate-left"></i> Histórico de inspeções</h4>
+    {% if recentes %}
+    <div class="dc-hist">
+      {% for r in recentes %}
+      <a href="?ver={{ r.id }}" data-ver="{{ r.id }}">
+        <img src="{{ r.imagem_url }}" alt="Documento {{ r.id }}" loading="lazy" />
+        <div>
+          <b>{{ r.tipo_documento or 'Documento' }}</b>
+          {% if r.num_problemas %}{{ r.num_problemas }} problema(s){% else %}Sem problemas{% endif %} · nota {{ r.score }}<br>
+          {{ r.criado_em | data_br }}{% if r.maquina_nome %} · {{ r.maquina_nome }}{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="dc-vazio" style="padding:10px;">Nenhum documento inspecionado ainda.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const $ = (id) => document.getElementById(id);
+  const drop = $('dcDrop'), input = $('dcArquivo'), btn = $('dcAnalisar'), corpo = $('dcResultadoCorpo');
+  let arquivo = null;
+  let tipo = document.querySelector('.dc-tipo.ativo')?.dataset.tipo || '';
+
+  function el(tag, cls, texto) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (texto != null) e.textContent = texto;
+    return e;
+  }
+
+  document.querySelectorAll('.dc-tipo').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.dc-tipo').forEach(x => { x.classList.toggle('ativo', x === b); x.setAttribute('aria-checked', String(x === b)); });
+    tipo = b.dataset.tipo;
+  }));
+
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  ['dragover', 'dragenter'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', e => { if (e.dataTransfer.files[0]) escolher(e.dataTransfer.files[0]); });
+  input.addEventListener('change', () => { if (input.files[0]) escolher(input.files[0]); });
+
+  function escolher(f) {
+    $('dcErro').hidden = true;
+    if (!/^image\/(png|jpe?g)$/.test(f.type)) { mostrarErro('Envie uma imagem PNG ou JPG.'); return; }
+    arquivo = f;
+    btn.disabled = false;
+    const img = el('img');
+    img.src = URL.createObjectURL(f);
+    img.alt = 'Prévia do documento';
+    drop.replaceChildren(img, el('div', null, f.name.length > 34 ? f.name.slice(0, 31) + '…' : f.name));
+  }
+
+  function mostrarErro(msg) { $('dcErro').textContent = msg; $('dcErro').hidden = false; }
+
+  btn.addEventListener('click', async () => {
+    if (!arquivo) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="dc-spinner"></span> Analisando…';
+    $('dcErro').hidden = true;
+    const fd = new FormData();
+    fd.append('foto', arquivo);
+    fd.append('tipo_documento', tipo);
+    fd.append('maquina_id', $('dcMaquina')?.value || '');
+    try {
+      const r = await fetch('/api/documento/analisar', { method: 'POST', headers: { 'X-CSRFToken': csrf }, body: fd });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { mostrarErro(d.erro || 'Não foi possível analisar o documento.'); return; }
+      mostrar(d);
+      if (window.matchMedia('(max-width: 900px)').matches) $('dcResultado').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      mostrarErro('Sem conexão com o servidor. Tente novamente.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Analisar documento';
+    }
+  });
+
+  const SEV = { alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
+  const TIPO = { erro_calculo: 'Erro de cálculo', campo_incorreto: 'Campo incorreto', dado_faltante: 'Dado faltante',
+                 inconsistencia: 'Inconsistência', erro_ortografico: 'Erro ortográfico', outro: 'Outro' };
+
+  function mostrar(d) {
+    corpo.className = '';
+    const topo = el('div', 'dc-result-top');
+    const nota = Math.round(d.score ?? 0);
+    const gauge = el('div', 'dc-gauge');
+    gauge.style.setProperty('--val', nota);
+    gauge.style.setProperty('--gc', nota >= 80 ? 'var(--success)' : (nota >= 50 ? 'var(--warning)' : 'var(--danger)'));
+    gauge.append(el('span', null, String(nota)));
+    const info = el('div');
+    info.append(el('div', null, d.tipo_documento || 'Documento'), el('small', null, d.resumo || ''));
+    info.firstChild.style.cssText = 'font-weight:600; font-size:14px;';
+    info.lastChild.style.cssText = 'font-size:12.5px; color:var(--text-muted); display:block; margin-top:3px;';
+    topo.append(gauge, info);
+
+    const foto = el('img', 'dc-foto');
+    foto.src = d.imagem_url;
+    foto.alt = 'Documento analisado';
+
+    const lista = el('div');
+    const probs = d.problemas || [];
+    if (!probs.length) {
+      const ok = el('div', 'dc-ok');
+      ok.append(el('i', 'fas fa-circle-check'), el('div', null, 'Nenhum problema encontrado. Documento pronto para seguir.'));
+      lista.append(ok);
+    } else {
+      const ordem = { alto: 0, medio: 1, baixo: 2 };
+      probs.sort((a, b) => (ordem[a.severidade] ?? 3) - (ordem[b.severidade] ?? 3)).forEach((p, i) => {
+        const c = el('div', 'dc-prob');
+        c.dataset.sev = p.severidade || 'medio';
+        const cab = el('div', 'dc-prob-cab');
+        cab.append(el('span', null, `${i + 1}. ${TIPO[p.tipo] || 'Problema'}${p.campo ? ' — ' + p.campo : ''}`),
+                   el('small', null, SEV[p.severidade] || 'Médio'));
+        c.append(cab, el('p', null, p.descricao || ''));
+        if (p.sugestao) {
+          const s = el('p', 'sug');
+          s.append(el('b', null, 'Como corrigir: '), document.createTextNode(p.sugestao));
+          c.append(s);
+        }
+        lista.append(c);
+      });
+    }
+    corpo.replaceChildren(topo, foto, lista);
+  }
+
+  // Reabrir uma inspeção do histórico
+  async function ver(id) {
+    const r = await fetch('/api/documento/' + id);
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { mostrar(d); $('dcResultado').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  }
+  document.querySelectorAll('.dc-hist a').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    history.replaceState(null, '', '?ver=' + a.dataset.ver);
+    ver(a.dataset.ver);
+  }));
+  const inicial = new URLSearchParams(location.search).get('ver');
+  if (inicial) ver(inicial);
+})();
+</script>
+{% endblock %}

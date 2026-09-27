@@ -11,4 +11,6 @@ __pycache__/
 # Uploads gerados em runtime (mantém a pasta versionada via .gitkeep)
 static/uploads/sensor/*
 !static/uploads/sensor/.gitkeep
+static/uploads/documentos/*
+!static/uploads/documentos/.gitkeep
 

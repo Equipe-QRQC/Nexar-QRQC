@@ -60,6 +60,12 @@
         <span>Sensor Visual</span>
       </a>
 
+      <a href="{{ url_for('inspecao_documento') }}"
+         class="nav-item {% if request.endpoint == 'inspecao_documento' %}active{% endif %}">
+        <i class="fas fa-file-circle-check"></i>
+        <span>Inspeção de Documento</span>
+      </a>
+
       <a href="{{ url_for('analise') }}"
          class="nav-item {% if request.endpoint == 'analise' %}active{% endif %}">
         <i class="fas fa-chart-bar"></i>

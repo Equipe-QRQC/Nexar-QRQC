@@ -840,7 +840,8 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   .grid-3 { grid-template-columns: 1fr 1fr; }
   .filter-grid { grid-template-columns: 1fr 1fr; }
   .page-body { padding: 20px; }
-  .topbar { padding: 0 20px; }
+  .topbar { padding: 8px 20px; height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; }
+  .topbar-actions { flex-wrap: wrap; gap: 6px; }
   .chat-window { width: 320px; }
 }
 

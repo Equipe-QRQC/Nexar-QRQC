@@ -649,6 +649,22 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_percepcoes_maquina
             ON percepcoes(maquina_id, criado_em);
 
+        -- Inspeção de documento por foto (OS, checklist, relatório)
+        CREATE TABLE IF NOT EXISTS inspecoes_documento (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imagem_url TEXT NOT NULL,
+            tipo_documento TEXT,
+            maquina_id INTEGER,
+            resultado_json TEXT,
+            score INTEGER,
+            num_problemas INTEGER DEFAULT 0,
+            modelo_ia TEXT,
+            criado_por_id INTEGER,
+            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (maquina_id) REFERENCES maquinas(id),
+            FOREIGN KEY (criado_por_id) REFERENCES usuarios(id)
+        );
+
         -- QRQC 3D AI: componentes físicos de cada máquina (mapeados ao modelo 3D)
         CREATE TABLE IF NOT EXISTS machine_components (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2314,12 +2330,17 @@ def sensor_componente_3d(maquina_id, anomalias: list[dict]) -> str | None:
     return None
 
 
+def _componente_json(maquina_id, cid):
+    nome = _nome_componente(maquina_id, cid) if cid else None
+    return {"id": cid, "nome": nome} if nome else None
+
+
 @app.route("/sensor")
 @login_required
 def sensor():
     """Página do Sensor Visual: captura de foto e análise de anomalias por IA."""
     conn = get_db()
-    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    maquinas_lista = maquinas_com_cad(conn)
     recentes = conn.execute("""
         SELECT p.id, p.imagem_url, p.num_anomalias, p.severidade_max,
                p.score_saude, p.confirmado, p.criado_em, m.nome AS maquina_nome
@@ -2391,17 +2412,18 @@ def sensor_analisar():
         return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
 
     anomalias = resultado["anomalias"]
+    componente_3d = sensor_componente_3d(maquina_id, anomalias)
     try:
         conn = get_db()
         cursor = conn.execute(
             """INSERT INTO percepcoes
                (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
-                num_anomalias, severidade_max, score_saude, criado_por_id)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                num_anomalias, severidade_max, score_saude, componente_3d, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 maquina_id, imagem_url, contexto, resultado["modelo"],
                 json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], current_user.id,
+                resultado["severidade_max"], resultado["score"], componente_3d, current_user.id,
             ),
         )
         percepcao_id = cursor.lastrowid
@@ -2414,6 +2436,8 @@ def sensor_analisar():
     return jsonify({
         "id": percepcao_id,
         "imagem_url": imagem_url,
+        "maquina_id": maquina_id,
+        "componente_3d": _componente_json(maquina_id, componente_3d),
         "anomalias": anomalias,
         "score": resultado["score"],
         "severidade_max": resultado["severidade_max"],
@@ -2727,6 +2751,9 @@ def sensor_get(percepcao_id: int):
         "resumo": sensor_visual._resumo(anomalias, row["score_saude"]),
         "confirmado": bool(row["confirmado"]),
         "maquina_nome": row["maquina_nome"],
+        "maquina_id": row["maquina_id"],
+        "componente_3d": _componente_json(row["maquina_id"], row["componente_3d"]),
+        "ocorrencia_id": row["ocorrencia_id"],
         "contexto": row["contexto"],
         "criado_em": row["criado_em"],
         "status": "ok" if anomalias else "sem_anomalia",
@@ -3578,27 +3605,40 @@ _DOC_SCHEMA = (
 )
 
 
-@app.route("/api/mobile/inspecao/documento", methods=["POST"])
-@csrf.exempt
-@_mobile_auth
-@limiter.limit("10 per minute")
-def mobile_inspecao_documento():
+DOC_FOLDER = os.path.join("static", "uploads", "documentos")
+os.makedirs(DOC_FOLDER, exist_ok=True)
+TIPOS_DOCUMENTO = ["Ordem de serviço", "Checklist de manutenção", "Relatório de inspeção",
+                   "Registro de lubrificação", "Permissão de trabalho (PT)", "Outro"]
+
+
+def analisar_documento(arquivo, tipo_doc: str, maquina_id, user_id) -> tuple[dict, int]:
+    """
+    Analisa a foto de um documento industrial (OS, checklist, relatório) com a IA,
+    guarda a foto e o resultado no histórico. Usado pela web e pelo app.
+    Retorna (json, status_http).
+    """
     openai_client = nexa_ia._get_client()
     if not openai_client:
-        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
-
-    arquivo = request.files.get("foto")
-    if not arquivo:
-        return jsonify({"erro": "Nenhuma foto enviada."}), 400
-
-    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
+        return {"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}, 503
+    if not arquivo or not arquivo.filename:
+        return {"erro": "Nenhuma foto enviada."}, 400
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else "jpg"
+    if ext not in _SENSOR_EXT:
+        return {"erro": "Formato inválido. Envie PNG ou JPG."}, 400
 
     try:
         img = Image.open(arquivo.stream)
-        if img.mode in ("RGBA", "P"):
+        img.load()
+        if img.mode in ("RGBA", "P", "LA"):
             img = img.convert("RGB")
     except Exception:
-        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
+        return {"erro": "Não foi possível processar a imagem."}, 400
+
+    # Guarda a foto (JPEG) para o histórico
+    nome_arquivo = f"{secrets.token_hex(8)}.jpg"
+    caminho = os.path.join(DOC_FOLDER, nome_arquivo)
+    img.save(caminho, format="JPEG", quality=88)
+    imagem_url = f"/{caminho.replace(os.sep, '/')}"
 
     import base64
     from io import BytesIO
@@ -3612,14 +3652,13 @@ def mobile_inspecao_documento():
         "Analise este documento e identifique TODOS os problemas:\n"
         "- Erros de cálculo (somas, médias, valores incorretos)\n"
         "- Campos preenchidos incorretamente ou com dados inconsistentes\n"
-        "- Dados obrigatórios faltantes\n"
+        "- Dados obrigatórios faltantes (assinatura, data, responsável, identificação do equipamento)\n"
         "- Inconsistências entre campos relacionados\n"
         "- Erros ortográficos em campos técnicos importantes\n\n"
         "Se o documento estiver correto, retorne problemas: [].\n"
         "Seja rigoroso — só reporte problemas realmente visíveis.\n\n"
         f"Retorne APENAS JSON neste formato:\n{_DOC_SCHEMA}"
     )
-
     try:
         resp = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -3627,35 +3666,112 @@ def mobile_inspecao_documento():
                 {"role": "system", "content": _DOC_SYSTEM},
                 {"role": "user", "content": [
                     {"type": "text", "text": user_prompt},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:image/jpeg;base64,{b64}",
-                        "detail": "high",
-                    }},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
                 ]},
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
             max_tokens=1500,
         )
-        content = (resp.choices[0].message.content or "").strip()
-        result = json.loads(content)
+        result = json.loads((resp.choices[0].message.content or "").strip())
     except Exception as e:
         err = str(e)
         if "credit_balance_exhausted" in err or "insufficient_quota" in err:
-            logger.error("[mobile/doc] créditos OpenAI esgotados")
-            return jsonify({"erro": "A análise por IA está indisponível no momento."}), 503
-        logger.exception("[mobile/doc] erro OpenAI")
-        return jsonify({"erro": "Não foi possível analisar o documento. Tente novamente."}), 502
+            logger.error("[documento] créditos OpenAI esgotados")
+            return {"erro": "A análise por IA está indisponível no momento.", "imagem_url": imagem_url}, 503
+        logger.exception("[documento] erro OpenAI")
+        return {"erro": "Não foi possível analisar o documento. Tente novamente.", "imagem_url": imagem_url}, 502
 
+    problemas = [p for p in (result.get("problemas") or []) if isinstance(p, dict)]
+    result["problemas"] = problemas
     result.setdefault("modelo", "gpt-4o")
-    result.setdefault("score", 100 if not result.get("problemas") else max(
-        0, 100 - len(result["problemas"]) * 15))
+    if not isinstance(result.get("score"), (int, float)):
+        result["score"] = 100 if not problemas else max(0, 100 - len(problemas) * 15)
     result.setdefault("resumo", "Análise concluída.")
-    logger.info(
-        f"[mobile/doc] user={request.mobile_user['user_id']} "
-        f"problemas={len(result.get('problemas', []))}"
-    )
-    return jsonify(result)
+
+    try:
+        conn = get_db()
+        cur = conn.execute(
+            """INSERT INTO inspecoes_documento
+               (imagem_url, tipo_documento, maquina_id, resultado_json, score, num_problemas,
+                modelo_ia, criado_por_id) VALUES (?,?,?,?,?,?,?,?)""",
+            (imagem_url, tipo_doc or None, maquina_id, json.dumps(result, ensure_ascii=False),
+             int(result["score"]), len(problemas), result["modelo"], user_id),
+        )
+        result["id"] = cur.lastrowid
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("[documento] erro ao salvar a inspeção")
+    result["imagem_url"] = imagem_url
+    result["tipo_documento"] = tipo_doc
+    logger.info(f"[documento] user={user_id} problemas={len(problemas)}")
+    return result, 200
+
+
+@app.route("/api/mobile/inspecao/documento", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+@limiter.limit("10 per minute")
+def mobile_inspecao_documento():
+    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
+    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, None,
+                                       request.mobile_user["user_id"])
+    return jsonify(dados), status
+
+
+@app.route("/inspecao-documento")
+@login_required
+def inspecao_documento():
+    """Inspeção de documento por foto (OS, checklist, relatório) com histórico."""
+    conn = get_db()
+    maquinas_lista = maquinas_com_cad(conn)
+    recentes = conn.execute("""
+        SELECT d.id, d.imagem_url, d.tipo_documento, d.score, d.num_problemas, d.criado_em,
+               m.nome AS maquina_nome, u.nome AS autor
+        FROM inspecoes_documento d
+        LEFT JOIN maquinas m ON m.id = d.maquina_id
+        LEFT JOIN usuarios u ON u.id = d.criado_por_id
+        ORDER BY d.criado_em DESC LIMIT 24
+    """).fetchall()
+    total = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(num_problemas), 0) AS p, "
+                         "COALESCE(ROUND(AVG(score)), 0) AS media FROM inspecoes_documento").fetchone()
+    conn.close()
+    return render_template("inspecao_documento.html", maquinas=maquinas_lista, recentes=recentes,
+                           tipos=TIPOS_DOCUMENTO, stats=dict(total),
+                           ia_online=nexa_ia._get_client() is not None)
+
+
+@app.route("/api/documento/analisar", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def api_documento_analisar():
+    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
+    try:
+        maquina_id = int(request.form.get("maquina_id") or 0) or None
+    except ValueError:
+        maquina_id = None
+    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, maquina_id, current_user.id)
+    return jsonify(dados), status
+
+
+@app.route("/api/documento/<int:doc_id>")
+@login_required
+def api_documento_get(doc_id: int):
+    conn = get_db()
+    r = conn.execute(
+        "SELECT d.*, m.nome AS maquina_nome FROM inspecoes_documento d "
+        "LEFT JOIN maquinas m ON m.id = d.maquina_id WHERE d.id = ?", (doc_id,)).fetchone()
+    conn.close()
+    if not r:
+        return jsonify({"erro": "Inspeção não encontrada."}), 404
+    try:
+        dados = json.loads(r["resultado_json"] or "{}")
+    except ValueError:
+        dados = {}
+    dados.update({"id": r["id"], "imagem_url": r["imagem_url"], "tipo_documento": r["tipo_documento"],
+                  "maquina_nome": r["maquina_nome"], "criado_em": data_br(r["criado_em"])})
+    return jsonify(dados)
 
 
 @app.route("/api/mobile/sensor/analisar", methods=["POST"])
@@ -3707,18 +3823,19 @@ def mobile_sensor_analisar():
         return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
 
     anomalias = resultado["anomalias"]
+    componente_3d = sensor_componente_3d(maquina_id, anomalias)
     user_id = request.mobile_user["user_id"]
     try:
         conn = get_db()
         cursor = conn.execute(
             """INSERT INTO percepcoes
                (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
-                num_anomalias, severidade_max, score_saude, criado_por_id)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                num_anomalias, severidade_max, score_saude, componente_3d, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 maquina_id, imagem_url, contexto, resultado["modelo"],
                 json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], user_id,
+                resultado["severidade_max"], resultado["score"], componente_3d, user_id,
             ),
         )
         percepcao_id = cursor.lastrowid
@@ -3731,6 +3848,8 @@ def mobile_sensor_analisar():
     return jsonify({
         "id": percepcao_id,
         "imagem_url": imagem_url,
+        "maquina_id": maquina_id,
+        "componente_3d": _componente_json(maquina_id, componente_3d),
         "anomalias": anomalias,
         "score": resultado["score"],
         "severidade_max": resultado["severidade_max"],

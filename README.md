@@ -114,6 +114,17 @@ DATABASE_PATH=demo.db python scripts/seed_demo.py   # em um banco separado
 Com `GEMINI_API_KEY` configurada, cada diagnóstico é gerado pela IA (leva ~2 minutos
 por causa do limite de requisições); sem chave, fica o roteiro padrão de inspeção.
 
+### Como o sistema funciona
+
+- **Nova ocorrência (3D):** o operador escolhe a máquina, toca na peça no modelo CAD 3D,
+  escolhe o sintoma e responde se a máquina parou e se há risco. O sistema mostra na hora as
+  soluções que já funcionaram naquela peça (nesta máquina e nas do mesmo modelo) e gera o
+  diagnóstico. Só máquinas com CAD 3D recebem ocorrências.
+- **Sensor Visual:** foto do equipamento → a IA marca as anomalias → o sistema aponta a peça
+  provável no 3D e abre a ocorrência já com máquina e peça preenchidas.
+- **Inspeção de Documento:** foto de OS, checklist ou relatório → a IA confere cálculos,
+  campos obrigatórios e assinaturas; tudo fica no histórico.
+
 ### Modelos 3D a partir do CAD
 
 Máquinas podem usar o CAD do fabricante (STEP convertido em GLB) no visualizador 3D.

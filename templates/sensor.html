@@ -2,9 +2,17 @@
 {% block title %}Sensor Visual — Nexar QRQC{% endblock %}
 
 {% block head %}
+{% include 'partials/three_importmap.html' %}
+<link rel="stylesheet" href="/static/css/viewer3d.css" />
 <style>
+  .sv-3d-bloco { margin-top:14px; }
+  .sv-3d-bloco[hidden] { display:none; }
+  .sv-3d-bloco h5 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  .sv-3d-bloco h5 i { color: var(--primary); }
+  #sv3d .v3d-stage { height: 300px; min-height: 300px; }
   .sv-grid { display:grid; grid-template-columns: 1fr 1fr; gap:18px; align-items:start; }
-  @media (max-width: 900px){ .sv-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 900px){ .sv-grid { grid-template-columns: minmax(0, 1fr); } }
+  .sv-grid > * { min-width: 0; }
 
   .sv-card {
     background: var(--bg-card); border:1px solid var(--border);
@@ -93,7 +101,7 @@
   .sv-field { margin-bottom:12px; }
   .sv-field label { display:block; font-size:12px; font-weight:600; color: var(--text-muted); margin-bottom:5px; }
   .sv-field input, .sv-field select {
-    width:100%; padding:9px 11px; border:1px solid var(--border);
+    width:100%; max-width:100%; min-width:0; box-sizing:border-box; padding:9px 11px; border:1px solid var(--border);
     border-radius: var(--radius-sm); background: var(--bg-input); font-size:13px; color: var(--text);
   }
   .sv-spinner { display:inline-block; width:15px; height:15px; border:2px solid rgba(255,255,255,.4);
@@ -137,7 +145,7 @@
       <h4><i class="fas fa-crosshairs"></i> Nova inspeção</h4>
 
       <div class="sv-field">
-        <label>Máquina (opcional)</label>
+        <label>Máquina com CAD 3D (recomendado)</label>
         <select id="svMaquina">
           <option value="">— Não vincular —</option>
           {% for m in maquinas %}
@@ -194,7 +202,7 @@
         <img id="svPreview" alt="foto analisada" />
       </div>
       <p class="sv-hint" id="svHint" style="display:none;">
-        <i class="fas fa-hand-pointer"></i> Passe o mouse sobre as marcações para ver os detalhes de cada anomalia.
+        <i class="fas fa-hand-pointer"></i> Passe o mouse ou toque nas marcações para ver os detalhes de cada anomalia.
       </p>
 
       <div id="svScoreRow" class="sv-score" style="margin-top:14px; display:none;">
@@ -207,6 +215,11 @@
 
       <div id="svAnomList" style="margin-top:8px;"></div>
 
+      <div class="sv-3d-bloco" id="sv3dBloco" hidden>
+        <h5><i class="fas fa-cube"></i> Peça provável no modelo 3D: <span id="sv3dNome"></span></h5>
+        <div id="sv3d"></div>
+      </div>
+
       <div class="sv-confirm-row" id="svConfirmRow" style="display:none;">
         <button id="svConfirmar" class="btn btn-success btn-sm" style="flex:1;">
           <i class="fas fa-check"></i> Validar laudo
@@ -217,7 +230,7 @@
         </a>
       </div>
       <a id="svAbrirOc" class="btn btn-primary btn-sm" href="#" style="display:none; width:100%; margin-top:8px; justify-content:center;">
-        <i class="fas fa-triangle-exclamation"></i> Abrir ocorrência a partir desta inspeção
+        <i class="fas fa-cube"></i> <span id="svAbrirOcTxt">Registrar ocorrência a partir desta inspeção</span>
       </a>
       <p id="svConfirmMsg" style="font-size:12px; color:var(--success); margin-top:8px; display:none;">
         <i class="fas fa-check-circle"></i> Laudo validado. A inspeção fica registrada no histórico da máquina.
@@ -294,8 +307,18 @@
     currentId = data.id;
     document.getElementById('svLaudo').href = '/sensor/' + data.id + '/laudo.pdf';
     const abrirOc = document.getElementById('svAbrirOc');
-    abrirOc.href = '/CadastroOcorrencia?inspecao=' + data.id;
-    abrirOc.style.display = (data.anomalias && data.anomalias.length) ? 'flex' : 'none';
+    const abrirTxt = document.getElementById('svAbrirOcTxt');
+    if (data.ocorrencia_id) {
+      abrirOc.href = '/ocorrencia/' + data.ocorrencia_id;
+      abrirTxt.textContent = 'Ver ocorrência #' + data.ocorrencia_id;
+    } else {
+      abrirOc.href = '/CadastroOcorrencia?inspecao=' + data.id;
+      abrirTxt.textContent = data.componente_3d
+        ? 'Registrar ocorrência em: ' + data.componente_3d.nome
+        : 'Registrar ocorrência a partir desta inspeção';
+    }
+    abrirOc.style.display = (data.anomalias && data.anomalias.length && (data.maquina_id || data.ocorrencia_id)) ? 'flex' : 'none';
+    mostrar3D(data);
     card.style.display = 'block';
     preview.src = data.imagem_url;
     card.scrollIntoView({ behavior:'smooth', block:'nearest' });
@@ -355,6 +378,22 @@
     }
   }
 
+  // Peça provável no CAD da máquina, destacada no 3D
+  let card3d = null;
+  async function mostrar3D(data){
+    const bloco = document.getElementById('sv3dBloco');
+    if (!data.maquina_id || !data.componente_3d) { bloco.hidden = true; return; }
+    bloco.hidden = false;
+    document.getElementById('sv3dNome').textContent = data.componente_3d.nome;
+    const sev = data.severidade_max === 'critico' ? 'high' : (data.severidade_max === 'atencao' ? 'medium' : 'low');
+    const { criarCard3D } = await import('/static/js/viewer3d/card3d.js');
+    if (card3d) card3d.viewer.dispose();
+    card3d = await criarCard3D(document.getElementById('sv3d'), {
+      maquinaId: data.maquina_id,
+      destaques: [{ component_id: data.componente_3d.id, severity: sev }],
+    });
+  }
+
   // Destaca simultaneamente a caixa na imagem e o card na lista
   function setHot(i, on){
     const box  = document.querySelector('.sv-box[data-index="'+i+'"]');
@@ -388,6 +427,13 @@
 
       box.addEventListener('mouseenter', () => { setHot(i, true); showTip(a, i, box, wrap, tip); });
       box.addEventListener('mouseleave', () => { setHot(i, false); tip.classList.remove('show'); });
+      box.addEventListener('click', () => {
+        const aberto = box.classList.contains('hot');
+        wrap.querySelectorAll('.sv-box.hot').forEach(b => setHot(+b.dataset.index, false));
+        if (aberto) { tip.classList.remove('show'); return; }
+        setHot(i, true); showTip(a, i, box, wrap, tip);
+        document.getElementById('svAnom'+i)?.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      });
       wrap.appendChild(box);
     });
   }
