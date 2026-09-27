@@ -173,7 +173,7 @@ def _expandir_cad(slug: str) -> dict | None:
         "internos": d.get("internos"),
         "rotacao": d.get("rotacao"),
         "agrupar_soltas": bool(d.get("agrupar_soltas")),
-        "mapa": {c["id"]: {"nos": c.get("nos", []), "nome": c["nome"],
+        "mapa": {c["id"]: {"nos": c.get("nos", []), "nome": c["nome"], "cor": c.get("cor"),
                            "explode": c.get("explode", [0, 0, 0]), "casca": c.get("casca", False)}
                  for c in d["componentes"]},
         "componentes": [{k: c.get(k, "") for k in ("id", "nome", "tipo", "descricao")}

@@ -30,6 +30,7 @@ import modelos_3d
 import diagnostico_local
 import empresa
 import indicadores
+import cad_import
 
 load_dotenv()
 
@@ -764,6 +765,13 @@ def init_db():
         if col not in cols_maq:
             c.execute(f"ALTER TABLE maquinas ADD COLUMN {col} REAL")
     c.execute("CREATE TABLE IF NOT EXISTS config_geral (chave TEXT PRIMARY KEY, valor TEXT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS importacoes_cad (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT, nome TEXT, arquivo TEXT,
+        status TEXT, mensagem TEXT, sugestoes_json TEXT, criado_por_id INTEGER,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    # Conversões interrompidas por reinício do servidor não ficam "convertendo" para sempre
+    c.execute("UPDATE importacoes_cad SET status = 'erro', mensagem = 'A conversão foi interrompida "
+              "(o servidor reiniciou). Envie o arquivo de novo.' WHERE status IN ('na_fila', 'convertendo', 'otimizando')")
 
     # Cadastros da empresa: pessoas, qualificações, tipos de documento, auditoria
     empresa.criar_tabelas(conn)
@@ -2399,6 +2407,133 @@ def ver_ocorrencia(oc_id: int):
         anotacoes=anotacoes,
         ctx3d=ctx3d,
     )
+
+
+# ── Importação de CAD (STEP → modelo 3D) ──────────────────────────────────────
+CAD_MAX_MB = 400
+
+
+@app.before_request
+def _limite_upload_cad():
+    # CAD de fabricante passa fácil de 100 MB; o resto do sistema segue com o limite padrão
+    if request.endpoint == "cad_importar" and request.method == "POST":
+        request.max_content_length = CAD_MAX_MB * 1024 * 1024
+
+
+def _atualizar_importacao(job_id, status, mensagem, sugestoes=None):
+    conn = get_db()
+    if sugestoes is None:
+        conn.execute("UPDATE importacoes_cad SET status=?, mensagem=?, atualizado_em=CURRENT_TIMESTAMP WHERE id=?",
+                     (status, mensagem, job_id))
+    else:
+        conn.execute("UPDATE importacoes_cad SET status=?, mensagem=?, sugestoes_json=?, atualizado_em=CURRENT_TIMESTAMP "
+                     "WHERE id=?", (status, mensagem, json.dumps(sugestoes, ensure_ascii=False), job_id))
+    conn.commit()
+    conn.close()
+
+
+@app.route("/maquinas/cad", methods=["GET"])
+@perfil_requerido("manutencao")
+def cad_lista():
+    conn = get_db()
+    jobs = conn.execute("SELECT i.*, u.nome AS autor FROM importacoes_cad i LEFT JOIN usuarios u ON u.id = i.criado_por_id "
+                        "ORDER BY i.id DESC LIMIT 30").fetchall()
+    conn.close()
+    return render_template("cad_importar.html", jobs=jobs, modelos=modelos_3d.modelos_cad_disponiveis(),
+                           max_mb=CAD_MAX_MB)
+
+
+@app.route("/maquinas/cad/importar", methods=["POST"])
+@perfil_requerido("manutencao")
+def cad_importar():
+    arq = request.files.get("arquivo")
+    nome = (request.form.get("nome") or "").strip()[:80]
+    if not arq or not arq.filename:
+        flash("Escolha o arquivo STEP (.step/.stp) ou um .zip com o STEP.", "danger")
+        return redirect(url_for("cad_lista"))
+    if not nome:
+        nome = os.path.splitext(secure_filename(arq.filename))[0] or "Modelo importado"
+    ext = arq.filename.lower().rsplit(".", 1)[-1]
+    if ext not in ("step", "stp", "zip"):
+        flash("Formato não suportado. Envie .step, .stp ou .zip.", "danger")
+        return redirect(url_for("cad_lista"))
+    slug_modelo = cad_import.slug_livre(nome)
+    origem_dir = os.path.join(cad_import.PASTA_ORIGEM, slug_modelo)
+    os.makedirs(origem_dir, exist_ok=True)
+    caminho = os.path.join(origem_dir, f"origem.{ext}")
+    arq.save(caminho)
+    try:
+        steps = cad_import.extrair_steps(caminho, origem_dir)
+    except ValueError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("cad_lista"))
+    os.makedirs(os.path.join(cad_import.PASTA_MODELOS, slug_modelo), exist_ok=True)
+    conn = get_db()
+    job_id = conn.execute("INSERT INTO importacoes_cad (slug, nome, arquivo, status, mensagem, criado_por_id) "
+                          "VALUES (?,?,?,?,?,?)", (slug_modelo, nome, os.path.basename(steps[0]) if len(steps) == 1
+                                                   else f"{len(steps)} arquivos STEP", "na_fila",
+                                                   "Na fila para conversão…", current_user.id)).lastrowid
+    conn.commit()
+    conn.close()
+    registrar_auditoria("cad_importado", "importacao_cad", job_id, f"{nome} ({len(steps)} arquivo(s) STEP)")
+    cad_import.converter_em_segundo_plano(job_id, steps, os.path.join(cad_import.PASTA_MODELOS, slug_modelo, "modelo.glb"),
+                                          _atualizar_importacao)
+    return redirect(url_for("cad_job", job_id=job_id))
+
+
+@app.route("/maquinas/cad/<int:job_id>")
+@perfil_requerido("manutencao")
+def cad_job(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job:
+        flash("Importação não encontrada.", "danger")
+        return redirect(url_for("cad_lista"))
+    return render_template("cad_mapear.html", job=job)
+
+
+@app.route("/api/cad/<int:job_id>")
+@perfil_requerido("manutencao")
+def api_cad_job(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job:
+        return jsonify({"erro": "Importação não encontrada."}), 404
+    return jsonify({"id": job["id"], "status": job["status"], "mensagem": job["mensagem"], "nome": job["nome"],
+                    "slug": job["slug"], "glb": f"/static/models3d/{job['slug']}/modelo.glb",
+                    "sugestoes": json.loads(job["sugestoes_json"] or "[]")})
+
+
+@app.route("/api/cad/<int:job_id>/salvar", methods=["POST"])
+@perfil_requerido("manutencao")
+def api_cad_salvar(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job or job["status"] not in ("mapear", "pronto"):
+        return jsonify({"ok": False, "erro": "Esta importação ainda não pode ser salva."}), 409
+    dados = request.get_json(silent=True) or {}
+    comps = []
+    for c in dados.get("componentes") or []:
+        nome = str(c.get("nome") or "").strip()[:80]
+        nos = [str(n)[:160] for n in (c.get("nos") or []) if str(n).strip()][:400]
+        cid = re.sub(r"[^a-z0-9_]", "", str(c.get("id") or "").lower())[:40]
+        if nome and nos and cid:
+            comps.append({"id": cid, "nome": nome, "nos": nos, "tipo": str(c.get("tipo") or "mecânico")[:20],
+                          "cor": str(c.get("cor") or "")[:7] or None,
+                          "explode": c.get("explode") if isinstance(c.get("explode"), list) else [0, 0, 0]})
+    if len(comps) < 2:
+        return jsonify({"ok": False, "erro": "Selecione pelo menos 2 componentes."}), 400
+    nome_modelo = (dados.get("nome") or job["nome"]).strip()[:80]
+    rot = dados.get("rotacao") if isinstance(dados.get("rotacao"), list) else None
+    rot = [float(v) for v in rot[:3]] if rot else None
+    cad_import.salvar_modelo(job["slug"], nome_modelo, f"Importado pelo sistema a partir de {job['arquivo']}", comps, rot)
+    modelos_3d._ler_modelo_cad.cache_clear()
+    _atualizar_importacao(job_id, "pronto", f"Modelo “{nome_modelo}” disponível no cadastro de máquinas ({len(comps)} componentes).")
+    registrar_auditoria("cad_modelo_salvo", "importacao_cad", job_id, f"{nome_modelo} · {len(comps)} componentes")
+    return jsonify({"ok": True, "slug": job["slug"]})
 
 
 # ── Mapa da fábrica ───────────────────────────────────────────────────────────

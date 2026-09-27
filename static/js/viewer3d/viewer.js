@@ -188,6 +188,14 @@ export class Viewer3D {
         o.receiveShadow = true;
         // Material próprio por malha: o destaque de um componente não vaza para outro
         o.material = o.material.clone();
+        // Cor definida no modelo.json para o componente (CAD que veio sem cor)
+        let dono = o;
+        while (dono && !dono.userData.componentId) dono = dono.parent;
+        if (dono?.userData.cor && o.material.color) {
+          o.material.color.set(dono.userData.cor);
+          o.material.map = null;
+          o.material.vertexColors = false;
+        }
         o.userData._mat = {
           cor: o.material.color ? o.material.color.getHex() : null,
           vertexColors: !!o.material.vertexColors,
@@ -238,7 +246,7 @@ export class Viewer3D {
     const grupos = [];
     for (const [id, def] of Object.entries(modelo.mapa || {})) {
       const grupo = new THREE.Group();
-      grupo.userData = { componentId: id, nome: def.nome, explode: def.explode, casca: def.casca };
+      grupo.userData = { componentId: id, nome: def.nome, explode: def.explode, casca: def.casca, cor: def.cor };
       raiz.add(grupo);
       grupos.push(grupo);
       for (const nomeNo of def.nos || []) {

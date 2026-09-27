@@ -20,7 +20,23 @@ Modelos incluídos:
 
 Os arquivos originais ficam em `cad_origem/`.
 
-## Passo a passo para um novo CAD
+## Pelo próprio sistema (recomendado)
+
+Em **Máquinas → Importar CAD 3D** (perfis Manutenção e Administrador):
+
+1. Envie o STEP (`.step`/`.stp`) ou um `.zip` — com uma montagem ou com uma peça por arquivo,
+   como nos catálogos de fabricante. Até 400 MB.
+2. O sistema converte em segundo plano (alguns minutos em CAD grande) e sugere os componentes
+   pelos nomes das peças; parafusos, porcas e arruelas ficam de fora e acompanham a peça mais
+   próxima.
+3. Na prévia 3D, marque os componentes que o operador vai apontar, ajuste nomes, tipos e cores,
+   gire se o modelo aparecer deitado e salve.
+4. O modelo aparece no cadastro de máquinas.
+
+Requisitos no servidor: `pip install cadquery-ocp` (conversor) e, opcional, Node.js com `npx`
+para reduzir o arquivo (sem ele o modelo funciona, só fica maior).
+
+## Passo a passo manual (linha de comando)
 
 ### 1. Converter STEP → GLB
 

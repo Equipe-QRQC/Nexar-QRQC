@@ -1,0 +1,234 @@
+{% extends 'menu.html' %}
+{% block title %}{{ job.nome }} — Importar CAD 3D{% endblock %}
+
+{% block head %}
+{% include 'partials/three_importmap.html' %}
+<link rel="stylesheet" href="/static/css/viewer3d.css" />
+<link rel="stylesheet" href="/static/css/nova_ocorrencia.css" />
+<style>
+  .cm-layout { display:grid; grid-template-columns: minmax(0, 1fr) 420px; height: calc(100vh - 60px); min-height:560px; }
+  .cm-palco { display:flex; flex-direction:column; min-width:0; min-height:0; border-right:1px solid var(--border); }
+  .cm-painel { overflow-y:auto; background:var(--bg-page); display:flex; flex-direction:column; }
+  .cm-bloco { background:var(--bg-card); border-bottom:1px solid var(--border); padding:14px 16px; }
+  .cm-status { display:flex; gap:12px; align-items:center; padding:16px; border-radius:var(--radius); background:var(--bg-card); border:1px solid var(--border);
+    max-width:560px; margin:40px auto; }
+  .cm-status i { font-size:26px; color:var(--primary); }
+  .cm-status.erro i { color:var(--danger); }
+  .cm-status b { display:block; }
+  .cm-status small { color:var(--text-muted); }
+  .cm-comp { display:grid; grid-template-columns: 20px minmax(0, 1fr) 104px 34px; gap:8px; align-items:center; padding:7px 8px; border-radius:8px; }
+  .cm-comp.sel { background:var(--primary-light); }
+  .cm-comp input[type=checkbox] { width:17px; height:17px; accent-color:var(--primary); }
+  .cm-comp input[type=text], .cm-comp select { height:34px; padding:4px 8px; font-size:13px; }
+  .cm-comp input[type=color] { width:34px; height:34px; padding:2px; border:1px solid var(--border); border-radius:6px; background:#fff; }
+  .cm-comp .qtd { grid-column: 2 / 5; font-size:11px; color:var(--text-muted); margin-top:-4px; }
+  .cm-lista { display:flex; flex-direction:column; gap:2px; }
+  .cm-rodape { position:sticky; bottom:0; margin-top:auto; background:var(--bg-card); border-top:1px solid var(--border); padding:12px 16px; display:flex; gap:8px; }
+  .cm-rodape .btn { flex:1; justify-content:center; min-height:44px; }
+  .cm-ajuda { font-size:12px; color:var(--text-muted); margin:6px 0 0; line-height:1.5; }
+  .page-cad_job .chat-fab { bottom: 96px; }
+  @media (max-width: 900px) {
+    .cm-layout { display:flex; flex-direction:column; height:auto; }
+    .cm-palco { border-right:none; } .cm-palco .no-stage { flex:none; height:48vh; min-height:280px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-cube"></i> {{ job.nome }}</div>
+  <div class="topbar-actions"><a href="{{ url_for('cad_lista') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Importações</a></div>
+</div>
+
+<div id="telaStatus" class="page-body">
+  <div class="cm-status" id="status"><i class="fas fa-circle-notch fa-spin"></i><div><b id="stTitulo">Carregando…</b><small id="stMsg"></small></div></div>
+</div>
+
+<div class="cm-layout" id="telaMapa" hidden>
+  <section class="cm-palco">
+    <div class="no-palco-barra">
+      <span class="no-palco-titulo"><i class="fas fa-eye"></i> Prévia</span>
+      <button type="button" class="v3d-btn" id="btnEnquadrar" aria-label="Enquadrar"><i class="fas fa-expand"></i></button>
+      <button type="button" class="v3d-btn" id="btnRaioX"><i class="fas fa-x-ray"></i> Raio-X</button>
+    </div>
+    <div class="no-stage" id="stage"><div class="no-stage-carregando" id="carregando"><i class="fas fa-circle-notch fa-spin"></i> Carregando a prévia…</div></div>
+  </section>
+  <section class="cm-painel">
+    <div class="cm-bloco">
+      <label class="form-label" for="nomeModelo">Nome do modelo</label>
+      <input class="form-control" id="nomeModelo" maxlength="80" />
+      <label class="form-label" for="rotacao" style="margin-top:10px;">Orientação</label>
+      <select class="form-select" id="rotacao">
+        <option value="0">Como veio do CAD</option>
+        <option value="90">Girar 90° (modelo aparece deitado)</option>
+        <option value="-90">Girar −90° (aparece de ponta-cabeça)</option>
+      </select>
+      <p class="cm-ajuda" id="stResumo"></p>
+    </div>
+    <div class="cm-bloco" style="border-bottom:none;">
+      <b style="font-size:14px;">Componentes</b>
+      <p class="cm-ajuda">Marque as peças que o operador vai apontar. As não marcadas acompanham a peça marcada mais próxima.
+        Toque na peça na prévia para achar na lista.</p>
+      <div class="cm-lista" id="lista" style="margin-top:10px;"></div>
+    </div>
+    <div class="cm-rodape">
+      <button type="button" class="btn btn-outline" id="btnPrevia"><i class="fas fa-rotate"></i> Atualizar prévia</button>
+      <button type="button" class="btn btn-primary" id="btnSalvar"><i class="fas fa-check"></i> Salvar modelo</button>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+import * as THREE from 'three';
+import { Viewer3D } from '/static/js/viewer3d/viewer.js';
+
+const JOB = {{ job.id }};
+const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+const $ = (id) => document.getElementById(id);
+const TIPOS = ['mecânico', 'elétrico', 'estrutura', 'segurança'];
+let job = null, viewer = null, comps = [], selecionado = null;
+const carregandoEl = $('carregando');
+
+function el(tag, attrs = {}, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (k === 'checked') e.checked = v;
+    else if (k === 'value') e.value = v;
+    else e.setAttribute(k, v);
+  }
+  filhos.forEach(f => f != null && e.append(f));
+  return e;
+}
+
+const TITULOS = { na_fila: 'Na fila', convertendo: 'Convertendo o CAD', otimizando: 'Otimizando o modelo',
+                  erro: 'Não foi possível converter', mapear: 'Pronto para conferir', pronto: 'Modelo salvo' };
+
+async function acompanhar() {
+  const r = await fetch(`/api/cad/${JOB}`);
+  job = await r.json();
+  $('stTitulo').textContent = TITULOS[job.status] || job.status;
+  $('stMsg').textContent = job.mensagem || '';
+  $('status').classList.toggle('erro', job.status === 'erro');
+  $('status').querySelector('i').className = job.status === 'erro' ? 'fas fa-circle-xmark'
+    : job.status === 'pronto' ? 'fas fa-circle-check' : 'fas fa-circle-notch fa-spin';
+  if (job.status === 'mapear' || job.status === 'pronto') return abrirMapa();
+  if (job.status !== 'erro') setTimeout(acompanhar, 3000);
+}
+
+function montarLista() {
+  $('lista').replaceChildren(...comps.map((c, i) => {
+    const linha = el('div', { class: 'cm-comp' + (selecionado === c.id ? ' sel' : ''), 'data-id': c.id },
+      el('input', { type: 'checkbox', checked: c.incluir, 'aria-label': `Incluir ${c.nome}`, onchange: (e) => { c.incluir = e.target.checked; } }),
+      el('input', { type: 'text', class: 'form-control', value: c.nome, maxlength: '80', 'aria-label': 'Nome do componente',
+                    onchange: (e) => { c.nome = e.target.value.trim() || c.nome; }, onfocus: () => focar(c.id) }),
+      el('select', { class: 'form-select', 'aria-label': 'Tipo', onchange: (e) => { c.tipo = e.target.value; } },
+         ...TIPOS.map(t => { const o = el('option', { value: t }, t); o.selected = t === c.tipo; return o; })),
+      el('input', { type: 'color', value: c.cor || '#cfd6de', 'aria-label': `Cor de ${c.nome}`, title: 'Cor no 3D',
+                    oninput: (e) => { c.cor = e.target.value; pintarPrevia(c.id, c.cor); } }),
+      el('span', { class: 'qtd' }, `${c.nos.length} peça(s) no CAD`));
+    return linha;
+  }));
+  $('stResumo').textContent = `${comps.filter(c => c.incluir).length} de ${comps.length} grupos marcados. ${job.mensagem || ''}`;
+}
+
+// Mostra a cor escolhida na prévia na hora (a cor vai para o modelo ao salvar)
+function pintarPrevia(id, cor) {
+  const comp = viewer?.componentes.get(id);
+  if (!comp) return;
+  comp.meshes.forEach(m => {
+    m.material.color.set(cor);
+    m.material.map = null;
+    m.material.vertexColors = false;
+    m.material.needsUpdate = true;
+    if (m.userData._mat) { m.userData._mat.cor = m.material.color.getHex(); m.userData._mat.map = null; m.userData._mat.vertexColors = false; }
+  });
+  viewer._sujo = true;
+}
+
+function focar(id) {
+  selecionado = id;
+  document.querySelectorAll('.cm-comp').forEach(l => l.classList.toggle('sel', l.dataset.id === id));
+  if (viewer?.componentes.has(id)) { viewer.destacar([{ id, severidade: 'op' }]); viewer.focar(id); }
+}
+
+function modeloAtual() {
+  const rot = +$('rotacao').value;
+  return {
+    fonte: 'glb', arquivo: `${job.glb}?v=${Date.now()}`, agrupar_soltas: true,
+    rotacao: rot ? [rot, 0, 0] : null,
+    mapa: Object.fromEntries(comps.filter(c => c.incluir).map(c => [c.id, { nos: c.nos, nome: c.nome, cor: c.cor || null, explode: [0, 0, 0] }])),
+  };
+}
+
+async function previa() {
+  carregandoEl.hidden = false;
+  if (viewer) viewer.dispose();
+  $('stage').replaceChildren(carregandoEl);
+  viewer = new Viewer3D($('stage'), {
+    onSelect: (id) => {
+      if (!id) return;
+      focar(id);
+      document.querySelector(`.cm-comp[data-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+  });
+  await viewer.carregar(modeloAtual(), comps.filter(c => c.incluir).map(c => ({ component_id: c.id, name: c.nome })));
+  carregandoEl.hidden = true;
+}
+
+// Vista explodida: cada componente se afasta do centro da máquina
+function explosoes() {
+  const centro = new THREE.Box3().setFromObject(viewer.raiz).getCenter(new THREE.Vector3());
+  const saida = {};
+  for (const [id, c] of viewer.componentes) {
+    const d = new THREE.Box3().setFromObject(c.obj).getCenter(new THREE.Vector3()).sub(centro);
+    d.y = Math.max(d.y, 0) + 0.3;
+    saida[id] = d.lengthSq() > 1e-6 ? d.normalize().multiplyScalar(0.9).toArray().map(v => +v.toFixed(2)) : [0, 0.6, 0];
+  }
+  return saida;
+}
+
+async function abrirMapa() {
+  $('telaStatus').hidden = job.status !== 'pronto';
+  $('telaMapa').hidden = false;
+  $('nomeModelo').value = job.nome;
+  comps = job.sugestoes;
+  montarLista();
+  $('btnEnquadrar').onclick = () => viewer?.enquadrar();
+  $('btnRaioX').onclick = () => { const a = !$('btnRaioX').classList.contains('ativo'); $('btnRaioX').classList.toggle('ativo', a); viewer?.raioX(a); };
+  $('btnPrevia').onclick = () => { montarLista(); previa(); };
+  $('rotacao').onchange = previa;
+  $('btnSalvar').onclick = salvar;
+  await previa();
+}
+
+async function salvar() {
+  const marcados = comps.filter(c => c.incluir);
+  if (marcados.length < 2) { alert('Marque pelo menos 2 componentes.'); return; }
+  const b = $('btnSalvar');
+  b.disabled = true;
+  await previa();                                   // garante que a prévia reflete a seleção atual
+  const exp = explosoes();
+  const rot = +$('rotacao').value;
+  const r = await fetch(`/api/cad/${JOB}/salvar`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+    body: JSON.stringify({ nome: $('nomeModelo').value.trim(), rotacao: rot ? [rot, 0, 0] : null,
+      componentes: marcados.map(c => ({ id: c.id, nome: c.nome, tipo: c.tipo, cor: c.cor || null, nos: c.nos, explode: exp[c.id] || [0, 0.6, 0] })) }),
+  });
+  const d = await r.json().catch(() => ({}));
+  b.disabled = false;
+  if (!r.ok) { alert(d.erro || 'Não foi possível salvar.'); return; }
+  $('telaStatus').hidden = false;
+  $('stTitulo').textContent = 'Modelo salvo';
+  $('stMsg').replaceChildren('Já aparece no cadastro de máquinas. ',
+    el('a', { href: '/maquinas/cadastro' }, 'Cadastrar uma máquina com este modelo'));
+  $('status').querySelector('i').className = 'fas fa-circle-check';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+acompanhar();
+</script>
+{% endblock %}

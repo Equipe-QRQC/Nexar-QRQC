@@ -7,6 +7,9 @@
     <i class="fas fa-cogs"></i> {{ t.maquinas }}
   </div>
   <div class="topbar-actions">
+    {% if pode('manutencao') %}
+    <a href="{{ url_for('cad_lista') }}" class="btn btn-outline btn-sm"><i class="fas fa-cube"></i> Importar CAD 3D</a>
+    {% endif %}
     <a href="{{ url_for('cadastro_maquina') }}" class="btn btn-primary btn-sm">
       <i class="fas fa-plus"></i> {{ t.nova_maquina }}
     </a>
