@@ -13,6 +13,16 @@
       <input id="rsComponente" class="form-control" list="rsSugestoes" maxlength="120"
              placeholder="Ex.: Vedação do cilindro" autocomplete="off" />
       <datalist id="rsSugestoes"></datalist>
+      <div class="rs-linha">
+        <div>
+          <label class="form-label" for="rsHoras" style="margin-top:14px;">Horas de trabalho</label>
+          <input id="rsHoras" class="form-control" inputmode="decimal" placeholder="Ex.: 2,5" maxlength="8" />
+        </div>
+        <div>
+          <label class="form-label" for="rsCusto" style="margin-top:14px;">Custo de peças (R$)</label>
+          <input id="rsCusto" class="form-control" inputmode="decimal" placeholder="Ex.: 480,00" maxlength="12" />
+        </div>
+      </div>
       <p class="rs-hint"><i class="fas fa-circle-info"></i>
         Esse registro fica no histórico da máquina e é usado pela Nexar IA nos próximos diagnósticos.</p>
       <p id="rsErro" class="rs-erro" hidden></p>

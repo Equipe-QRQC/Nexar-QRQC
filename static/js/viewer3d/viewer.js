@@ -51,7 +51,7 @@ export class Viewer3D {
     this._ultimoPulso = 0;
     this.controls.addEventListener('change', () => { this._sujo = true; });
     for (const nome of ['carregar', 'enquadrar', 'focar', 'destacar', 'limparDestaques', 'selecionar',
-                        'raioX', 'explodir', 'marcarPonto', 'limparPonto', '_redimensionar']) {
+                        'raioX', 'explodir', 'marcarPonto', 'limparPonto', 'mapaDeCalor', '_redimensionar']) {
       const original = this[nome];
       this[nome] = (...args) => {
         const r = original.apply(this, args);
@@ -189,6 +189,9 @@ export class Viewer3D {
         // Material próprio por malha: o destaque de um componente não vaza para outro
         o.material = o.material.clone();
         o.userData._mat = {
+          cor: o.material.color ? o.material.color.getHex() : null,
+          vertexColors: !!o.material.vertexColors,
+          map: o.material.map || null,
           emissive: o.material.emissive ? o.material.emissive.getHex() : 0,
           emissiveIntensity: o.material.emissiveIntensity ?? 1,
           opacity: o.material.opacity, transparent: o.material.transparent,
@@ -404,6 +407,40 @@ export class Viewer3D {
       m.material.emissive.setHex(o.emissive);
       m.material.emissiveIntensity = o.emissiveIntensity;
     }
+  }
+
+  // ── Mapa de calor (falhas por componente) ───────────────────────────────
+  /**
+   * Pinta cada componente pela quantidade de falhas: sem falha = cinza claro,
+   * 1 falha = vermelho claro, a peça que mais falha = vermelho escuro (uma só
+   * matiz, do claro ao escuro). Passe null para voltar às cores originais.
+   * @param {Object<string, number>|null} valores  { componentId: falhas }
+   */
+  mapaDeCalor(valores) {
+    const max = valores ? Math.max(1, ...Object.values(valores)) : 1;
+    const semFalha = new THREE.Color(0xE2E6EB), claro = new THREE.Color(0xFCA5A5), escuro = new THREE.Color(0x991B1B);
+    for (const [id, c] of this.componentes) {
+      c.meshes.forEach(m => {
+        if (!m.material.color) return;
+        const o = m.userData._mat || {};
+        // CAD com cor por vértice ou em textura: a cor do material seria multiplicada por ela
+        const vc = !valores && !!o.vertexColors;
+        const mapa = valores ? null : (o.map || null);
+        if (m.material.vertexColors !== vc || m.material.map !== mapa) {
+          m.material.vertexColors = vc;
+          m.material.map = mapa;
+          m.material.needsUpdate = true;
+        }
+        if (!valores) {
+          if (o.cor !== null && o.cor !== undefined) m.material.color.setHex(o.cor);
+          return;
+        }
+        const n = valores[id] || 0;
+        if (!n) m.material.color.copy(semFalha);
+        else m.material.color.lerpColors(claro, escuro, max > 1 ? (n - 1) / (max - 1) : 1);
+      });
+    }
+    this.calorAtivo = !!valores;
   }
 
   // ── Seleção ─────────────────────────────────────────────────────────────

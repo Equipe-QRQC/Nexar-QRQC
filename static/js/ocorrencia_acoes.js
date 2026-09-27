@@ -60,6 +60,8 @@
     document.getElementById('rsId').textContent = id;
     document.getElementById('rsSolucao').value = preenchido?.solucao || '';
     document.getElementById('rsComponente').value = preenchido?.componente || '';
+    document.getElementById('rsHoras').value = '';
+    document.getElementById('rsCusto').value = '';
     document.getElementById('rsErro').hidden = true;
     const dl = document.getElementById('rsSugestoes');
     dl.innerHTML = '';
@@ -102,7 +104,9 @@
     const { id, onDone } = atual;
     try {
       const data = await postJSON(`/ocorrencias/${id}/resolver`,
-        { solucao_aplicada: solucao, componente_real: componente });
+        { solucao_aplicada: solucao, componente_real: componente,
+          horas_trabalho: document.getElementById('rsHoras').value.trim(),
+          custo_pecas: document.getElementById('rsCusto').value.trim().replace(/\./g, '').replace(',', '.') });
       fecharResolucao();
       toast(`Ocorrência #${id} resolvida.`);
       if (onDone) onDone(data);

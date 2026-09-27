@@ -114,10 +114,17 @@
           <i class="fas fa-cube"></i> Vincular CAD 3D
         </a>
         {% endif %}
+        {% if m.id in cad_ids %}
+        <a href="{{ url_for('maquina_3d', mid=m.id) }}" class="btn btn-outline btn-sm" title="3D e mapa de falhas" aria-label="3D e mapa de falhas">
+          <i class="fas fa-fire"></i>
+        </a>
+        {% endif %}
+        {% if pode('manutencao') %}
         <a href="{{ url_for('editar_maquina', maquina_id=m.id) }}"
            class="btn btn-outline btn-sm" title="{{ t.editar }}">
           <i class="fas fa-edit"></i>
         </a>
+        {% endif %}
       </div>
 
     </div>

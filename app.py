@@ -29,6 +29,7 @@ import nexa_ia
 import modelos_3d
 import diagnostico_local
 import empresa
+import indicadores
 
 load_dotenv()
 
@@ -734,6 +735,9 @@ def init_db():
         "sintoma":             "ALTER TABLE ocorrencias ADD COLUMN sintoma TEXT",
         "maquina_parada":      "ALTER TABLE ocorrencias ADD COLUMN maquina_parada INTEGER",
         "risco_pessoas":       "ALTER TABLE ocorrencias ADD COLUMN risco_pessoas INTEGER",
+        # Indicadores: esforço e custo registrados na resolução
+        "horas_trabalho":      "ALTER TABLE ocorrencias ADD COLUMN horas_trabalho REAL",
+        "custo_pecas":         "ALTER TABLE ocorrencias ADD COLUMN custo_pecas REAL",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -755,6 +759,11 @@ def init_db():
     if "modelo_3d" not in cols_maq:
         c.execute("ALTER TABLE maquinas ADD COLUMN modelo_3d TEXT")
         logger.info("Migração: coluna modelo_3d adicionada em maquinas.")
+    # Posição da máquina no mapa da fábrica (0–100 % da planta)
+    for col in ("mapa_x", "mapa_y"):
+        if col not in cols_maq:
+            c.execute(f"ALTER TABLE maquinas ADD COLUMN {col} REAL")
+    c.execute("CREATE TABLE IF NOT EXISTS config_geral (chave TEXT PRIMARY KEY, valor TEXT)")
 
     # Cadastros da empresa: pessoas, qualificações, tipos de documento, auditoria
     empresa.criar_tabelas(conn)
@@ -849,6 +858,28 @@ def inject_perfil():
     def pode(*perfis):
         return current_user.is_authenticated and (current_user.perfil == "admin" or current_user.perfil in perfis)
     return {"pode": pode, "PERFIS": empresa.PERFIS}
+
+
+@app.template_filter("num_br")
+def num_br(valor, casas: int = 1) -> str:
+    """1234.5 → '1.234,5'. Vazio → '—'."""
+    if valor is None or valor == "":
+        return "—"
+    txt = f"{float(valor):,.{casas}f}"
+    return txt.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@app.template_filter("moeda")
+def moeda(valor) -> str:
+    return "R$ " + num_br(valor or 0, 2)
+
+
+@app.template_filter("duracao")
+def duracao(horas) -> str:
+    """Horas → '5,2 h' ou '12,4 dias' (acima de 72 h)."""
+    if horas is None:
+        return "—"
+    return f"{num_br(horas / 24, 1)} dias" if horas >= 72 else f"{num_br(horas, 1)} h"
 
 
 @app.template_filter("data_br")
@@ -1979,6 +2010,15 @@ def resolver_ocorrencia(ocorrencia_id: int):
     data = request.get_json(silent=True) or request.form
     solucao = (data.get("solucao_aplicada") or "").strip()[:2000]
     componente = (data.get("componente_real") or "").strip()[:120]
+
+    def _numero(v, maximo):
+        try:
+            n = float(str(v).replace(",", ".")) if v not in (None, "") else None
+        except ValueError:
+            return None
+        return n if n is not None and 0 <= n <= maximo else None
+    horas = _numero(data.get("horas_trabalho"), 2000)
+    custo = _numero(data.get("custo_pecas"), 10_000_000)
     if len(solucao) < 5:
         return jsonify({"ok": False, "erro": "Descreva a solução aplicada (mínimo de 5 caracteres)."}), 400
 
@@ -1998,9 +2038,9 @@ def resolver_ocorrencia(ocorrencia_id: int):
         conn.execute(
             """UPDATE ocorrencias
                SET status='Resolvida', data_resolucao=?, resolvido_por_id=?,
-                   solucao_aplicada=?, componente_real=?
+                   solucao_aplicada=?, componente_real=?, horas_trabalho=?, custo_pecas=?
                WHERE id = ?""",
-            (agora, current_user.id, solucao, componente or None, ocorrencia_id),
+            (agora, current_user.id, solucao, componente or None, horas, custo, ocorrencia_id),
         )
         conn.commit()
 
@@ -2359,6 +2399,121 @@ def ver_ocorrencia(oc_id: int):
         anotacoes=anotacoes,
         ctx3d=ctx3d,
     )
+
+
+# ── Mapa de calor: falhas por peça no modelo 3D ───────────────────────────────
+
+def _maquinas_mesmo_modelo(conn, maquina_id: int, cfg: dict | None) -> list[int]:
+    ids = [maquina_id]
+    if cfg and cfg.get("modelo"):
+        for r in conn.execute("SELECT id, modelo_3d FROM maquinas WHERE id != ?", (maquina_id,)):
+            c2 = modelos_3d.ler_config(r["modelo_3d"])
+            if c2 and c2.get("modelo") == cfg["modelo"]:
+                ids.append(r["id"])
+    return ids
+
+
+def falhas_por_componente(maquina_id: int, frota: bool = False) -> dict:
+    """
+    Para cada peça do modelo 3D: falhas, em aberto, última falha, soluções e custo.
+    Casa a ocorrência pela peça apontada no 3D ou pelo "componente que falhou".
+    frota=True soma as máquinas com o mesmo modelo CAD.
+    """
+    conn = get_db()
+    m = conn.execute("SELECT id, nome, modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    if not m:
+        conn.close()
+        return {}
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    comps = modelos_3d.componentes_da_config(cfg)
+    irmas = _maquinas_mesmo_modelo(conn, maquina_id, cfg)
+    ids = irmas if frota else [maquina_id]
+    marcas = ",".join("?" * len(ids))
+    ocs = conn.execute(
+        "SELECT o.id, o.maquina_id, o.descricao, o.status, o.componente_apontado, o.componente_real, "
+        "o.solucao_aplicada, o.data_resolucao, o.horas_trabalho, o.custo_pecas, "
+        "COALESCE(o.data_ocorrencia, o.data_registro) AS quando, mq.nome AS maquina_nome "
+        f"FROM ocorrencias o JOIN maquinas mq ON mq.id = o.maquina_id WHERE o.maquina_id IN ({marcas}) "
+        "ORDER BY quando DESC", ids).fetchall()
+    valor_hora = indicadores.custo_hora(conn)
+    conn.close()
+    palavras = modelos_3d.palavras_do_modelo(cfg)
+    resultado = []
+    for c in comps:
+        cid = c["component_id"]
+        termos = palavras.get(cid, []) + [modelos_3d._normalizar_texto(c["name"])]
+        itens = [o for o in ocs if o["componente_apontado"] == cid or (
+            o["componente_real"] and any(t in modelos_3d._normalizar_texto(o["componente_real"]) for t in termos))]
+        resultado.append({
+            "id": cid, "nome": c["name"], "tipo": c["type"],
+            "falhas": len(itens),
+            "abertas": sum(1 for o in itens if o["status"] not in ("Resolvida", "Fechada")),
+            "ultima": data_br(itens[0]["quando"]) if itens else None,
+            "custo": sum((o["custo_pecas"] or 0) + (o["horas_trabalho"] or 0) * valor_hora for o in itens),
+            "ocorrencias": [{"id": o["id"], "descricao": o["descricao"], "status": o["status"],
+                             "solucao": o["solucao_aplicada"], "quando": data_br(o["quando"]),
+                             "maquina": o["maquina_nome"]} for o in itens[:4]],
+        })
+    resultado.sort(key=lambda x: (-x["falhas"], x["nome"]))
+    return {"maquina": {"id": m["id"], "nome": m["nome"]}, "frota": frota,
+            "maquinas_na_frota": len(irmas),
+            "componentes": resultado}
+
+
+@app.route("/api/maquinas/<int:mid>/calor")
+@login_required
+def api_calor(mid: int):
+    return jsonify(falhas_por_componente(mid, frota=request.args.get("frota") == "1"))
+
+
+@app.route("/maquinas/<int:mid>/3d")
+@login_required
+def maquina_3d(mid: int):
+    conn = get_db()
+    m = conn.execute("SELECT * FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    if not m:
+        flash("Máquina não encontrada.", "danger")
+        return redirect(url_for("maquinas"))
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    if not cfg:
+        flash("Esta máquina ainda não tem modelo 3D.", "warning")
+        return redirect(url_for("maquinas"))
+    return render_template("maquina_3d.html", m=m, cfg=cfg, tem_cad=modelos_3d.eh_cad(cfg))
+
+
+# ── Indicadores de manutenção (MTTR, MTBF, disponibilidade, custo) ────────────
+
+@app.route("/indicadores")
+@perfil_requerido("manutencao")
+def pagina_indicadores():
+    dias = request.args.get("dias", type=int) or 90
+    if dias not in (30, 90, 180, 365):
+        dias = 90
+    conn = get_db()
+    dados = indicadores.calcular(conn, dias, nomes_componentes=_nome_componente)
+    conn.close()
+    return render_template("indicadores.html", d=dados, dias=dias)
+
+
+@app.route("/indicadores/custo-hora", methods=["POST"])
+@perfil_requerido("manutencao")
+def indicadores_custo_hora():
+    try:
+        valor = float((request.form.get("custo_hora") or "").replace(",", "."))
+    except ValueError:
+        valor = -1
+    if not 0 < valor < 10000:
+        flash("Informe o custo da hora em reais (ex.: 85,00).", "danger")
+    else:
+        conn = get_db()
+        conn.execute("INSERT INTO config_geral (chave, valor) VALUES ('custo_hora_manutencao', ?) "
+                     "ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", (str(valor),))
+        conn.commit()
+        conn.close()
+        registrar_auditoria("custo_hora_alterado", "config", None, f"R$ {valor:.2f}")
+        flash(f"Custo da hora de manutenção atualizado para R$ {valor:.2f}.".replace(".", ","), "success")
+    return redirect(url_for("pagina_indicadores", dias=request.form.get("dias") or 90))
 
 
 # ── Configurações (administrador) ─────────────────────────────────────────────

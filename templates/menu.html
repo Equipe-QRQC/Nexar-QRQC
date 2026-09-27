@@ -81,6 +81,12 @@
       {% endif %}
 
       {% if pode('manutencao') %}
+      <span class="nav-label" style="margin-top:8px">Gestão</span>
+      <a href="{{ url_for('pagina_indicadores') }}"
+         class="nav-item {% if request.endpoint == 'pagina_indicadores' %}active{% endif %}">
+        <i class="fas fa-gauge-high"></i>
+        <span>Indicadores</span>
+      </a>
       <a href="{{ url_for('analise') }}"
          class="nav-item {% if request.endpoint == 'analise' %}active{% endif %}">
         <i class="fas fa-chart-bar"></i>

@@ -192,6 +192,14 @@ USUARIOS = [
 ]
 
 
+# Custo típico de peças por componente (R$), para os indicadores de custo
+CUSTO_PECAS = {
+    "compensador": 3800, "chicote": 2600, "eixo2": 950, "eixo4": 420, "eixo5": 1800, "eixo6": 640,
+    "eixo1": 380, "base": 260, "contraponto": 120, "transmissao": 540, "carro_transversal": 90,
+    "placa": 680, "porta_ferramenta": 210, "emergencia": 180, "cabecote": 460, "painel": 350, "fuso": 300,
+}
+
+
 def criar_pessoas_e_usuarios(conn) -> None:
     from werkzeug.security import generate_password_hash
     hoje = datetime.now().date()
@@ -289,15 +297,17 @@ def main() -> None:
                 tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
                 resposta_ia, ia_status, anotacoes_ia, diagrama_url, status, data_registro,
                 solucao_aplicada, componente_real, data_resolucao, resolvido_por_id,
-                componente_apontado, sintoma, maquina_parada, risco_pessoas
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                componente_apontado, sintoma, maquina_parada, risco_pessoas, horas_trabalho, custo_pecas
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ids[mi], campos["data_ocorrencia"], operador, campos["setor_area"], desc,
              campos["tipo_ocorrencia"], impacto, recorrente, det,
              diag["resposta_ia"], diag["ia_status"],
              json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
              diag["diagrama_url"], status, quando.strftime("%Y-%m-%d %H:%M:%S"),
              solucao, comp_nome if resolvida else None, data_res, admin_id if resolvida else None,
-             comp, sintoma, int(parada), int(risco)),
+             comp, sintoma, int(parada), int(risco),
+             round(horas * 0.6, 1) if resolvida else None,
+             CUSTO_PECAS.get(comp, 150) if resolvida else None),
         )
         conn.commit()
         conn.close()
