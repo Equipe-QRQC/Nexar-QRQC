@@ -159,6 +159,60 @@ OCORRENCIAS = [
      "Aberta", None, None),
 ]
 
+# Pessoas e habilitações: validade em dias a partir de hoje (negativo = vencida).
+# Alguns casos de propósito: NR-10 vencida, ASO vencendo, terceiro com NR-35 vencida, desligado.
+PESSOAS = [
+    ("10231", "Carlos Souza", "Manutenção", "Eletricista de manutenção", "CLT", "Fernanda Costa",
+     {"ASO": 200, "NR-10": 300, "NR-12": 150, "Integração": 330}, True),
+    ("10234", "Marcos Pereira", "Manutenção", "Mecânico de manutenção", "CLT", "Fernanda Costa",
+     {"ASO": 90, "NR-10": -18, "NR-12": 120, "Integração": 200}, True),
+    ("10240", "Ana Lima", "Produção", "Operadora de solda", "CLT", "Paulo Mendes",
+     {"ASO": 12, "NR-12": 200, "Integração": 150}, True),
+    ("10251", "Juliana Rocha", "Manutenção", "Técnica eletromecânica", "CLT", "Fernanda Costa",
+     {"ASO": 300, "NR-10": 25, "NR-12": 310, "NR-35": 180, "Integração": 280}, True),
+    ("10262", "Roberto Alves", "Utilidades", "Eletricista (terceiro)", "Terceiro", "Juliana Rocha",
+     {"ASO": 100, "NR-10": 400, "NR-35": -5, "Integração": 60}, True),
+    ("10270", "Fernanda Costa", "Segurança do Trabalho", "Técnica de segurança", "CLT", "Diretoria industrial",
+     {"ASO": 250, "NR-10": 250, "NR-33": 250, "NR-35": 250, "Integração": 300}, True),
+    ("10275", "Paulo Mendes", "Ferramentaria", "Torneiro mecânico", "CLT", "Fernanda Costa",
+     {"ASO": 60, "NR-12": 40, "Integração": 90}, True),
+    ("10281", "Lucas Martins", "Expedição", "Operador de empilhadeira", "Temporário", "Paulo Mendes",
+     {"ASO": -3, "Integração": 20}, True),
+    ("10288", "Beatriz Nunes", "RH", "Analista de RH", "CLT", "Diretoria administrativa",
+     {"ASO": 180, "Integração": 200}, True),
+    ("10190", "José Ribeiro", "Manutenção", "Eletricista", "CLT", "Fernanda Costa",
+     {"ASO": 40, "NR-10": 100}, False),
+]
+
+# Um usuário por perfil para a demonstração (mesma senha do administrador)
+USUARIOS = [
+    ("Beatriz Nunes (RH)", "rh@nexar.com", "rh"),
+    ("Fernanda Costa (Manutenção)", "manutencao@nexar.com", "manutencao"),
+    ("Carlos Souza (Operador)", "operador@nexar.com", "operador"),
+]
+
+
+def criar_pessoas_e_usuarios(conn) -> None:
+    from werkzeug.security import generate_password_hash
+    hoje = datetime.now().date()
+    for mat, nome, setor, funcao, vinculo, gestor, quals, ativo in PESSOAS:
+        cid = conn.execute(
+            "INSERT INTO colaboradores (matricula, nome, setor, funcao, vinculo, gestor, admissao, ativo) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (mat, nome, setor, funcao, vinculo, gestor, (hoje - timedelta(days=400 + int(mat[-2:]) * 20)).isoformat(),
+             int(ativo))).lastrowid
+        for q, dias in quals.items():
+            nexar.empresa.salvar_qualificacao(conn, cid, q, hoje + timedelta(days=dias))
+    senha = os.getenv("ADMIN_PASSWORD", "").strip() or "nexar2026"
+    for nome, email, perfil in USUARIOS:
+        if not conn.execute("SELECT 1 FROM usuarios WHERE email = ?", (email,)).fetchone():
+            conn.execute("INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",
+                         (nome, email, generate_password_hash(senha), perfil))
+    conn.commit()
+    print(f"✓ {len(PESSOAS)} pessoas com habilitações e {len(USUARIOS)} usuários de demonstração "
+          f"({', '.join(u[1] for u in USUARIOS)})")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--forcar", action="store_true", help="apaga ocorrências e máquinas existentes")
@@ -174,7 +228,8 @@ def main() -> None:
 
     if args.forcar:
         for tabela in ("ai_diagnosis_components", "ai_diagnoses", "machine_components",
-                       "ocorrencias", "diagramas", "percepcoes", "maquinas"):
+                       "ocorrencias", "diagramas", "percepcoes", "inspecoes_documento",
+                       "qualificacoes", "colaboradores", "maquinas"):
             conn.execute(f"DELETE FROM {tabela}")
         conn.commit()
 
@@ -197,6 +252,7 @@ def main() -> None:
             print(f"  modelo 3D '{cfg3d.get('familia') or cfg3d.get('modelo')}' com {n3d} componentes → {m['nome']}")
     conn.commit()
     print(f"✓ {len(ids)} máquinas cadastradas")
+    criar_pessoas_e_usuarios(conn)
 
     conn.close()
 

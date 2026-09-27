@@ -2,6 +2,7 @@
 {% block title %}Inspeção de Documento — Nexar QRQC{% endblock %}
 
 {% block head %}
+<link rel="stylesheet" href="/static/css/empresa.css" />
 <style>
   .dc-grid { display:grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap:18px; align-items:start; }
   @media (max-width: 900px) { .dc-grid { grid-template-columns: 1fr; } }
@@ -9,15 +10,12 @@
   .dc-card h4 { font-size:15px; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
   .dc-card h4 i { color:var(--primary); }
 
-  .dc-stats { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; margin-bottom:16px; }
+  .dc-stats { display:grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap:10px; margin-bottom:16px; }
+  @media (max-width: 767px) { .dc-stats { grid-template-columns: repeat(2, minmax(0,1fr)); } }
   .dc-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; }
   .dc-stat span { font-size:11.5px; color:var(--text-muted); display:block; }
   .dc-stat b { font-size:20px; }
 
-  .dc-tipos { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
-  .dc-tipo { min-height:38px; padding:7px 12px; border-radius:var(--radius-full); border:1px solid var(--border);
-    background:var(--bg-card); font:500 12.5px var(--font); color:var(--text); cursor:pointer; }
-  .dc-tipo.ativo { background:var(--primary); border-color:var(--primary); color:#fff; }
 
   .dc-drop { border:2px dashed var(--border); border-radius:var(--radius); padding:26px 16px; text-align:center;
     cursor:pointer; background:var(--bg-input); color:var(--text-muted); transition:.15s; }
@@ -53,6 +51,9 @@
   .dc-hist img { width:100%; height:92px; object-fit:cover; display:block; background:#E2E8F0; }
   .dc-hist div { padding:7px 9px; font-size:11.5px; color:var(--text-muted); }
   .dc-hist b { display:block; color:var(--text); font-size:12px; margin-bottom:2px; }
+  .dc-hist-status { display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; margin-bottom:4px; }
+  .dc-hist-aprovado { background:#D1FAE5; color:#065F46; } .dc-hist-pendencias { background:#FEF3C7; color:#92400E; }
+  .dc-hist-bloqueado { background:#FEE2E2; color:#991B1B; }
   .dc-vazio { color:var(--text-muted); font-size:13px; text-align:center; padding:26px 10px; }
   .dc-spinner { display:inline-block; width:15px; height:15px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff;
     border-radius:50%; animation:dc-gira .7s linear infinite; vertical-align:-2px; }
@@ -74,25 +75,30 @@
 
 <div class="page-body">
   <p style="color:var(--text-muted); font-size:13px; margin:0 0 16px; max-width:760px;">
-    Fotografe uma ordem de serviço, checklist ou relatório. A IA confere cálculos, campos obrigatórios,
-    assinaturas e inconsistências antes do documento seguir adiante.
+    Fotografe uma permissão de trabalho, ordem de serviço, checklist ou ficha. A IA lê o documento e o sistema confere
+    com o cadastro da empresa: quem executa está cadastrado, ativo e com as habilitações em dia? A máquina existe?
+    Os campos obrigatórios, cálculos e assinaturas estão certos?
   </p>
 
   <div class="dc-stats">
     <div class="dc-stat"><span>Documentos inspecionados</span><b>{{ stats.n }}</b></div>
-    <div class="dc-stat"><span>Problemas encontrados</span><b>{{ stats.p }}</b></div>
-    <div class="dc-stat"><span>Nota média</span><b>{{ stats.media|int if stats.n else '—' }}</b></div>
+    <div class="dc-stat"><span>Aprovados</span><b style="color:#047857;">{{ stats.aprovados }}</b></div>
+    <div class="dc-stat"><span>Com pendências</span><b style="color:#B45309;">{{ stats.pendencias }}</b></div>
+    <div class="dc-stat"><span>Bloqueados</span><b style="color:#B91C1C;">{{ stats.bloqueados }}</b></div>
   </div>
 
   <div class="dc-grid">
     <div class="dc-card">
       <h4><i class="fas fa-camera"></i> Nova inspeção</h4>
       <label class="form-label">Tipo de documento</label>
-      <div class="dc-tipos" id="dcTipos" role="radiogroup" aria-label="Tipo de documento">
-        {% for t in tipos %}
-        <button type="button" class="dc-tipo{{ ' ativo' if loop.first }}" role="radio" aria-checked="{{ 'true' if loop.first else 'false' }}" data-tipo="{{ t }}">{{ t }}</button>
+      <select class="form-select" id="dcTipo" aria-label="Tipo de documento" style="margin-bottom:8px;">
+        {% for grupo in tipos | groupby('setor') %}
+        <optgroup label="{{ grupo.grouper or 'Geral' }}">
+          {% for t in grupo.list %}<option value="{{ t.id }}">{{ t.nome }}</option>{% endfor %}
+        </optgroup>
         {% endfor %}
-      </div>
+      </select>
+      <p class="dc-tipo-info" id="dcTipoInfo"></p>
 
       <div class="dc-drop" id="dcDrop" tabindex="0" role="button" aria-label="Tirar foto ou escolher arquivo">
         <i class="fas fa-file-image"></i>
@@ -101,15 +107,18 @@
       </div>
       <input id="dcArquivo" type="file" accept="image/png,image/jpeg" capture="environment" hidden />
 
-      {% if maquinas %}
-      <div class="dc-field">
-        <label for="dcMaquina">Máquina relacionada (opcional)</label>
-        <select id="dcMaquina" class="form-select">
-          <option value="">— Nenhuma —</option>
-          {% for m in maquinas %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
-        </select>
-      </div>
-      {% endif %}
+      <details class="dc-manual" id="dcManual">
+        <summary><i class="fas fa-keyboard"></i> Informar dados à mão (ou conferir sem IA)</summary>
+        <div class="dc-manual-corpo">
+          <label class="form-label" for="dcMatriculas">Matrículas de quem executa</label>
+          <input class="form-control" id="dcMatriculas" inputmode="numeric" placeholder="Ex.: 10234, 10251" />
+          <label class="form-label" for="dcMaquina">Máquina</label>
+          <select id="dcMaquina" class="form-select">
+            <option value="">— Identificar pelo documento —</option>
+            {% for m in maquinas %}<option value="{{ m.id }}">{{ m.nome }}</option>{% endfor %}
+          </select>
+        </div>
+      </details>
 
       <button id="dcAnalisar" class="btn btn-primary" style="width:100%; margin-top:14px; min-height:46px; justify-content:center;" disabled>
         <i class="fas fa-wand-magic-sparkles"></i> Analisar documento
@@ -134,8 +143,8 @@
       <a href="?ver={{ r.id }}" data-ver="{{ r.id }}">
         <img src="{{ r.imagem_url }}" alt="Documento {{ r.id }}" loading="lazy" />
         <div>
+          <span class="dc-hist-status dc-hist-{{ r.status or 'pendencias' }}">{{ {'aprovado': 'Aprovado', 'bloqueado': 'Bloqueado'}.get(r.status, 'Pendências') }}</span>
           <b>{{ r.tipo_documento or 'Documento' }}</b>
-          {% if r.num_problemas %}{{ r.num_problemas }} problema(s){% else %}Sem problemas{% endif %} · nota {{ r.score }}<br>
           {{ r.criado_em | data_br }}{% if r.maquina_nome %} · {{ r.maquina_nome }}{% endif %}
         </div>
       </a>
@@ -150,12 +159,15 @@
 
 {% block scripts %}
 <script>
+  window.TIPOS_DOC = {{ tipos | tojson }};
+</script>
+<script>
 (function () {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
   const $ = (id) => document.getElementById(id);
   const drop = $('dcDrop'), input = $('dcArquivo'), btn = $('dcAnalisar'), corpo = $('dcResultadoCorpo');
+  const tipos = Object.fromEntries((window.TIPOS_DOC || []).map(t => [String(t.id), t]));
   let arquivo = null;
-  let tipo = document.querySelector('.dc-tipo.ativo')?.dataset.tipo || '';
 
   function el(tag, cls, texto) {
     const e = document.createElement(tag);
@@ -163,11 +175,22 @@
     if (texto != null) e.textContent = texto;
     return e;
   }
+  const ic = (c) => el('i', 'fas ' + c);
 
-  document.querySelectorAll('.dc-tipo').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.dc-tipo').forEach(x => { x.classList.toggle('ativo', x === b); x.setAttribute('aria-checked', String(x === b)); });
-    tipo = b.dataset.tipo;
-  }));
+  function infoTipo() {
+    const t = tipos[$('dcTipo').value];
+    const info = $('dcTipoInfo');
+    info.replaceChildren();
+    if (!t) return;
+    const partes = [];
+    if (t.qualificacoes.length) partes.push(['Exige de quem executa: ', t.qualificacoes.join(', ')]);
+    if (t.exige_maquina) partes.push(['Confere a máquina', '']);
+    if (t.campos.length) partes.push([`${t.campos.length} campos obrigatórios`, '']);
+    info.append(document.createTextNode(t.descricao ? t.descricao + ' ' : ''));
+    partes.forEach(([a, b], i) => { info.append(i || t.descricao ? ' · ' : '', el('b', null, a), b); });
+  }
+  $('dcTipo').addEventListener('change', infoTipo);
+  infoTipo();
 
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
@@ -192,16 +215,21 @@
   btn.addEventListener('click', async () => {
     if (!arquivo) return;
     btn.disabled = true;
-    btn.innerHTML = '<span class="dc-spinner"></span> Analisando…';
+    btn.innerHTML = '<span class="dc-spinner"></span> Lendo e conferindo…';
     $('dcErro').hidden = true;
     const fd = new FormData();
     fd.append('foto', arquivo);
-    fd.append('tipo_documento', tipo);
-    fd.append('maquina_id', $('dcMaquina')?.value || '');
+    fd.append('tipo_id', $('dcTipo').value);
+    fd.append('maquina_id', $('dcMaquina').value || '');
+    fd.append('matriculas', $('dcMatriculas').value || '');
     try {
       const r = await fetch('/api/documento/analisar', { method: 'POST', headers: { 'X-CSRFToken': csrf }, body: fd });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) { mostrarErro(d.erro || 'Não foi possível analisar o documento.'); return; }
+      if (!r.ok) {
+        mostrarErro(d.erro || 'Não foi possível analisar o documento.');
+        if (d.sem_ia) { $('dcManual').open = true; $('dcMatriculas').focus(); }
+        return;
+      }
       mostrar(d);
       if (window.matchMedia('(max-width: 900px)').matches) $('dcResultado').scrollIntoView({ behavior: 'smooth' });
     } catch (e) {
@@ -215,9 +243,101 @@
   const SEV = { alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
   const TIPO = { erro_calculo: 'Erro de cálculo', campo_incorreto: 'Campo incorreto', dado_faltante: 'Dado faltante',
                  inconsistencia: 'Inconsistência', erro_ortografico: 'Erro ortográfico', outro: 'Outro' };
+  const STATUS = {
+    aprovado: ['fa-circle-check', 'Aprovado', 'Documento conferido com o cadastro. Pode seguir.'],
+    pendencias: ['fa-triangle-exclamation', 'Com pendências', 'Corrija os pontos abaixo antes de arquivar ou liberar.'],
+    bloqueado: ['fa-ban', 'Bloqueado', 'Não libere o serviço: há pessoa sem habilitação válida ou fora do cadastro.'],
+  };
+  const SIT = { valida: 'válido', vence_em_breve: 'vence em breve', vencida: 'vencido', sem_registro: 'sem registro' };
+  const SIT_CLASSE = { valida: 'em-q-valida', vence_em_breve: 'em-q-vence_em_breve', vencida: 'em-q-vencida', sem_registro: 'em-q-vencida' };
+  const dataBR = (iso) => iso ? iso.slice(0, 10).split('-').reverse().join('/') : '';
 
   function mostrar(d) {
     corpo.className = '';
+    const partes = [];
+    const st = STATUS[d.status] || STATUS.pendencias;
+    const faixa = el('div', `dc-status dc-status-${d.status || 'pendencias'}`);
+    const txt = el('div');
+    txt.append(el('b', null, `${st[1]} · ${d.tipo_documento || 'Documento'}`), el('small', null, st[2]));
+    faixa.append(ic(st[0]), txt);
+    partes.push(faixa);
+
+    if (d.aviso_ia) {
+      const av = el('p', 'dc-tipo-info');
+      av.append(ic('fa-circle-info'), ' ' + d.aviso_ia + ' Conferência feita com os dados informados.');
+      partes.push(av);
+    }
+
+    const conf = d.conferencia || { pessoas: [], conferencias: [] };
+    // Pessoas
+    if (conf.pessoas.length) {
+      partes.push(el('div', 'dc-secao', 'Quem aparece no documento'));
+      conf.pessoas.forEach(p => {
+        const box = el('div', 'dc-pessoa' + (p.encontrado ? '' : ' nao-encontrada'));
+        const cab = el('div', 'dc-pessoa-cab');
+        cab.append(el('b', null, p.nome || `Matrícula ${p.matricula}`),
+                   el('small', null, (p.encontrado
+                     ? `mat. ${p.matricula} · ${p.funcao || p.setor || ''}${p.vinculo ? ' · ' + p.vinculo : ''}${p.ativo === false ? ' · DESLIGADO' : ''}`
+                     : 'não encontrado no cadastro') + (p.papel && p.papel !== 'informado' ? ` · ${p.papel}` : '')));
+        box.append(cab);
+        if (p.qualificacoes && p.qualificacoes.length) {
+          const tags = el('div', 'em-tags');
+          p.qualificacoes.forEach(q => tags.append(el('span', `em-tag ${SIT_CLASSE[q.situacao]}`,
+            `${q.tipo} · ${SIT[q.situacao]}${q.valido_ate ? ' até ' + dataBR(q.valido_ate) : ''}`)));
+          box.append(tags);
+        }
+        partes.push(box);
+      });
+    }
+    if (conf.maquina) {
+      const m = el('div', 'dc-conf dc-conf-info');
+      const t = el('div');
+      t.append(el('b', null, `Máquina: ${conf.maquina.nome}`), el('small', null, 'Identificada no cadastro'));
+      m.append(ic('fa-gears'), t);
+      partes.push(m);
+    }
+    // Conferências
+    const confs = (conf.conferencias || []).slice().sort((a, b) =>
+      ['alto', 'medio', 'baixo', 'info'].indexOf(a.severidade) - ['alto', 'medio', 'baixo', 'info'].indexOf(b.severidade));
+    if (confs.length) {
+      partes.push(el('div', 'dc-secao', 'Conferência com o cadastro'));
+      confs.forEach(c => {
+        const linha = el('div', `dc-conf dc-conf-${c.severidade}`);
+        const t = el('div');
+        t.append(el('b', null, c.titulo), el('small', null, c.descricao));
+        linha.append(ic(c.severidade === 'alto' ? 'fa-circle-xmark' : c.severidade === 'medio' ? 'fa-triangle-exclamation' : 'fa-circle-info'), t);
+        partes.push(linha);
+      });
+    }
+
+    // Problemas de preenchimento (IA)
+    const probs = d.problemas || [];
+    if (d.leitura_ia !== false) {
+      partes.push(el('div', 'dc-secao', 'Preenchimento do documento'));
+      if (!probs.length) {
+        const ok = el('div', 'dc-conf');
+        ok.append(ic('fa-circle-check'), el('div', null, 'Nenhum problema de preenchimento encontrado.'));
+        ok.firstChild.style.color = 'var(--success)';
+        partes.push(ok);
+      } else {
+        const ordem = { alto: 0, medio: 1, baixo: 2 };
+        probs.sort((a, b) => (ordem[a.severidade] ?? 3) - (ordem[b.severidade] ?? 3)).forEach((p, i) => {
+          const c = el('div', 'dc-prob');
+          c.dataset.sev = p.severidade || 'medio';
+          const cab = el('div', 'dc-prob-cab');
+          cab.append(el('span', null, `${i + 1}. ${TIPO[p.tipo] || 'Problema'}${p.campo ? ' — ' + p.campo : ''}`),
+                     el('small', null, SEV[p.severidade] || 'Médio'));
+          c.append(cab, el('p', null, p.descricao || ''));
+          if (p.sugestao) {
+            const s = el('p', 'sug');
+            s.append(el('b', null, 'Como corrigir: '), document.createTextNode(p.sugestao));
+            c.append(s);
+          }
+          partes.push(c);
+        });
+      }
+    }
+
     const topo = el('div', 'dc-result-top');
     const nota = Math.round(d.score ?? 0);
     const gauge = el('div', 'dc-gauge');
@@ -225,7 +345,10 @@
     gauge.style.setProperty('--gc', nota >= 80 ? 'var(--success)' : (nota >= 50 ? 'var(--warning)' : 'var(--danger)'));
     gauge.append(el('span', null, String(nota)));
     const info = el('div');
-    info.append(el('div', null, d.tipo_documento || 'Documento'), el('small', null, d.resumo || ''));
+    const extra = d.extraido || {};
+    info.append(el('div', null, [extra.numero ? `Nº ${extra.numero}` : null, extra.data_documento ? dataBR(extra.data_documento) : null]
+                                  .filter(Boolean).join(' · ') || 'Nota do documento'),
+                el('small', null, d.resumo || ''));
     info.firstChild.style.cssText = 'font-weight:600; font-size:14px;';
     info.lastChild.style.cssText = 'font-size:12.5px; color:var(--text-muted); display:block; margin-top:3px;';
     topo.append(gauge, info);
@@ -233,31 +356,7 @@
     const foto = el('img', 'dc-foto');
     foto.src = d.imagem_url;
     foto.alt = 'Documento analisado';
-
-    const lista = el('div');
-    const probs = d.problemas || [];
-    if (!probs.length) {
-      const ok = el('div', 'dc-ok');
-      ok.append(el('i', 'fas fa-circle-check'), el('div', null, 'Nenhum problema encontrado. Documento pronto para seguir.'));
-      lista.append(ok);
-    } else {
-      const ordem = { alto: 0, medio: 1, baixo: 2 };
-      probs.sort((a, b) => (ordem[a.severidade] ?? 3) - (ordem[b.severidade] ?? 3)).forEach((p, i) => {
-        const c = el('div', 'dc-prob');
-        c.dataset.sev = p.severidade || 'medio';
-        const cab = el('div', 'dc-prob-cab');
-        cab.append(el('span', null, `${i + 1}. ${TIPO[p.tipo] || 'Problema'}${p.campo ? ' — ' + p.campo : ''}`),
-                   el('small', null, SEV[p.severidade] || 'Médio'));
-        c.append(cab, el('p', null, p.descricao || ''));
-        if (p.sugestao) {
-          const s = el('p', 'sug');
-          s.append(el('b', null, 'Como corrigir: '), document.createTextNode(p.sugestao));
-          c.append(s);
-        }
-        lista.append(c);
-      });
-    }
-    corpo.replaceChildren(topo, foto, lista);
+    corpo.replaceChildren(partes[0], topo, ...partes.slice(1), foto);
   }
 
   // Reabrir uma inspeção do histórico

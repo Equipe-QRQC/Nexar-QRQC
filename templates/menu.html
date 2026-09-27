@@ -30,12 +30,16 @@
     <nav class="sidebar-nav">
       <span class="nav-label">Menu</span>
 
+      {% if pode('manutencao', 'rh') %}
       <a href="{{ url_for('dashboard') }}"
          class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}">
         <i class="fas fa-chart-line"></i>
         <span>Dashboard</span>
       </a>
+      {% endif %}
 
+      {% if pode('manutencao', 'operador') %}
+      <span class="nav-label">Chão de fábrica</span>
       <a href="{{ url_for('CadastroOcorrencia') }}"
          class="nav-item {% if request.endpoint == 'CadastroOcorrencia' or request.endpoint == 'registrar_ocorrencia' %}active{% endif %}">
         <i class="fas fa-plus-circle"></i>
@@ -59,18 +63,38 @@
         <i class="fas fa-camera-retro"></i>
         <span>Sensor Visual</span>
       </a>
+      {% endif %}
 
+      <span class="nav-label" style="margin-top:8px">Documentos e pessoas</span>
       <a href="{{ url_for('inspecao_documento') }}"
          class="nav-item {% if request.endpoint == 'inspecao_documento' %}active{% endif %}">
         <i class="fas fa-file-circle-check"></i>
         <span>Inspeção de Documento</span>
       </a>
 
+      {% if pode('rh', 'manutencao') %}
+      <a href="{{ url_for('pessoas') }}"
+         class="nav-item {% if request.endpoint in ('pessoas', 'pessoa_form') %}active{% endif %}">
+        <i class="fas fa-id-card"></i>
+        <span>Pessoas e habilitações</span>
+      </a>
+      {% endif %}
+
+      {% if pode('manutencao') %}
       <a href="{{ url_for('analise') }}"
          class="nav-item {% if request.endpoint == 'analise' %}active{% endif %}">
         <i class="fas fa-chart-bar"></i>
         <span>Análise</span>
       </a>
+      {% endif %}
+
+      {% if pode() %}
+      <a href="{{ url_for('configuracoes') }}"
+         class="nav-item {% if request.endpoint == 'configuracoes' %}active{% endif %}">
+        <i class="fas fa-sliders"></i>
+        <span>Configurações</span>
+      </a>
+      {% endif %}
 
       <span class="nav-label" style="margin-top:8px">Suporte</span>
 
@@ -88,7 +112,7 @@
         </div>
         <div class="user-info-text">
           <p>{{ current_user.nome if current_user.is_authenticated else 'Usuário' }}</p>
-          <span>{{ current_user.perfil.title() if current_user.is_authenticated else '' }}</span>
+          <span>{{ PERFIS.get(current_user.perfil, current_user.perfil) if current_user.is_authenticated else '' }}</span>
         </div>
       </div>
 

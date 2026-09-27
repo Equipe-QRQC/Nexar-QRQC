@@ -1,0 +1,68 @@
+{% extends 'menu.html' %}
+{% block title %}{{ pessoa.nome if pessoa else 'Nova pessoa' }} — Nexar QRQC{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/empresa.css" />
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-id-card"></i> {{ pessoa.nome if pessoa else 'Nova pessoa' }}</div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('pessoas') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Pessoas</a>
+  </div>
+</div>
+
+<div class="page-body">
+  <form method="POST" class="em-grid em-grid-pessoa">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-user"></i> Dados</span></div>
+      <div class="card-body em-campos">
+        <div><label class="form-label" for="pMat">Matrícula</label>
+          <input class="form-control" id="pMat" name="matricula" inputmode="numeric" required maxlength="20" value="{{ pessoa.matricula if pessoa else '' }}" /></div>
+        <div><label class="form-label" for="pNome">Nome completo</label>
+          <input class="form-control" id="pNome" name="nome" required maxlength="120" value="{{ pessoa.nome if pessoa else '' }}" /></div>
+        <div><label class="form-label" for="pSetor">Setor</label>
+          <input class="form-control" id="pSetor" name="setor" maxlength="80" value="{{ pessoa.setor if pessoa and pessoa.setor else '' }}" /></div>
+        <div><label class="form-label" for="pFuncao">Função</label>
+          <input class="form-control" id="pFuncao" name="funcao" maxlength="80" value="{{ pessoa.funcao if pessoa and pessoa.funcao else '' }}" /></div>
+        <div><label class="form-label" for="pVinculo">Vínculo</label>
+          <select class="form-select" id="pVinculo" name="vinculo">
+            {% for v in vinculos %}<option{{ ' selected' if pessoa and pessoa.vinculo == v }}>{{ v }}</option>{% endfor %}
+          </select></div>
+        <div><label class="form-label" for="pGestor">Gestor imediato</label>
+          <input class="form-control" id="pGestor" name="gestor" maxlength="120" value="{{ pessoa.gestor if pessoa and pessoa.gestor else '' }}" /></div>
+        <div><label class="form-label" for="pAdm">Admissão</label>
+          <input class="form-control" id="pAdm" name="admissao" type="date" value="{{ pessoa.admissao if pessoa and pessoa.admissao else '' }}" /></div>
+        <div><label class="form-label" for="pAtivo">Situação</label>
+          <select class="form-select" id="pAtivo" name="ativo">
+            <option value="1">Ativo</option>
+            <option value="0"{{ ' selected' if pessoa and not pessoa.ativo }}>Desligado</option>
+          </select></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-id-badge"></i> Habilitações e validade</span></div>
+      <div class="card-body">
+        <p class="em-ajuda">Informe até quando cada treinamento ou exame vale. Deixe em branco o que a pessoa não tem.
+           Documentos que exigem a habilitação são bloqueados quando ela está vencida.</p>
+        <div class="em-quals-form">
+          {% for q, nome in qualificacoes.items() %}
+          <label class="em-qual">
+            <span><b>{{ q }}</b><small>{{ nome }}</small></span>
+            <input class="form-control" type="date" name="q_{{ q }}" value="{{ quals.get(q, '') }}" aria-label="Validade {{ q }}" />
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="em-rodape-form">
+      <a href="{{ url_for('pessoas') }}" class="btn btn-ghost">Cancelar</a>
+      <button class="btn btn-primary"><i class="fas fa-check"></i> Salvar</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

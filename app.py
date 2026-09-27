@@ -4,7 +4,7 @@ import json
 import logging
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -28,6 +28,7 @@ import sensor_visual
 import nexa_ia
 import modelos_3d
 import diagnostico_local
+import empresa
 
 load_dotenv()
 
@@ -755,6 +756,13 @@ def init_db():
         c.execute("ALTER TABLE maquinas ADD COLUMN modelo_3d TEXT")
         logger.info("Migração: coluna modelo_3d adicionada em maquinas.")
 
+    # Cadastros da empresa: pessoas, qualificações, tipos de documento, auditoria
+    empresa.criar_tabelas(conn)
+    cols_doc = [r["name"] for r in c.execute("PRAGMA table_info(inspecoes_documento)").fetchall()]
+    for col, tipo_col in (("tipo_documento_id", "INTEGER"), ("status", "TEXT")):
+        if col not in cols_doc:
+            c.execute(f"ALTER TABLE inspecoes_documento ADD COLUMN {col} {tipo_col}")
+
     admin_email = os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower()
     admin_senha = os.getenv("ADMIN_PASSWORD", "").strip()
     admin = c.execute("SELECT id FROM usuarios WHERE email = ?", (admin_email,)).fetchone()
@@ -795,6 +803,52 @@ def load_user(user_id):
     if u:
         return User(u["id"], u["nome"], u["email"], u["perfil"])
     return None
+
+
+def perfil_requerido(*perfis):
+    """Restringe a rota aos perfis indicados (o administrador sempre pode)."""
+    from functools import wraps
+
+    def deco(f):
+        @wraps(f)
+        @login_required
+        def inner(*a, **kw):
+            if current_user.perfil != "admin" and current_user.perfil not in perfis:
+                flash("Seu perfil não tem acesso a esta área.", "danger")
+                return redirect(url_for("inicio_do_perfil"))
+            return f(*a, **kw)
+        return inner
+    return deco
+
+
+def registrar_auditoria(acao: str, entidade: str | None = None, entidade_id=None, detalhe: str | None = None):
+    """Trilha de auditoria (LGPD): quem fez o quê com dados de pessoas e documentos."""
+    try:
+        conn = get_db()
+        conn.execute("INSERT INTO auditoria (usuario_id, acao, entidade, entidade_id, detalhe) VALUES (?,?,?,?,?)",
+                     (current_user.id if current_user.is_authenticated else None, acao, entidade, entidade_id,
+                      (detalhe or "")[:300] or None))
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("[auditoria] falha ao registrar")
+
+
+def destino_do_perfil(perfil: str) -> str:
+    return {"operador": "CadastroOcorrencia", "rh": "pessoas"}.get(perfil, "dashboard")
+
+
+@app.route("/inicio")
+@login_required
+def inicio_do_perfil():
+    return redirect(url_for(destino_do_perfil(current_user.perfil)))
+
+
+@app.context_processor
+def inject_perfil():
+    def pode(*perfis):
+        return current_user.is_authenticated and (current_user.perfil == "admin" or current_user.perfil in perfis)
+    return {"pode": pode, "PERFIS": empresa.PERFIS}
 
 
 @app.template_filter("data_br")
@@ -838,7 +892,7 @@ def login():
         conn.close()
         if u and check_password_hash(u["senha_hash"], senha):
             login_user(User(u["id"], u["nome"], u["email"], u["perfil"]))
-            return redirect(url_for("dashboard"))
+            return redirect(url_for(destino_do_perfil(u["perfil"])))
         lang = idioma_atual()
         erro = {"pt": "E-mail ou senha incorretos.", "en": "Invalid email or password.", "es": "Correo o contraseña incorrectos."}.get(lang)
         return render_template("login.html", erro=erro)
@@ -1269,7 +1323,7 @@ def index():
     vai direto para o dashboard.
     """
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
+        return redirect(url_for(destino_do_perfil(current_user.perfil)))
     return render_template("inicialtotem.html")
 
 
@@ -2307,6 +2361,230 @@ def ver_ocorrencia(oc_id: int):
     )
 
 
+# ── Configurações (administrador) ─────────────────────────────────────────────
+
+@app.route("/configuracoes")
+@perfil_requerido()
+def configuracoes():
+    conn = get_db()
+    usuarios = conn.execute("SELECT id, nome, email, perfil, ativo, criado_em FROM usuarios ORDER BY ativo DESC, nome").fetchall()
+    tipos = [empresa.tipo_para_dict(r) for r in conn.execute("SELECT * FROM tipos_documento ORDER BY ativo DESC, setor, nome")]
+    auditoria = conn.execute(
+        "SELECT a.*, u.nome AS usuario FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id "
+        "ORDER BY a.id DESC LIMIT 80").fetchall()
+    conn.close()
+    return render_template("configuracoes.html", usuarios=usuarios, tipos=tipos, auditoria=auditoria,
+                           qualificacoes=empresa.QUALIFICACOES, aba=request.args.get("aba") or "usuarios")
+
+
+@app.route("/configuracoes/usuarios", methods=["POST"])
+@perfil_requerido()
+def config_usuario_salvar():
+    uid = request.form.get("id", type=int)
+    nome = (request.form.get("nome") or "").strip()[:120]
+    email = (request.form.get("email") or "").strip().lower()[:160]
+    perfil = request.form.get("perfil") or "operador"
+    senha = request.form.get("senha") or ""
+    ativo = 1 if request.form.get("ativo", "1") == "1" else 0
+    if perfil not in empresa.PERFIS:
+        perfil = "operador"
+    if not nome or "@" not in email:
+        flash("Informe nome e e-mail válidos.", "danger")
+        return redirect(url_for("configuracoes", aba="usuarios"))
+    conn = get_db()
+    try:
+        if uid:
+            if uid == current_user.id and (perfil != "admin" or not ativo):
+                flash("Você não pode tirar o seu próprio acesso de administrador.", "danger")
+                return redirect(url_for("configuracoes", aba="usuarios"))
+            conn.execute("UPDATE usuarios SET nome=?, email=?, perfil=?, ativo=? WHERE id=?", (nome, email, perfil, ativo, uid))
+            if senha:
+                if len(senha) < 8:
+                    flash("A senha precisa ter pelo menos 8 caracteres.", "danger")
+                    return redirect(url_for("configuracoes", aba="usuarios"))
+                conn.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (generate_password_hash(senha), uid))
+            acao = "usuario_alterado"
+        else:
+            if len(senha) < 8:
+                flash("A senha precisa ter pelo menos 8 caracteres.", "danger")
+                return redirect(url_for("configuracoes", aba="usuarios"))
+            uid = conn.execute("INSERT INTO usuarios (nome, email, senha_hash, perfil, ativo) VALUES (?,?,?,?,?)",
+                               (nome, email, generate_password_hash(senha), perfil, ativo)).lastrowid
+            acao = "usuario_criado"
+        conn.commit()
+    except sqlite3.IntegrityError:
+        flash("Já existe um usuário com esse e-mail.", "danger")
+        return redirect(url_for("configuracoes", aba="usuarios"))
+    finally:
+        conn.close()
+    registrar_auditoria(acao, "usuario", uid, f"{email} · {empresa.PERFIS[perfil]}")
+    flash(f"Usuário {nome} salvo.", "success")
+    return redirect(url_for("configuracoes", aba="usuarios"))
+
+
+@app.route("/configuracoes/tipos", methods=["POST"])
+@perfil_requerido()
+def config_tipo_salvar():
+    tid = request.form.get("id", type=int)
+    nome = (request.form.get("nome") or "").strip()[:120]
+    if not nome:
+        flash("Informe o nome do tipo de documento.", "danger")
+        return redirect(url_for("configuracoes", aba="tipos"))
+    quals = [q for q in request.form.getlist("qualificacoes") if q in empresa.QUALIFICACOES]
+    campos = "\n".join(l.strip()[:120] for l in (request.form.get("campos") or "").splitlines() if l.strip())
+    dados = (nome, (request.form.get("setor") or "").strip()[:80], (request.form.get("descricao") or "").strip()[:300],
+             campos, ",".join(quals), 1 if request.form.get("exige_maquina") else 0,
+             0 if request.form.get("inativo") else 1)
+    conn = get_db()
+    try:
+        if tid:
+            conn.execute("UPDATE tipos_documento SET nome=?, setor=?, descricao=?, campos_obrigatorios=?, "
+                         "qualificacoes_exigidas=?, exige_maquina=?, ativo=? WHERE id=?", dados + (tid,))
+        else:
+            tid = conn.execute("INSERT INTO tipos_documento (nome, setor, descricao, campos_obrigatorios, "
+                               "qualificacoes_exigidas, exige_maquina, ativo) VALUES (?,?,?,?,?,?,?)", dados).lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        flash("Já existe um tipo de documento com esse nome.", "danger")
+        return redirect(url_for("configuracoes", aba="tipos"))
+    finally:
+        conn.close()
+    registrar_auditoria("tipo_documento_salvo", "tipo_documento", tid, nome)
+    flash(f"Tipo de documento “{nome}” salvo.", "success")
+    return redirect(url_for("configuracoes", aba="tipos"))
+
+
+# ── Pessoas (RH) ──────────────────────────────────────────────────────────────
+
+def _resumo_qualificacoes(conn) -> tuple[dict, list[dict]]:
+    """Qualificações por pessoa e a lista de vencimentos (vencidas + próximas 30 dias)."""
+    por_pessoa: dict[int, dict] = {}
+    vencimentos = []
+    for r in conn.execute(
+            "SELECT q.colaborador_id, q.tipo, q.valido_ate, c.nome, c.matricula, c.setor, c.ativo "
+            "FROM qualificacoes q JOIN colaboradores c ON c.id = q.colaborador_id ORDER BY q.valido_ate"):
+        st = empresa.situacao(r["valido_ate"])
+        por_pessoa.setdefault(r["colaborador_id"], {})[r["tipo"]] = {"valido_ate": r["valido_ate"], "situacao": st}
+        if r["ativo"] and st in ("vencida", "vence_em_breve"):
+            dias = (empresa.para_data(r["valido_ate"]) - date.today()).days
+            vencimentos.append({"colaborador_id": r["colaborador_id"], "nome": r["nome"], "matricula": r["matricula"],
+                                "setor": r["setor"], "tipo": r["tipo"], "valido_ate": r["valido_ate"],
+                                "situacao": st, "dias": dias})
+    return por_pessoa, vencimentos
+
+
+@app.route("/pessoas")
+@perfil_requerido("rh", "manutencao")
+def pessoas():
+    busca = (request.args.get("q") or "").strip()
+    setor = request.args.get("setor") or ""
+    filtro = request.args.get("situacao") or ""
+    conn = get_db()
+    lista = conn.execute("SELECT * FROM colaboradores ORDER BY ativo DESC, nome").fetchall()
+    quals, vencimentos = _resumo_qualificacoes(conn)
+    setores = sorted({r["setor"] for r in lista if r["setor"]})
+    conn.close()
+    bq = empresa.normalizar(busca)
+    itens = []
+    for r in lista:
+        q = quals.get(r["id"], {})
+        if bq and bq not in empresa.normalizar(f"{r['nome']} {r['matricula']} {r['funcao'] or ''}"):
+            continue
+        if setor and r["setor"] != setor:
+            continue
+        sits = {v["situacao"] for v in q.values()}
+        if filtro == "vencida" and "vencida" not in sits:
+            continue
+        if filtro == "vence_em_breve" and "vence_em_breve" not in sits:
+            continue
+        if filtro == "inativo" and r["ativo"]:
+            continue
+        itens.append({"p": r, "q": q})
+    ativos = sum(1 for r in lista if r["ativo"])
+    stats = {"ativos": ativos, "vencidas": sum(1 for v in vencimentos if v["situacao"] == "vencida"),
+             "em_breve": sum(1 for v in vencimentos if v["situacao"] == "vence_em_breve")}
+    registrar_auditoria("pessoas_listadas", "colaborador", None, busca or None)
+    return render_template("pessoas.html", itens=itens, vencimentos=vencimentos, stats=stats, setores=setores,
+                           busca=busca, setor=setor, filtro=filtro, qualificacoes=empresa.QUALIFICACOES,
+                           pode_editar=current_user.perfil in ("admin", "rh"))
+
+
+@app.route("/pessoas/nova", methods=["GET", "POST"])
+@app.route("/pessoas/<int:pid>", methods=["GET", "POST"])
+@perfil_requerido("rh")
+def pessoa_form(pid: int | None = None):
+    conn = get_db()
+    pessoa = conn.execute("SELECT * FROM colaboradores WHERE id = ?", (pid,)).fetchone() if pid else None
+    if pid and not pessoa:
+        conn.close()
+        flash("Pessoa não encontrada.", "danger")
+        return redirect(url_for("pessoas"))
+    if request.method == "POST":
+        mat = re.sub(r"\D", "", request.form.get("matricula") or "")[:20]
+        nome = (request.form.get("nome") or "").strip()[:120]
+        if not mat or not nome:
+            conn.close()
+            flash("Matrícula (só números) e nome são obrigatórios.", "danger")
+            return redirect(request.url)
+        adm = empresa.para_data(request.form.get("admissao"))
+        dados = (mat, nome, (request.form.get("setor") or "").strip()[:80], (request.form.get("funcao") or "").strip()[:80],
+                 request.form.get("vinculo") or "CLT", (request.form.get("gestor") or "").strip()[:120],
+                 adm.isoformat() if adm else None, 1 if request.form.get("ativo", "1") == "1" else 0)
+        try:
+            if pessoa:
+                conn.execute("UPDATE colaboradores SET matricula=?, nome=?, setor=?, funcao=?, vinculo=?, gestor=?, "
+                             "admissao=?, ativo=? WHERE id=?", dados + (pid,))
+            else:
+                pid = conn.execute("INSERT INTO colaboradores (matricula, nome, setor, funcao, vinculo, gestor, admissao, "
+                                   "ativo) VALUES (?,?,?,?,?,?,?,?)", dados).lastrowid
+            for q in empresa.QUALIFICACOES:
+                empresa.salvar_qualificacao(conn, pid, q, empresa.para_data(request.form.get(f"q_{q}")))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            flash("Já existe outra pessoa com essa matrícula.", "danger")
+            return redirect(request.url)
+        conn.close()
+        registrar_auditoria("pessoa_salva", "colaborador", pid, f"{mat} · {nome}")
+        flash(f"{nome} salvo(a).", "success")
+        return redirect(url_for("pessoas"))
+    quals = empresa.qualificacoes_de(conn, pid) if pid else {}
+    conn.close()
+    if pid:
+        registrar_auditoria("pessoa_consultada", "colaborador", pid)
+    return render_template("pessoa_form.html", pessoa=pessoa, quals=quals, qualificacoes=empresa.QUALIFICACOES,
+                           vinculos=empresa.VINCULOS)
+
+
+@app.route("/pessoas/importar", methods=["POST"])
+@perfil_requerido("rh")
+def pessoas_importar():
+    arq = request.files.get("planilha")
+    if not arq or not arq.filename.lower().endswith((".csv", ".txt")):
+        flash("Envie a planilha em CSV (no Excel: Salvar como → CSV).", "danger")
+        return redirect(url_for("pessoas"))
+    conn = get_db()
+    try:
+        res = empresa.importar_csv(conn, arq.read(2_000_000))
+        conn.commit()
+    finally:
+        conn.close()
+    registrar_auditoria("pessoas_importadas", "colaborador", None,
+                        f"{res['criados']} novas, {res['atualizados']} atualizadas")
+    flash(f"Importação concluída: {res['criados']} nova(s), {res['atualizados']} atualizada(s).", "success")
+    for e in res["erros"]:
+        flash(e, "warning")
+    return redirect(url_for("pessoas"))
+
+
+@app.route("/pessoas/modelo.csv")
+@perfil_requerido("rh")
+def pessoas_modelo_csv():
+    from flask import Response
+    return Response(empresa.modelo_csv(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=modelo_pessoas.csv"})
+
+
 # ── Sensor Visual (percepção industrial aumentada) ────────────────────────────
 
 SENSOR_FOLDER = os.path.join("static", "uploads", "sensor")
@@ -2859,7 +3137,7 @@ def _config_3d_do_form(atual: str | None) -> dict | None:
 
 
 @app.route("/maquinas/cadastro", methods=["GET", "POST"])
-@login_required
+@perfil_requerido("manutencao")
 def cadastro_maquina():
     if request.method == "POST":
         nome       = request.form.get("nome", "").strip()
@@ -2916,7 +3194,7 @@ def cadastro_maquina():
 
 
 @app.route("/maquinas/<int:maquina_id>/editar", methods=["GET", "POST"])
-@login_required
+@perfil_requerido("manutencao")
 def editar_maquina(maquina_id: int):
     conn = get_db()
     maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
@@ -3590,12 +3868,16 @@ def mobile_logout():
 
 _DOC_SYSTEM = (
     "Você é um auditor especializado em documentos industriais e formulários técnicos. "
-    "Analisa documentos fotografados e identifica problemas com rigor profissional. "
+    "Analisa documentos fotografados, extrai os dados principais e identifica problemas com rigor profissional. "
     "Retorna APENAS JSON válido, sem texto antes ou depois."
 )
 
 _DOC_SCHEMA = (
-    '{"problemas": [{'
+    '{"extraido": {"numero": "número do documento ou null", "data_documento": "AAAA-MM-DD ou null", '
+    '"equipamento": "equipamento/máquina/local como escrito, ou null", '
+    '"pessoas": [{"nome": "nome como escrito", "matricula": "matrícula como escrita ou null", '
+    '"papel": "executante|emitente|responsavel|colaborador"}]}, '
+    '"problemas": [{'
     '"tipo": "erro_calculo|campo_incorreto|dado_faltante|inconsistencia|erro_ortografico|outro", '
     '"campo": "nome do campo ou região do documento", '
     '"descricao": "descrição objetiva do problema encontrado", '
@@ -3604,59 +3886,43 @@ _DOC_SCHEMA = (
     '}], "score": 0-100, "resumo": "resumo em 1 frase"}'
 )
 
-
 DOC_FOLDER = os.path.join("static", "uploads", "documentos")
 os.makedirs(DOC_FOLDER, exist_ok=True)
-TIPOS_DOCUMENTO = ["Ordem de serviço", "Checklist de manutenção", "Relatório de inspeção",
-                   "Registro de lubrificação", "Permissão de trabalho (PT)", "Outro"]
 
 
-def analisar_documento(arquivo, tipo_doc: str, maquina_id, user_id) -> tuple[dict, int]:
-    """
-    Analisa a foto de um documento industrial (OS, checklist, relatório) com a IA,
-    guarda a foto e o resultado no histórico. Usado pela web e pelo app.
-    Retorna (json, status_http).
-    """
+def _tipo_documento(conn, ref) -> dict | None:
+    """Tipo de documento pelo id ou pelo nome (o app manda o nome)."""
+    if not ref:
+        return None
+    if str(ref).isdigit():
+        r = conn.execute("SELECT * FROM tipos_documento WHERE id = ?", (int(ref),)).fetchone()
+    else:
+        r = conn.execute("SELECT * FROM tipos_documento WHERE LOWER(nome) = LOWER(?)", (str(ref).strip(),)).fetchone()
+    return empresa.tipo_para_dict(r)
+
+
+def _ler_documento_com_ia(img, tipo: dict | None) -> tuple[dict | None, str | None]:
+    """Envia só a imagem e as regras do tipo para a IA (o cadastro da empresa não sai daqui)."""
     openai_client = nexa_ia._get_client()
     if not openai_client:
-        return {"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}, 503
-    if not arquivo or not arquivo.filename:
-        return {"erro": "Nenhuma foto enviada."}, 400
-    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else "jpg"
-    if ext not in _SENSOR_EXT:
-        return {"erro": "Formato inválido. Envie PNG ou JPG."}, 400
-
-    try:
-        img = Image.open(arquivo.stream)
-        img.load()
-        if img.mode in ("RGBA", "P", "LA"):
-            img = img.convert("RGB")
-    except Exception:
-        return {"erro": "Não foi possível processar a imagem."}, 400
-
-    # Guarda a foto (JPEG) para o histórico
-    nome_arquivo = f"{secrets.token_hex(8)}.jpg"
-    caminho = os.path.join(DOC_FOLDER, nome_arquivo)
-    img.save(caminho, format="JPEG", quality=88)
-    imagem_url = f"/{caminho.replace(os.sep, '/')}"
-
+        return None, "A leitura por IA está indisponível no momento."
     import base64
     from io import BytesIO
     buf = BytesIO()
     img.save(buf, format="JPEG", quality=90)
     b64 = base64.b64encode(buf.getvalue()).decode()
-
-    ctx = f"Tipo de documento: {tipo_doc}\n" if tipo_doc else ""
+    ctx = ""
+    if tipo:
+        ctx = f"Tipo de documento: {tipo['nome']}\n"
+        if tipo["campos"]:
+            ctx += ("Campos obrigatórios deste tipo (reporte como dado_faltante os que estiverem em branco "
+                    "ou ilegíveis):\n" + "\n".join(f"- {c}" for c in tipo["campos"]) + "\n")
     user_prompt = (
         f"{ctx}"
-        "Analise este documento e identifique TODOS os problemas:\n"
-        "- Erros de cálculo (somas, médias, valores incorretos)\n"
-        "- Campos preenchidos incorretamente ou com dados inconsistentes\n"
-        "- Dados obrigatórios faltantes (assinatura, data, responsável, identificação do equipamento)\n"
-        "- Inconsistências entre campos relacionados\n"
-        "- Erros ortográficos em campos técnicos importantes\n\n"
-        "Se o documento estiver correto, retorne problemas: [].\n"
-        "Seja rigoroso — só reporte problemas realmente visíveis.\n\n"
+        "1) Extraia o número, a data, o equipamento/local e TODAS as pessoas citadas (nome e matrícula, como escritos).\n"
+        "2) Identifique TODOS os problemas: erros de cálculo, campos incorretos ou inconsistentes, "
+        "dados obrigatórios faltantes (assinaturas, datas, responsáveis), erros em termos técnicos.\n"
+        "Se o documento estiver correto, retorne problemas: []. Só reporte o que for visível.\n\n"
         f"Retorne APENAS JSON neste formato:\n{_DOC_SCHEMA}"
     )
     try:
@@ -3671,42 +3937,103 @@ def analisar_documento(arquivo, tipo_doc: str, maquina_id, user_id) -> tuple[dic
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=1500,
+            max_tokens=1800,
         )
-        result = json.loads((resp.choices[0].message.content or "").strip())
+        return json.loads((resp.choices[0].message.content or "").strip()), None
     except Exception as e:
         err = str(e)
         if "credit_balance_exhausted" in err or "insufficient_quota" in err:
             logger.error("[documento] créditos OpenAI esgotados")
-            return {"erro": "A análise por IA está indisponível no momento.", "imagem_url": imagem_url}, 503
-        logger.exception("[documento] erro OpenAI")
-        return {"erro": "Não foi possível analisar o documento. Tente novamente.", "imagem_url": imagem_url}, 502
+        else:
+            logger.exception("[documento] erro OpenAI")
+        return None, "Não foi possível ler o documento com a IA agora."
 
-    problemas = [p for p in (result.get("problemas") or []) if isinstance(p, dict)]
-    result["problemas"] = problemas
-    result.setdefault("modelo", "gpt-4o")
-    if not isinstance(result.get("score"), (int, float)):
-        result["score"] = 100 if not problemas else max(0, 100 - len(problemas) * 15)
-    result.setdefault("resumo", "Análise concluída.")
 
+def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: list[str] | None = None) -> tuple[dict, int]:
+    """
+    Lê a foto do documento com a IA e confere o que foi lido contra o cadastro da
+    empresa (pessoas e habilitações, máquinas). Com a IA fora do ar, a conferência
+    roda com os dados informados à mão (matrículas e máquina). Guarda no histórico.
+    Retorna (json, status_http). Usado pela web e pelo app.
+    """
+    if not arquivo or not arquivo.filename:
+        return {"erro": "Nenhuma foto enviada."}, 400
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else "jpg"
+    if ext not in _SENSOR_EXT:
+        return {"erro": "Formato inválido. Envie PNG ou JPG."}, 400
     try:
-        conn = get_db()
+        img = Image.open(arquivo.stream)
+        img.load()
+        if img.mode in ("RGBA", "P", "LA"):
+            img = img.convert("RGB")
+    except Exception:
+        return {"erro": "Não foi possível processar a imagem."}, 400
+
+    conn = get_db()
+    tipo = _tipo_documento(conn, tipo_ref)
+    conn.close()
+    matriculas = [re.sub(r"\D", "", m) for m in (matriculas or []) if re.sub(r"\D", "", m)]
+
+    lido, erro_ia = _ler_documento_com_ia(img, tipo)
+    if lido is None and not matriculas and not maquina_id:
+        return {"erro": f"{erro_ia} Informe as matrículas e a máquina em “Conferir sem IA” para seguir.",
+                "sem_ia": True}, 503
+
+    nome_arquivo = f"{secrets.token_hex(8)}.jpg"
+    caminho = os.path.join(DOC_FOLDER, nome_arquivo)
+    img.save(caminho, format="JPEG", quality=88)
+    imagem_url = f"/{caminho.replace(os.sep, '/')}"
+
+    lido = lido or {}
+    extraido = lido.get("extraido") if isinstance(lido.get("extraido"), dict) else {}
+    pessoas_lidas = [p for p in (extraido.get("pessoas") or []) if isinstance(p, dict)]
+    ja = {re.sub(r"\D", "", str(p.get("matricula") or "")) for p in pessoas_lidas}
+    pessoas_lidas += [{"matricula": m, "papel": "informado"} for m in matriculas if m not in ja]
+    extraido["pessoas"] = pessoas_lidas
+    problemas = [p for p in (lido.get("problemas") or []) if isinstance(p, dict)]
+
+    conn = get_db()
+    conf = empresa.conferir(conn, tipo, extraido, maquina_id_informada=maquina_id)
+    status = empresa.status_final(conf, problemas)
+    score = lido.get("score")
+    if not isinstance(score, (int, float)):
+        score = 100 if not problemas else max(0, 100 - len(problemas) * 15)
+    if status == "bloqueado":
+        score = min(score, 40)
+    resultado = {
+        "status": status,
+        "tipo_documento": tipo["nome"] if tipo else (str(tipo_ref) if tipo_ref else "Documento"),
+        "tipo": tipo,
+        "extraido": extraido,
+        "problemas": problemas,
+        "conferencia": conf,
+        "score": int(score),
+        "resumo": lido.get("resumo") or ("Conferência feita com os dados informados (sem leitura por IA)."
+                                         if erro_ia else "Análise concluída."),
+        "leitura_ia": erro_ia is None,
+        "aviso_ia": erro_ia,
+        "modelo": "gpt-4o" if erro_ia is None else "manual",
+    }
+    try:
         cur = conn.execute(
             """INSERT INTO inspecoes_documento
-               (imagem_url, tipo_documento, maquina_id, resultado_json, score, num_problemas,
-                modelo_ia, criado_por_id) VALUES (?,?,?,?,?,?,?,?)""",
-            (imagem_url, tipo_doc or None, maquina_id, json.dumps(result, ensure_ascii=False),
-             int(result["score"]), len(problemas), result["modelo"], user_id),
+               (imagem_url, tipo_documento, tipo_documento_id, maquina_id, resultado_json, score, num_problemas,
+                modelo_ia, status, criado_por_id) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (imagem_url, resultado["tipo_documento"], tipo["id"] if tipo else None,
+             (conf["maquina"] or {}).get("id"), json.dumps(resultado, ensure_ascii=False), resultado["score"],
+             len(problemas) + sum(1 for c in conf["conferencias"] if c["severidade"] in ("alto", "medio")),
+             resultado["modelo"], status, user_id),
         )
-        result["id"] = cur.lastrowid
+        resultado["id"] = cur.lastrowid
         conn.commit()
-        conn.close()
     except Exception:
         logger.exception("[documento] erro ao salvar a inspeção")
-    result["imagem_url"] = imagem_url
-    result["tipo_documento"] = tipo_doc
-    logger.info(f"[documento] user={user_id} problemas={len(problemas)}")
-    return result, 200
+    finally:
+        conn.close()
+    resultado["imagem_url"] = imagem_url
+    logger.info(f"[documento] user={user_id} status={status} problemas={len(problemas)} "
+                f"conferencias={len(conf['conferencias'])}")
+    return resultado, 200
 
 
 @app.route("/api/mobile/inspecao/documento", methods=["POST"])
@@ -3714,44 +4041,48 @@ def analisar_documento(arquivo, tipo_doc: str, maquina_id, user_id) -> tuple[dic
 @_mobile_auth
 @limiter.limit("10 per minute")
 def mobile_inspecao_documento():
-    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
-    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, None,
-                                       request.mobile_user["user_id"])
+    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:120]
+    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, request.mobile_user["user_id"])
     return jsonify(dados), status
 
 
 @app.route("/inspecao-documento")
 @login_required
 def inspecao_documento():
-    """Inspeção de documento por foto (OS, checklist, relatório) com histórico."""
+    """Inspeção de documento: leitura por IA + conferência com o cadastro da empresa."""
     conn = get_db()
-    maquinas_lista = maquinas_com_cad(conn)
+    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    tipos = [empresa.tipo_para_dict(r) for r in
+             conn.execute("SELECT * FROM tipos_documento WHERE ativo = 1 ORDER BY setor, nome")]
     recentes = conn.execute("""
-        SELECT d.id, d.imagem_url, d.tipo_documento, d.score, d.num_problemas, d.criado_em,
-               m.nome AS maquina_nome, u.nome AS autor
-        FROM inspecoes_documento d
-        LEFT JOIN maquinas m ON m.id = d.maquina_id
-        LEFT JOIN usuarios u ON u.id = d.criado_por_id
-        ORDER BY d.criado_em DESC LIMIT 24
+        SELECT d.id, d.imagem_url, d.tipo_documento, d.score, d.num_problemas, d.status, d.criado_em,
+               m.nome AS maquina_nome
+        FROM inspecoes_documento d LEFT JOIN maquinas m ON m.id = d.maquina_id
+        ORDER BY d.criado_em DESC, d.id DESC LIMIT 24
     """).fetchall()
-    total = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(num_problemas), 0) AS p, "
-                         "COALESCE(ROUND(AVG(score)), 0) AS media FROM inspecoes_documento").fetchone()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(status = 'bloqueado'), 0) AS bloqueados, "
+        "COALESCE(SUM(status = 'pendencias'), 0) AS pendencias, COALESCE(SUM(status = 'aprovado'), 0) AS aprovados "
+        "FROM inspecoes_documento").fetchone()
     conn.close()
     return render_template("inspecao_documento.html", maquinas=maquinas_lista, recentes=recentes,
-                           tipos=TIPOS_DOCUMENTO, stats=dict(total),
-                           ia_online=nexa_ia._get_client() is not None)
+                           tipos=tipos, stats=dict(total), ia_online=nexa_ia._get_client() is not None)
 
 
 @app.route("/api/documento/analisar", methods=["POST"])
 @login_required
 @limiter.limit("10 per minute")
 def api_documento_analisar():
-    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
     try:
         maquina_id = int(request.form.get("maquina_id") or 0) or None
     except ValueError:
         maquina_id = None
-    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, maquina_id, current_user.id)
+    matriculas = re.split(r"[,;\s]+", request.form.get("matriculas") or "")
+    dados, status = analisar_documento(request.files.get("foto"), request.form.get("tipo_id"),
+                                       current_user.id, maquina_id=maquina_id, matriculas=matriculas)
+    if status == 200:
+        registrar_auditoria("documento_inspecionado", "inspecao_documento", dados.get("id"),
+                            f"{dados['tipo_documento']} · {dados['status']}")
     return jsonify(dados), status
 
 
@@ -3771,6 +4102,7 @@ def api_documento_get(doc_id: int):
         dados = {}
     dados.update({"id": r["id"], "imagem_url": r["imagem_url"], "tipo_documento": r["tipo_documento"],
                   "maquina_nome": r["maquina_nome"], "criado_em": data_br(r["criado_em"])})
+    registrar_auditoria("documento_consultado", "inspecao_documento", doc_id)
     return jsonify(dados)
 
 

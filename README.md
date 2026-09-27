@@ -122,8 +122,21 @@ por causa do limite de requisições); sem chave, fica o roteiro padrão de insp
   diagnóstico. Só máquinas com CAD 3D recebem ocorrências.
 - **Sensor Visual:** foto do equipamento → a IA marca as anomalias → o sistema aponta a peça
   provável no 3D e abre a ocorrência já com máquina e peça preenchidas.
-- **Inspeção de Documento:** foto de OS, checklist ou relatório → a IA confere cálculos,
-  campos obrigatórios e assinaturas; tudo fica no histórico.
+- **Inspeção de Documento:** foto de permissão de trabalho, OS, checklist ou ficha → a IA lê
+  o documento (número, data, equipamento, pessoas) e o sistema confere com o cadastro da
+  empresa: quem executa está cadastrado, ativo e com as habilitações exigidas em dia (NR-10,
+  NR-35, ASO…)? A máquina existe? O resultado é **Aprovado**, **Com pendências** ou
+  **Bloqueado**. Sem IA, dá para conferir informando as matrículas e a máquina.
+- **Pessoas e habilitações (RH):** cadastro de colaboradores com validade de ASO e treinamentos
+  NR, importação por planilha (CSV) e painel de vencimentos. Não guarda salário nem laudos
+  médicos; cada consulta fica na auditoria (LGPD).
+- **Configurações (administrador):** usuários e perfis (Administrador, RH, Manutenção,
+  Operador), tipos de documento (campos obrigatórios e habilitações exigidas) e auditoria.
+
+**Usuários da base de demonstração** (senha igual à do administrador, `nexar2026` por padrão):
+`admin@nexar.com`, `rh@nexar.com`, `manutencao@nexar.com`, `operador@nexar.com`.
+Fotos de documentos para testar estão em `docs/exemplos/` (uma PT bloqueada por NR-10
+vencida, uma OS com pendências e uma PT aprovada).
 
 ### Modelos 3D a partir do CAD
 

@@ -1,0 +1,174 @@
+{% extends 'menu.html' %}
+{% block title %}Configurações — Nexar QRQC{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/empresa.css" />
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-sliders"></i> Configurações</div>
+</div>
+
+<div class="page-body">
+  <nav class="em-abas" role="tablist">
+    <a href="?aba=usuarios" class="{{ 'ativa' if aba == 'usuarios' }}" role="tab"><i class="fas fa-users-gear"></i> Usuários e perfis</a>
+    <a href="?aba=tipos" class="{{ 'ativa' if aba == 'tipos' }}" role="tab"><i class="fas fa-file-shield"></i> Tipos de documento</a>
+    <a href="?aba=auditoria" class="{{ 'ativa' if aba == 'auditoria' }}" role="tab"><i class="fas fa-clipboard-list"></i> Auditoria</a>
+  </nav>
+
+  {% if aba == 'usuarios' %}
+  <div class="em-grid">
+    <form class="card em-form" method="POST" action="{{ url_for('config_usuario_salvar') }}" id="formUsuario">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="id" id="uId" />
+      <div class="card-header"><span class="card-title" id="uTitulo"><i class="fas fa-user-plus"></i> Novo usuário</span></div>
+      <div class="card-body">
+        <label class="form-label" for="uNome">Nome</label>
+        <input class="form-control" id="uNome" name="nome" required maxlength="120" />
+        <label class="form-label" for="uEmail">E-mail (login)</label>
+        <input class="form-control" id="uEmail" name="email" type="email" required maxlength="160" />
+        <label class="form-label" for="uPerfil">Perfil</label>
+        <select class="form-select" id="uPerfil" name="perfil">
+          {% for k, v in PERFIS.items() %}<option value="{{ k }}"{{ ' selected' if k == 'operador' }}>{{ v }}</option>{% endfor %}
+        </select>
+        <label class="form-label" for="uSenha">Senha <small id="uSenhaDica">(mínimo 8 caracteres)</small></label>
+        <input class="form-control" id="uSenha" name="senha" type="password" minlength="8" autocomplete="new-password" />
+        <label class="em-check"><input type="checkbox" id="uAtivo" checked /> Ativo</label>
+        <input type="hidden" name="ativo" id="uAtivoV" value="1" />
+        <div class="em-acoes">
+          <button type="button" class="btn btn-ghost btn-sm" id="uLimpar" hidden>Cancelar edição</button>
+          <button class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Salvar usuário</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-users"></i> Usuários ({{ usuarios|length }})</span></div>
+      <div class="card-body em-perfis">
+        <p><b>Operador:</b> registra ocorrências, Sensor Visual e documentos. <b>Manutenção:</b> tudo do chão de fábrica, máquinas e análise.
+           <b>RH:</b> pessoas, habilitações e documentos. <b>Administrador:</b> tudo, inclusive estas configurações.</p>
+      </div>
+      <div class="em-tabela-wrap">
+        <table class="em-tabela">
+          <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead>
+          <tbody>
+          {% for u in usuarios %}
+            <tr class="{{ 'inativo' if not u.ativo }}">
+              <td>{{ u.nome }}</td><td>{{ u.email }}</td>
+              <td><span class="em-perfil em-perfil-{{ u.perfil }}">{{ PERFIS.get(u.perfil, u.perfil) }}</span></td>
+              <td>{{ 'Ativo' if u.ativo else 'Inativo' }}</td>
+              <td><button type="button" class="btn btn-outline btn-sm em-editar-usuario"
+                          data-id="{{ u.id }}" data-nome="{{ u.nome }}" data-email="{{ u.email }}"
+                          data-perfil="{{ u.perfil }}" data-ativo="{{ u.ativo }}"><i class="fas fa-pen"></i> Editar</button></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% elif aba == 'tipos' %}
+  <div class="em-grid">
+    <form class="card em-form" method="POST" action="{{ url_for('config_tipo_salvar') }}" id="formTipo">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="id" id="tId" />
+      <div class="card-header"><span class="card-title" id="tTitulo"><i class="fas fa-file-circle-plus"></i> Novo tipo de documento</span></div>
+      <div class="card-body">
+        <label class="form-label" for="tNome">Nome</label>
+        <input class="form-control" id="tNome" name="nome" required maxlength="120" placeholder="Ex.: Permissão de Trabalho — Espaço confinado" />
+        <label class="form-label" for="tSetor">Setor responsável</label>
+        <input class="form-control" id="tSetor" name="setor" maxlength="80" placeholder="Ex.: Segurança do Trabalho" />
+        <label class="form-label" for="tDescricao">Descrição</label>
+        <input class="form-control" id="tDescricao" name="descricao" maxlength="300" />
+        <label class="form-label" for="tCampos">Campos obrigatórios <small>(um por linha — a IA confere se estão preenchidos)</small></label>
+        <textarea class="form-control" id="tCampos" name="campos" rows="5"></textarea>
+        <span class="form-label">Habilitações exigidas de quem executa</span>
+        <div class="em-quals">
+          {% for q, nome in qualificacoes.items() %}
+          <label class="em-check" title="{{ nome }}"><input type="checkbox" name="qualificacoes" value="{{ q }}" /> {{ q }}</label>
+          {% endfor %}
+        </div>
+        <label class="em-check"><input type="checkbox" name="exige_maquina" id="tMaquina" /> Documento de máquina (confere o equipamento no cadastro)</label>
+        <label class="em-check"><input type="checkbox" name="inativo" id="tInativo" /> Desativado</label>
+        <div class="em-acoes">
+          <button type="button" class="btn btn-ghost btn-sm" id="tLimpar" hidden>Cancelar edição</button>
+          <button class="btn btn-primary btn-sm"><i class="fas fa-check"></i> Salvar tipo</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="em-tipos">
+      {% for t in tipos %}
+      <div class="card em-tipo {{ 'inativo' if not t.ativo }}">
+        <div class="em-tipo-cab">
+          <div><b>{{ t.nome }}</b><small>{{ t.setor or 'Geral' }}{% if not t.ativo %} · desativado{% endif %}</small></div>
+          <button type="button" class="btn btn-outline btn-sm em-editar-tipo" data-tipo='{{ t | tojson }}'><i class="fas fa-pen"></i> Editar</button>
+        </div>
+        {% if t.descricao %}<p>{{ t.descricao }}</p>{% endif %}
+        <div class="em-tags">
+          {% for q in t.qualificacoes %}<span class="em-tag em-tag-q"><i class="fas fa-id-badge"></i> {{ q }}</span>{% endfor %}
+          {% if t.exige_maquina %}<span class="em-tag"><i class="fas fa-gears"></i> Máquina</span>{% endif %}
+          <span class="em-tag">{{ t.campos|length }} campo(s) obrigatório(s)</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% else %}
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title"><i class="fas fa-clipboard-list"></i> Trilha de auditoria</span>
+      <small style="color:var(--text-muted);">Quem acessou ou alterou dados de pessoas, usuários e documentos (LGPD)</small>
+    </div>
+    <div class="em-tabela-wrap">
+      <table class="em-tabela">
+        <thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Detalhe</th></tr></thead>
+        <tbody>
+        {% for a in auditoria %}
+          <tr><td>{{ a.criado_em | data_br }}</td><td>{{ a.usuario or '—' }}</td>
+              <td>{{ a.acao.replace('_', ' ') }}{% if a.entidade_id %} #{{ a.entidade_id }}{% endif %}</td><td>{{ a.detalhe or '' }}</td></tr>
+        {% else %}
+          <tr><td colspan="4" style="text-align:center; color:var(--text-muted);">Nenhum registro ainda.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  // Usuários
+  document.querySelectorAll('.em-editar-usuario').forEach(b => b.addEventListener('click', () => {
+    $('uId').value = b.dataset.id; $('uNome').value = b.dataset.nome; $('uEmail').value = b.dataset.email;
+    $('uPerfil').value = b.dataset.perfil; $('uAtivo').checked = b.dataset.ativo === '1';
+    $('uAtivoV').value = b.dataset.ativo; $('uSenha').value = '';
+    $('uSenhaDica').textContent = '(deixe em branco para manter)';
+    $('uTitulo').innerHTML = '<i class="fas fa-user-pen"></i> Editar usuário';
+    $('uLimpar').hidden = false;
+    $('formUsuario').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  $('uAtivo')?.addEventListener('change', e => { $('uAtivoV').value = e.target.checked ? '1' : '0'; });
+  $('uLimpar')?.addEventListener('click', () => location.reload());
+
+  // Tipos de documento
+  document.querySelectorAll('.em-editar-tipo').forEach(b => b.addEventListener('click', () => {
+    const t = JSON.parse(b.dataset.tipo);
+    $('tId').value = t.id; $('tNome').value = t.nome; $('tSetor').value = t.setor; $('tDescricao').value = t.descricao;
+    $('tCampos').value = t.campos.join('\n'); $('tMaquina').checked = t.exige_maquina; $('tInativo').checked = !t.ativo;
+    document.querySelectorAll('input[name="qualificacoes"]').forEach(c => { c.checked = t.qualificacoes.includes(c.value); });
+    $('tTitulo').innerHTML = '<i class="fas fa-file-pen"></i> Editar tipo de documento';
+    $('tLimpar').hidden = false;
+    $('formTipo').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+  $('tLimpar')?.addEventListener('click', () => location.reload());
+})();
+</script>
+{% endblock %}
