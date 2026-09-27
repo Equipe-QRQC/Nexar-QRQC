@@ -1,10 +1,11 @@
 import os
+import hashlib
 import io
 import json
 import logging
 import re
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Literal
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -866,6 +867,14 @@ def inject_perfil():
     def pode(*perfis):
         return current_user.is_authenticated and (current_user.perfil == "admin" or current_user.perfil in perfis)
     return {"pode": pode, "PERFIS": empresa.PERFIS}
+
+
+@app.template_filter("fromjson")
+def fromjson(valor):
+    try:
+        return json.loads(valor) if valor else []
+    except ValueError:
+        return []
 
 
 @app.template_filter("num_br")
@@ -2738,9 +2747,14 @@ def configuracoes():
     auditoria = conn.execute(
         "SELECT a.*, u.nome AS usuario FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id "
         "ORDER BY a.id DESC LIMIT 80").fetchall()
+    sincronizacoes = conn.execute("SELECT * FROM sync_rh ORDER BY id DESC LIMIT 15").fetchall()
+    tem_chave = bool(conn.execute("SELECT 1 FROM config_geral WHERE chave = 'integracao_rh_token_hash'").fetchone())
     conn.close()
     return render_template("configuracoes.html", usuarios=usuarios, tipos=tipos, auditoria=auditoria,
-                           qualificacoes=empresa.QUALIFICACOES, aba=request.args.get("aba") or "usuarios")
+                           qualificacoes=empresa.QUALIFICACOES, aba=request.args.get("aba") or "usuarios",
+                           sincronizacoes=sincronizacoes, tem_chave=tem_chave,
+                           token_novo=session.pop("token_rh_novo", None),
+                           url_api=url_for("api_rh_colaboradores", _external=True))
 
 
 @app.route("/configuracoes/usuarios", methods=["POST"])
@@ -2818,6 +2832,96 @@ def config_tipo_salvar():
     registrar_auditoria("tipo_documento_salvo", "tipo_documento", tid, nome)
     flash(f"Tipo de documento “{nome}” salvo.", "success")
     return redirect(url_for("configuracoes", aba="tipos"))
+
+
+# ── Integração com o sistema de RH ────────────────────────────────────────────
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _config(conn, chave: str) -> str | None:
+    r = conn.execute("SELECT valor FROM config_geral WHERE chave = ?", (chave,)).fetchone()
+    return r["valor"] if r else None
+
+
+def sincronizar_rh(lista, completo: bool, origem: str) -> dict:
+    conn = get_db()
+    try:
+        res = empresa.aplicar_colaboradores(conn, lista, completo)
+        conn.execute("INSERT INTO sync_rh (origem, recebidos, criados, atualizados, desligados, erros) VALUES (?,?,?,?,?,?)",
+                     (origem[:80], res["recebidos"], res["criados"], res["atualizados"], res["desligados"],
+                      json.dumps(res["erros"], ensure_ascii=False) if res["erros"] else None))
+        conn.commit()
+    finally:
+        conn.close()
+    return res
+
+
+@app.route("/api/integracao/rh/colaboradores", methods=["POST"])
+@csrf.exempt
+@limiter.limit("30 per minute")
+def api_rh_colaboradores():
+    """
+    Entrada para o sistema de RH (TOTVS, Senior, integrador...). Autenticação:
+    Authorization: Bearer <chave gerada em Configurações → Integrações>.
+    Corpo: {"colaboradores": [...], "modo": "parcial"|"completo", "origem": "TOTVS"}.
+    """
+    auth = request.headers.get("Authorization", "")
+    conn = get_db()
+    esperado = _config(conn, "integracao_rh_token_hash")
+    conn.close()
+    if not esperado or not auth.startswith("Bearer ") or not secrets.compare_digest(_hash_token(auth[7:].strip()), esperado):
+        return jsonify({"ok": False, "erro": "Chave de integração inválida."}), 401
+    dados = request.get_json(silent=True) or {}
+    origem = str(dados.get("origem") or "Sistema de RH")[:60]
+    res = sincronizar_rh(dados.get("colaboradores"), dados.get("modo") == "completo", origem)
+    logger.info(f"[integracao/rh] {origem}: {res['criados']} novos, {res['atualizados']} atualizados, "
+                f"{res['desligados']} desligados, {len(res['erros'])} erros")
+    return jsonify({"ok": True, **res})
+
+
+@app.route("/configuracoes/integracao/chave", methods=["POST"])
+@perfil_requerido()
+def config_integracao_chave():
+    conn = get_db()
+    if request.form.get("acao") == "revogar":
+        conn.execute("DELETE FROM config_geral WHERE chave = 'integracao_rh_token_hash'")
+        conn.commit()
+        conn.close()
+        registrar_auditoria("integracao_rh_chave_revogada", "config")
+        flash("Chave de integração revogada. O sistema de RH não consegue mais enviar dados.", "success")
+        return redirect(url_for("configuracoes", aba="integracoes"))
+    token = "nxr_" + secrets.token_urlsafe(32)
+    conn.execute("INSERT INTO config_geral (chave, valor) VALUES ('integracao_rh_token_hash', ?) "
+                 "ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", (_hash_token(token),))
+    conn.commit()
+    conn.close()
+    registrar_auditoria("integracao_rh_chave_gerada", "config")
+    session["token_rh_novo"] = token   # mostrado uma única vez
+    return redirect(url_for("configuracoes", aba="integracoes"))
+
+
+@app.route("/configuracoes/integracao/simular", methods=["POST"])
+@perfil_requerido()
+def config_integracao_simular():
+    """Demonstração: um envio como o sistema de RH faria (renovações e uma admissão)."""
+    hoje = date.today()
+    def daqui(dias):
+        return (hoje + timedelta(days=dias)).isoformat()
+    lista = [
+        {"matricula": "10234", "nome": "Marcos Pereira", "qualificacoes": {"NR-10": daqui(730)}},
+        {"matricula": "10240", "nome": "Ana Lima", "qualificacoes": {"ASO": daqui(365)}},
+        {"matricula": "10301", "nome": "Rafael Gomes", "setor": "Manutenção", "funcao": "Eletricista de manutenção",
+         "vinculo": "CLT", "gestor": "Fernanda Costa", "admissao": hoje.isoformat(),
+         "qualificacoes": {"ASO": daqui(365), "NR-10": daqui(730), "Integração": daqui(365)}},
+    ]
+    res = sincronizar_rh(lista, False, "Simulação do sistema de RH")
+    registrar_auditoria("integracao_rh_simulada", "config", None, f"{res['criados']} novos, {res['atualizados']} atualizados")
+    flash(f"Envio simulado recebido: {res['criados']} admissão(ões), {res['atualizados']} atualização(ões). "
+          "Confira em Pessoas e habilitações.", "success")
+    return redirect(url_for("configuracoes", aba="integracoes"))
 
 
 # ── Pessoas (RH) ──────────────────────────────────────────────────────────────

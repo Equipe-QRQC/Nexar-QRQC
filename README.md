@@ -133,6 +133,16 @@ por causa do limite de requisições); sem chave, fica o roteiro padrão de insp
 - **Configurações (administrador):** usuários e perfis (Administrador, RH, Manutenção,
   Operador), tipos de documento (campos obrigatórios e habilitações exigidas) e auditoria.
 
+- **Indicadores (Manutenção):** MTTR, MTBF, disponibilidade e custo por máquina e por mês,
+  com as peças que mais falham.
+- **Mapa de calor no 3D:** cada peça pintada pelo número de falhas, da máquina ou da frota do
+  mesmo modelo, com as soluções de cada peça.
+- **Mapa da fábrica:** planta com a situação de cada máquina (parada, com ocorrência, operando).
+- **Importar CAD 3D:** envio de STEP pelo próprio sistema, conversão em segundo plano e
+  conferência dos componentes numa prévia 3D (ver [docs/CAD_3D.md](docs/CAD_3D.md)).
+- **Integração com o RH:** o sistema de RH envia pessoas e habilitações por uma API com chave
+  (ver [docs/INTEGRACAO_RH.md](docs/INTEGRACAO_RH.md)).
+
 **Usuários da base de demonstração** (senha igual à do administrador, `nexar2026` por padrão):
 `admin@nexar.com`, `rh@nexar.com`, `manutencao@nexar.com`, `operador@nexar.com`.
 Fotos de documentos para testar estão em `docs/exemplos/` (uma PT bloqueada por NR-10

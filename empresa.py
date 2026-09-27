@@ -118,6 +118,7 @@ SQL_TABELAS = """
 
 def criar_tabelas(conn) -> None:
     conn.executescript(SQL_TABELAS)
+    conn.executescript(SQL_SYNC)
     if not conn.execute("SELECT 1 FROM tipos_documento LIMIT 1").fetchone():
         for t in TIPOS_PADRAO:
             conn.execute(
@@ -388,3 +389,83 @@ def salvar_qualificacao(conn, colaborador_id: int, tipo: str, valido_ate: date |
         "INSERT INTO qualificacoes (colaborador_id, tipo, valido_ate) VALUES (?,?,?) "
         "ON CONFLICT(colaborador_id, tipo) DO UPDATE SET valido_ate = excluded.valido_ate, "
         "atualizado_em = CURRENT_TIMESTAMP", (colaborador_id, tipo, valido_ate.isoformat()))
+
+
+# ── Integração com o sistema de RH ────────────────────────────────────────────
+SQL_SYNC = """
+    CREATE TABLE IF NOT EXISTS sync_rh (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        origem TEXT,
+        recebidos INTEGER, criados INTEGER, atualizados INTEGER, desligados INTEGER,
+        erros TEXT,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+"""
+
+
+def aplicar_colaboradores(conn, lista: list, completo: bool = False) -> dict:
+    """
+    Cria ou atualiza pessoas pela matrícula a partir do sistema de RH.
+    completo=True: quem não veio na lista (e está ativo) é marcado como desligado.
+    Qualificações: {"NR-10": "2027-05-10", ...} (validade). Campos ausentes não são apagados.
+    """
+    criados = atualizados = desligados = 0
+    erros: list[str] = []
+    vistas: set[str] = set()
+    if not isinstance(lista, list):
+        return {"recebidos": 0, "criados": 0, "atualizados": 0, "desligados": 0,
+                "erros": ["'colaboradores' deve ser uma lista."]}
+    for n, p in enumerate(lista[:5000], 1):
+        if not isinstance(p, dict):
+            erros.append(f"Item {n}: formato inválido.")
+            continue
+        mat = _so_digitos(p.get("matricula"))[:20]
+        nome = str(p.get("nome") or "").strip()[:120]
+        if not mat or not nome:
+            erros.append(f"Item {n}: matrícula e nome são obrigatórios.")
+            continue
+        vistas.add(mat)
+        adm = para_data(p.get("admissao"))
+        campos = {
+            "nome": nome,
+            "setor": (str(p["setor"]).strip()[:80] if p.get("setor") is not None else None),
+            "funcao": (str(p["funcao"]).strip()[:80] if p.get("funcao") is not None else None),
+            "vinculo": (str(p["vinculo"]).strip()[:40] if p.get("vinculo") is not None else None),
+            "gestor": (str(p["gestor"]).strip()[:120] if p.get("gestor") is not None else None),
+            "admissao": adm.isoformat() if adm else None,
+            "ativo": (1 if p.get("ativo", True) not in (False, 0, "0", "false", "nao", "não") else 0),
+        }
+        existe = conn.execute("SELECT id FROM colaboradores WHERE matricula = ?", (mat,)).fetchone()
+        if existe:
+            sets = [(k, v) for k, v in campos.items() if v is not None]
+            conn.execute(f"UPDATE colaboradores SET {', '.join(k + ' = ?' for k, _ in sets)} WHERE id = ?",
+                         [v for _, v in sets] + [existe["id"]])
+            cid = existe["id"]
+            atualizados += 1
+        else:
+            cid = conn.execute(
+                "INSERT INTO colaboradores (matricula, nome, setor, funcao, vinculo, gestor, admissao, ativo) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (mat, nome, campos["setor"], campos["funcao"], campos["vinculo"] or "CLT", campos["gestor"],
+                 campos["admissao"], campos["ativo"])).lastrowid
+            criados += 1
+        quals = p.get("qualificacoes") or {}
+        if isinstance(quals, dict):
+            for tipo, validade in quals.items():
+                chave = next((q for q in QUALIFICACOES if normalizar(q).replace(" ", "") == normalizar(str(tipo)).replace(" ", "")), None)
+                d = para_data(validade)
+                if not chave or not d:
+                    erros.append(f"Item {n} ({mat}): habilitação '{tipo}' ou data '{validade}' inválida.")
+                    continue
+                salvar_qualificacao(conn, cid, chave, d)
+    ativos = conn.execute("SELECT COUNT(*) AS n FROM colaboradores WHERE ativo = 1").fetchone()["n"]
+    if completo and vistas and len(vistas) < ativos * 0.5:
+        # Trava contra envio incompleto por engano: não desliga metade da empresa
+        erros.append(f"Modo completo ignorado: a lista tem {len(vistas)} pessoas e há {ativos} ativas. "
+                     "Nenhum desligamento foi feito; confira se o envio está completo.")
+    elif completo and vistas:
+        marcas = ",".join("?" * len(vistas))
+        desligados = conn.execute(
+            f"UPDATE colaboradores SET ativo = 0 WHERE ativo = 1 AND matricula NOT IN ({marcas})", list(vistas)).rowcount
+    return {"recebidos": len(lista), "criados": criados, "atualizados": atualizados,
+            "desligados": desligados, "erros": erros[:50]}
