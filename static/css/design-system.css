@@ -3,7 +3,7 @@
    Paleta baseada na identidade visual Nexar
    ═══════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('../vendor/inter/inter.css');
 
 :root {
   /* Cores principais */
@@ -273,6 +273,9 @@ body {
   flex-direction: column;
   transition: var(--transition);
   min-height: 100vh;
+  /* Sem isso, tabelas largas empurram a largura da página (item flex) e o
+     overflow-x do .table-wrapper nunca atua — quebra o layout no celular. */
+  min-width: 0;
 }
 
 .main-content.expanded { margin-left: var(--sidebar-collapsed); }
@@ -775,6 +778,57 @@ textarea.form-control { resize: vertical; min-height: 90px; }
 .hamburger-btn:hover { background: var(--bg-page); color: var(--text); }
 
 /* ── Tablet: 768px – 1023px ──────────────────────── */
+/* ── Modal de resolução ──────────────────────────── */
+.rs-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(15, 23, 42, .55);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.rs-overlay[hidden] { display: none; }
+/* O atributo hidden sempre vence o display dos componentes */
+.btn[hidden], .badge[hidden], .card[hidden] { display: none !important; }
+.rs-linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.rs-box {
+  background: var(--bg-card); border-radius: var(--radius);
+  width: 100%; max-width: 520px; box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; max-height: 92vh;
+}
+.rs-hdr {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.rs-hdr h3 { font-size: 16px; font-weight: 600; }
+.rs-close { background: none; border: none; cursor: pointer; color: var(--text-muted); width: 36px; height: 36px; border-radius: var(--radius-sm); }
+.rs-close:hover { background: var(--bg-page); }
+.rs-body { padding: 18px 20px; overflow-y: auto; }
+.rs-hint { font-size: 12px; color: var(--text-muted); margin-top: 12px; display: flex; gap: 6px; }
+.rs-hint i { color: var(--primary); margin-top: 3px; }
+.rs-erro { font-size: 13px; color: var(--danger); margin-top: 10px; }
+.rs-ftr {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 20px; border-top: 1px solid var(--border); background: var(--bg-page);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* ── Toast ───────────────────────────────────────── */
+.toast-stack {
+  position: fixed; top: 16px; right: 16px; z-index: 700;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 240px; max-width: 360px; padding: 12px 16px;
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+  background: var(--bg-card); border-left: 4px solid var(--success);
+  font-size: 13px; color: var(--text);
+  animation: toast-in .2s ease-out; transition: opacity .3s, transform .3s;
+}
+.toast i { color: var(--success); }
+.toast-danger { border-left-color: var(--danger); }
+.toast-danger i { color: var(--danger); }
+.toast.saindo { opacity: 0; transform: translateY(-6px); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
 @media (min-width: 768px) and (max-width: 1023px) {
   .sidebar { width: var(--sidebar-collapsed); }
   .sidebar .nav-item span,
@@ -789,14 +843,20 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   .grid-3 { grid-template-columns: 1fr 1fr; }
   .filter-grid { grid-template-columns: 1fr 1fr; }
   .page-body { padding: 20px; }
-  .topbar { padding: 0 20px; }
+  .topbar { padding: 8px 20px; height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; }
+  .topbar-actions { flex-wrap: wrap; gap: 6px; }
   .chat-window { width: 320px; }
 }
 
 /* ── Mobile: < 768px ─────────────────────────────── */
 @media (max-width: 767px) {
   /* Hamburger visible */
-  .hamburger-btn { display: flex; }
+  /* Fixo no canto, sobre a barra do topo (que reserva 54px à esquerda);
+     sem isso ele ocupava 36px do layout e empurrava todas as telas para a direita */
+  .hamburger-btn {
+    display: flex; position: fixed; top: 10px; left: 10px; z-index: 90;
+    background: var(--bg-card); border-color: var(--border); color: var(--text);
+  }
 
   /* Sidebar: off-canvas drawer — hidden by default */
   .sidebar {
@@ -831,7 +891,7 @@ textarea.form-control { resize: vertical; min-height: 90px; }
     gap: 6px;
   }
   .topbar-title { font-size: 14px; gap: 6px; padding: 10px 0; }
-  .topbar-actions { gap: 5px; padding: 6px 0; }
+  .topbar-actions { gap: 5px; padding: 6px 0; flex-wrap: wrap; max-width: 100%; }
   .topbar-actions .btn { padding: 6px 10px; font-size: 12px; gap: 4px; }
   .topbar-actions .btn i { font-size: 11px; }
   .topbar-actions .btn-lg { padding: 6px 10px; font-size: 12px; }
@@ -853,6 +913,39 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   .card-body { padding: 16px; }
   .card-title { font-size: 13.5px; }
 
+  /* Tabelas de ocorrências viram lista de cards no celular:
+     linha 1 = máquina + status · linha 2 = descrição · linha 3 = tipo, impacto, data */
+  .table-cards thead { display: none; }
+  .table-cards, .table-cards tbody { display: block; width: 100%; }
+  .table-cards tr[data-id], .table-cards tr.row-link {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    grid-template-areas:
+      "maq  maq  maq  status"
+      "desc desc desc desc"
+      "tipo imp  data acao";
+    align-items: center;
+    gap: 6px 8px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-cards td { padding: 0 !important; border: none !important; white-space: normal !important; }
+  .table-cards .c-id, .table-cards .c-op { display: none; }
+  .table-cards .c-maq { grid-area: maq; min-width: 0; }
+  .table-cards .c-status { grid-area: status; justify-self: end; }
+  .table-cards .badge { white-space: nowrap; }
+  .table-cards .c-desc {
+    grid-area: desc; max-width: none !important; font-size: 13px; color: var(--text-muted);
+    display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .table-cards .c-tipo { grid-area: tipo; }
+  .table-cards .c-imp  { grid-area: imp; }
+  .table-cards .c-data { grid-area: data; justify-self: end; font-size: 12px; }
+  .table-cards .c-acao { grid-area: acao; }
+  .table-cards .c-acao .btn-icon { width: 44px; height: 44px; }
+  .table-cards tr:not([data-id]):not(.row-link) { display: block; }
+  .table-cards tr:not([data-id]):not(.row-link) td { display: block; }
+
   /* Tables: horizontal scroll */
   .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .table th, .table td { padding: 10px 12px; white-space: nowrap; }
@@ -864,6 +957,13 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   /* Chat */
   .chat-window { width: calc(100vw - 24px); right: 12px; bottom: 72px; }
   .chat-fab { bottom: 14px; right: 14px; width: 48px; height: 48px; font-size: 18px; }
+  /* Em formulários o botão flutuante cobre campos e botões: fica oculto */
+  .page-CadastroOcorrencia .chat-fab,
+  .page-registrar_ocorrencia .chat-fab,
+  .page-solicitacao .chat-fab,
+  .page-cadastro_maquina .chat-fab,
+  .page-editar_maquina .chat-fab,
+  .page-sensor .chat-fab { display: none; }
 
   /* Actions row: wrap buttons, submit full width */
   .actions-row { justify-content: stretch; gap: 8px; }

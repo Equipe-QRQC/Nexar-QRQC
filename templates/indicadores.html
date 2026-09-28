@@ -1,0 +1,179 @@
+{% extends 'menu.html' %}
+{% block title %}Indicadores — Nexar QRQC{% endblock %}
+
+{% block head %}
+<script src="/static/vendor/chartjs/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/css/empresa.css" />
+<style>
+  .ind-filtros { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:16px; }
+  .ind-periodo { display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; background:var(--bg-card); }
+  .ind-periodo a { padding:8px 14px; font-size:13px; font-weight:600; color:var(--text-muted); text-decoration:none; }
+  .ind-periodo a + a { border-left:1px solid var(--border); }
+  .ind-periodo a.ativo { background:var(--primary-light); color:var(--primary-dark); }
+  .ind-hora { margin-left:auto; display:flex; gap:6px; align-items:center; font-size:12.5px; color:var(--text-muted); }
+  .ind-hora input { width:92px; }
+
+  .ind-kpis { display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:12px; margin-bottom:16px; }
+  .ind-kpi { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .ind-kpi span { display:block; font-size:12px; color:var(--text-muted); font-weight:500; }
+  .ind-kpi b { display:block; font-size:26px; font-weight:700; margin:4px 0 2px; color:var(--text); }
+  .ind-kpi small { font-size:11.5px; color:var(--text-muted); line-height:1.4; display:block; }
+
+  .ind-graficos { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:14px; margin-bottom:16px; }
+  .ind-graficos .card { min-width:0; }
+  .ind-graf { position:relative; height:220px; padding:4px 14px 12px; }
+
+  .ind-disp { display:flex; align-items:center; gap:8px; min-width:120px; }
+  .ind-disp-barra { flex:1; height:6px; background:var(--bg-page); border-radius:4px; overflow:hidden; }
+  .ind-disp-barra i { display:block; height:100%; background:#0284C7; border-radius:4px; }
+  .ind-tabela td a { color:var(--text); text-decoration:none; }
+  .ind-tabela td a:hover { color:var(--primary-dark); text-decoration:underline; }
+  .ind-num { text-align:right; white-space:nowrap; font-variant-numeric: tabular-nums; }
+  .ind-agora { font-size:11px; font-weight:700; color:#B91C1C; background:#FEE2E2; border-radius:999px; padding:2px 7px; margin-left:6px; white-space:nowrap; }
+  .ind-nota { font-size:12px; color:var(--text-muted); margin-top:12px; line-height:1.6; }
+
+  @media (max-width: 1100px) { .ind-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ind-graficos { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 767px) {
+    .ind-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }
+    .ind-kpi b { font-size:21px; }
+    .ind-hora { margin-left:0; }
+    .ind-tabela td.ind-num { text-align:left; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-gauge-high"></i> Indicadores de manutenção</div>
+</div>
+
+<div class="page-body">
+  <div class="ind-filtros">
+    <nav class="ind-periodo" aria-label="Período">
+      {% for n, rot in [(30, '30 dias'), (90, '90 dias'), (180, '6 meses'), (365, '12 meses')] %}
+      <a href="?dias={{ n }}" class="{{ 'ativo' if dias == n }}">{{ rot }}</a>
+      {% endfor %}
+    </nav>
+    <form class="ind-hora" method="POST" action="{{ url_for('indicadores_custo_hora') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="dias" value="{{ dias }}" />
+      <label for="custoHora">Custo da hora de manutenção (R$)</label>
+      <input class="form-control" id="custoHora" name="custo_hora" inputmode="decimal" value="{{ d.custo_hora | num_br(2) }}" />
+      <button class="btn btn-outline btn-sm">Salvar</button>
+    </form>
+  </div>
+
+  {% set r = d.resumo %}
+  <div class="ind-kpis">
+    <div class="ind-kpi"><span>MTTR · tempo médio de reparo</span><b>{{ r.mttr | duracao }}</b><small>da abertura à resolução</small></div>
+    <div class="ind-kpi"><span>MTBF · tempo médio entre falhas</span><b>{{ r.mtbf | duracao }}</b><small>por máquina, descontando paradas</small></div>
+    <div class="ind-kpi"><span>Disponibilidade</span><b>{{ r.disponibilidade | num_br(1) }}%</b><small>{{ r.parado_h | duracao }} de máquina parada</small></div>
+    <div class="ind-kpi"><span>Custo de manutenção</span><b>{{ r.custo | moeda }}</b><small>peças + horas de trabalho</small></div>
+    <div class="ind-kpi"><span>Falhas registradas</span><b>{{ r.falhas }}</b><small>em {{ r.maquinas }} máquina(s), últimos {{ dias }} dias</small></div>
+  </div>
+
+  <div class="ind-graficos">
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-chart-column"></i> Falhas por mês</span></div>
+      <div class="ind-graf"><canvas id="grafFalhas" aria-label="Falhas por mês" role="img"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-coins"></i> Custo por mês</span></div>
+      <div class="ind-graf"><canvas id="grafCusto" aria-label="Custo de manutenção por mês" role="img"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title"><i class="fas fa-fire"></i> Peças que mais falham</span></div>
+      <div class="ind-graf"><canvas id="grafPecas" aria-label="Peças com mais falhas" role="img"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title"><i class="fas fa-table"></i> Por máquina</span>
+      <small style="color:var(--text-muted);">ordenado por custo</small></div>
+    <div class="em-tabela-wrap">
+      <table class="em-tabela ind-tabela">
+        <thead><tr><th>Máquina</th><th class="ind-num">Falhas</th><th class="ind-num">MTTR</th><th class="ind-num">MTBF</th>
+          <th>Disponibilidade</th><th class="ind-num">Parada</th><th class="ind-num">Custo</th></tr></thead>
+        <tbody>
+        {% for m in d.maquinas %}
+          <tr>
+            <td><a href="{{ url_for('maquina_3d', mid=m.id) }}"><b>{{ m.nome }}</b></a>
+              {% if m.paradas_agora %}<span class="ind-agora">parada agora</span>{% endif %}
+              <small>{{ m.setor or '—' }}{% if m.abertas %} · {{ m.abertas }} em aberto{% endif %}</small></td>
+            <td class="ind-num">{{ m.falhas }}</td>
+            <td class="ind-num">{{ m.mttr | duracao }}</td>
+            <td class="ind-num">{{ m.mtbf | duracao if m.falhas else 'sem falhas' }}</td>
+            <td><div class="ind-disp"><span class="ind-disp-barra"><i style="width:{{ m.disponibilidade | round(1) }}%"></i></span>
+              <span class="ind-num">{{ m.disponibilidade | num_br(1) }}%</span></div></td>
+            <td class="ind-num">{{ m.parado_h | duracao if m.parado_h else '—' }}</td>
+            <td class="ind-num"><b>{{ m.custo | moeda }}</b><small>{{ m.horas_trabalho | num_br(1) }} h · peças {{ m.custo_pecas | moeda }}</small></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="ind-nota"><i class="fas fa-circle-info" style="color:var(--primary);"></i>
+    MTTR: média do tempo entre a abertura e a resolução. MTBF: horas do período sem parada ÷ número de falhas.
+    Disponibilidade: horas sem parada ÷ horas do período (conta como parada quando o operador responde “a máquina parou”).
+    Custo: peças + horas registradas na resolução × custo da hora.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const mensal = {{ d.mensal | tojson }};
+  const pecas = {{ d.top_pecas | tojson }};
+  const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const rotulo = (m) => { const [a, n] = m.split('-'); return `${MESES[+n - 1]}/${a.slice(2)}`; };
+  const brl = (v) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Uma série por gráfico, mesma tinta; grade e eixos discretos (texto nunca na cor da série)
+  const COR = '#0284C7', TEXTO = '#64748B', GRADE = '#E2E8F0';
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = TEXTO;
+  const barra = { backgroundColor: COR, hoverBackgroundColor: '#0369A1', borderRadius: { topLeft: 4, topRight: 4 },
+                  borderSkipped: 'start', maxBarThickness: 28, categoryPercentage: 0.72, barPercentage: 0.9 };
+  const base = (formato) => ({
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false },
+               tooltip: { displayColors: false, callbacks: { label: (c) => formato(c.parsed.y ?? c.parsed.x) } } },
+    scales: {
+      x: { grid: { display: false }, border: { color: GRADE } },
+      y: { beginAtZero: true, grid: { color: GRADE }, border: { display: false }, ticks: { precision: 0, maxTicksLimit: 5 } },
+    },
+  });
+
+  new Chart(document.getElementById('grafFalhas'), {
+    type: 'bar',
+    data: { labels: mensal.map(m => rotulo(m.mes)), datasets: [{ label: 'Falhas', data: mensal.map(m => m.falhas), ...barra }] },
+    options: base(v => `${v} falha(s)`),
+  });
+
+  const optCusto = base(brl);
+  optCusto.scales.y.ticks = { maxTicksLimit: 5, callback: (v) => v >= 1000 ? `R$ ${(v / 1000).toLocaleString('pt-BR')} mil` : `R$ ${v}` };
+  new Chart(document.getElementById('grafCusto'), {
+    type: 'bar',
+    data: { labels: mensal.map(m => rotulo(m.mes)), datasets: [{ label: 'Custo', data: mensal.map(m => m.custo), ...barra }] },
+    options: optCusto,
+  });
+
+  const optPecas = base(v => `${v} falha(s)`);
+  optPecas.indexAxis = 'y';
+  optPecas.scales = {
+    x: { beginAtZero: true, grid: { color: GRADE }, border: { display: false }, ticks: { precision: 0, maxTicksLimit: 4 } },
+    y: { grid: { display: false }, border: { color: GRADE }, ticks: { autoSkip: false } },
+  };
+  optPecas.plugins.tooltip.callbacks.title = (itens) => pecas[itens[0].dataIndex] ? `${pecas[itens[0].dataIndex].nome} — ${pecas[itens[0].dataIndex].maquina}` : '';
+  optPecas.onClick = (_, els) => { if (els[0]) location.href = `/maquinas/${pecas[els[0].index].maquina_id}/3d`; };
+  const curto = (t) => t.length > 22 ? t.slice(0, 21) + '…' : t;
+  new Chart(document.getElementById('grafPecas'), {
+    type: 'bar',
+    data: { labels: pecas.map(p => curto(p.nome)), datasets: [{ label: 'Falhas', data: pecas.map(p => p.falhas),
+            ...barra, borderRadius: { topRight: 4, bottomRight: 4 }, maxBarThickness: 20 }] },
+    options: optPecas,
+  });
+})();
+</script>
+{% endblock %}

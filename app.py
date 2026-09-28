@@ -1,14 +1,15 @@
 import os
+import hashlib
 import io
 import json
 import logging
 import re
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Literal
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from google import genai
@@ -26,6 +27,11 @@ from werkzeug.utils import secure_filename
 
 import sensor_visual
 import nexa_ia
+import modelos_3d
+import diagnostico_local
+import empresa
+import indicadores
+import cad_import
 
 load_dotenv()
 
@@ -44,9 +50,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger("nexar.qrqc")
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.getenv("DATABASE_PATH") or os.path.join(BASE_DIR, "qrqc.db")
+
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "nexar-qrqc-secret-2026")
+def _carregar_secret_key() -> str:
+    """
+    SECRET_KEY do .env; na falta dela, uma chave aleatória gerada uma única vez
+    e guardada em .secret_key (fora do git). Assim nenhuma chave fica no código
+    e reiniciar o servidor não derruba as sessões abertas.
+    """
+    chave = os.getenv("SECRET_KEY", "").strip()
+    if chave:
+        return chave
+    arquivo = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), ".secret_key")  # junto do banco (volume, na nuvem)
+    try:
+        with open(arquivo, encoding="utf-8") as f:
+            chave = f.read().strip()
+    except FileNotFoundError:
+        chave = ""
+    if not chave:
+        chave = secrets.token_hex(32)
+        with open(arquivo, "w", encoding="utf-8") as f:
+            f.write(chave)
+        logger.warning(f"SECRET_KEY não definida no .env — chave gerada e guardada em {arquivo}.")
+    return chave
+
+
+app.secret_key = _carregar_secret_key()
 app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB por requisição
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ATRAS_DE_PROXY"):
+    # Atrás do proxy HTTPS da hospedagem: IP real do usuário (limite de tentativas) e cookie só em HTTPS
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["REMEMBER_COOKIE_SECURE"] = True
 csrf = CSRFProtect(app)
 limiter = Limiter(
     key_func=lambda: str(current_user.id) if current_user.is_authenticated else get_remote_address(),
@@ -55,8 +96,60 @@ limiter = Limiter(
     storage_uri="memory://",
 )
 
+@app.before_request
+def proteger_uploads():
+    """
+    Arquivos enviados (diagramas, fotos de inspeção, anexos de suporte) ficam em
+    static/uploads/ e seriam servidos a qualquer um. Exige sessão web ou token
+    mobile válido para acessá-los.
+    """
+    if not request.path.startswith("/static/uploads/"):
+        return None
+    if current_user.is_authenticated:
+        return None
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        conn = get_db()
+        ok = conn.execute(
+            "SELECT 1 FROM mobile_tokens WHERE token = ? "
+            "AND (expires_at IS NULL OR expires_at > datetime('now'))",
+            (auth[7:],),
+        ).fetchone()
+        conn.close()
+        if ok:
+            return None
+    return ("Acesso não autorizado.", 401)
+
+
+@app.errorhandler(CSRFError)
+def csrf_handler(e):
+    """
+    Sessão expirada ou página aberta antes de o servidor reiniciar: em vez de um
+    400 cru, volta para a página com um aviso (ou JSON, nas chamadas via fetch).
+    """
+    logger.info(f"[csrf] {e.description} — {request.method} {request.path}")
+    msg = "Sua sessão expirou. Tente novamente."
+    if request.path.startswith("/api/") or request.is_json or request.accept_mimetypes.best == "application/json":
+        return jsonify({"ok": False, "erro": msg + " Se persistir, recarregue a página."}), 400
+    if request.path == "/login":
+        return render_template("login.html", erro=msg), 400
+    flash(msg, "warning")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
+@app.errorhandler(413)
+def too_large_handler(e):
+    msg = "Arquivo muito grande. O limite é de 10 MB por envio."
+    if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/") or request.is_json:
+        return jsonify({"ok": False, "erro": msg}), 413
+    flash(msg, "danger")
+    return redirect(request.referrer or url_for("dashboard"))
+
+
 @app.errorhandler(429)
 def rate_limit_handler(e):
+    if request.path == "/login":
+        return render_template("login.html", erro="Muitas tentativas de acesso. Aguarde um minuto e tente novamente."), 429
     return jsonify({"erro": "Muitas tentativas. Aguarde um momento e tente novamente."}), 429
 
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
@@ -221,7 +314,7 @@ TRANSLATIONS = {
         "sem_dados": "Sem dados ainda",
         "sem_dados_sub": "Registre ocorrências para visualizar a análise de falhas.",
         "total_kpi": "Total", "abertas_kpi": "Abertas", "resolvidas_kpi": "Resolvidas",
-        "taxa_resolucao": "Taxa de Resolução", "alto_impacto_kpi": "Alto Impacto",
+        "taxa_resolucao": "Taxa de Resolução", "alto_impacto_kpi": "Críticas em aberto",
         "ocorrencias_label": "ocorrências", "pendentes_label": "pendentes",
         "concluidas_label": "concluídas", "do_total": "do total",
         "criticas_abertas": "abertas críticas",
@@ -353,8 +446,35 @@ def content_is_valid(stream, ext: str) -> bool:
     return header == magic
 
 
+def pdf_texto(texto, markdown: bool = False) -> str:
+    """
+    Prepara texto livre (usuário ou IA) para um Paragraph do ReportLab:
+    escapa &, < e > (senão '<img ...>' ou '<b>' quebram o PDF com erro 500),
+    remove caracteres que a Helvetica não desenha (emojis viram quadrados),
+    converte **negrito** opcionalmente e preserva quebras de linha.
+    """
+    from xml.sax.saxutils import escape
+    t = str(texto or "")
+    t = "".join(ch for ch in t if _cabe_na_helvetica(ch))
+    t = escape(t)
+    if markdown:
+        t = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", t)
+    return t.replace("\r\n", "\n").replace("\n", "<br/>")
+
+
+def _cabe_na_helvetica(ch: str) -> bool:
+    if ch in "\n\r\t":
+        return True
+    try:
+        ch.encode("cp1252")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def get_db():
-    conn = sqlite3.connect("qrqc.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -383,6 +503,10 @@ def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) ->
     if not (SMTP_USER and SMTP_PASSWORD and SUPORTE_EMAIL_DESTINO):
         logger.warning("[suporte] SMTP não configurado — pulando envio de email")
         return False
+
+    import html as _html
+    raw_ticket = ticket
+    ticket = {k: _html.escape(str(v or "")) for k, v in ticket.items()}
 
     cor_pri = {
         "Baixa": "#10B981", "Média": "#F59E0B",
@@ -420,8 +544,8 @@ def enviar_email_suporte(ticket: dict, anexos_paths: list[str] | None = None) ->
         msg = MIMEMultipart()
         msg["From"]     = SUPORTE_EMAIL_FROM
         msg["To"]       = SUPORTE_EMAIL_DESTINO
-        msg["Reply-To"] = ticket["email"]
-        msg["Subject"]  = f"[{ticket['prioridade']}] {ticket['protocolo']} — {ticket['assunto']}"
+        msg["Reply-To"] = raw_ticket["email"]
+        msg["Subject"]  = f"[{raw_ticket['prioridade']}] {raw_ticket['protocolo']} — {raw_ticket['assunto']}"
         msg.attach(MIMEText(body_html, "html", "utf-8"))
 
         for path in (anexos_paths or []):
@@ -535,6 +659,22 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_percepcoes_maquina
             ON percepcoes(maquina_id, criado_em);
 
+        -- Inspeção de documento por foto (OS, checklist, relatório)
+        CREATE TABLE IF NOT EXISTS inspecoes_documento (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            imagem_url TEXT NOT NULL,
+            tipo_documento TEXT,
+            maquina_id INTEGER,
+            resultado_json TEXT,
+            score INTEGER,
+            num_problemas INTEGER DEFAULT 0,
+            modelo_ia TEXT,
+            criado_por_id INTEGER,
+            criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (maquina_id) REFERENCES maquinas(id),
+            FOREIGN KEY (criado_por_id) REFERENCES usuarios(id)
+        );
+
         -- QRQC 3D AI: componentes físicos de cada máquina (mapeados ao modelo 3D)
         CREATE TABLE IF NOT EXISTS machine_components (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -597,6 +737,15 @@ def init_db():
         "componente_real":     "ALTER TABLE ocorrencias ADD COLUMN componente_real TEXT",
         "data_resolucao":      "ALTER TABLE ocorrencias ADD COLUMN data_resolucao DATETIME",
         "resolvido_por_id":    "ALTER TABLE ocorrencias ADD COLUMN resolvido_por_id INTEGER",
+        # Peça indicada pelo operador no modelo 3D ao registrar
+        "componente_apontado": "ALTER TABLE ocorrencias ADD COLUMN componente_apontado TEXT",
+        # Registro guiado pelo 3D: sintoma escolhido e perguntas rápidas
+        "sintoma":             "ALTER TABLE ocorrencias ADD COLUMN sintoma TEXT",
+        "maquina_parada":      "ALTER TABLE ocorrencias ADD COLUMN maquina_parada INTEGER",
+        "risco_pessoas":       "ALTER TABLE ocorrencias ADD COLUMN risco_pessoas INTEGER",
+        # Indicadores: esforço e custo registrados na resolução
+        "horas_trabalho":      "ALTER TABLE ocorrencias ADD COLUMN horas_trabalho REAL",
+        "custo_pecas":         "ALTER TABLE ocorrencias ADD COLUMN custo_pecas REAL",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -606,12 +755,53 @@ def init_db():
             except Exception as e:
                 logger.warning(f"Migração de {col} falhou: {e}")
 
-    admin = c.execute("SELECT id FROM usuarios WHERE email = 'admin@nexar.com'").fetchone()
+    # Sensor Visual: ocorrência aberta a partir da inspeção e peça do 3D
+    cols_per = [r["name"] for r in c.execute("PRAGMA table_info(percepcoes)").fetchall()]
+    for col, tipo_col in (("ocorrencia_id", "INTEGER"), ("componente_3d", "TEXT")):
+        if col not in cols_per:
+            c.execute(f"ALTER TABLE percepcoes ADD COLUMN {col} {tipo_col}")
+            logger.info(f"Migração: coluna {col} adicionada em percepcoes.")
+
+    # Máquinas: configuração do modelo 3D (JSON — ver modelos_3d.py)
+    cols_maq = [r["name"] for r in c.execute("PRAGMA table_info(maquinas)").fetchall()]
+    if "modelo_3d" not in cols_maq:
+        c.execute("ALTER TABLE maquinas ADD COLUMN modelo_3d TEXT")
+        logger.info("Migração: coluna modelo_3d adicionada em maquinas.")
+    # Posição da máquina no mapa da fábrica (0–100 % da planta)
+    for col in ("mapa_x", "mapa_y"):
+        if col not in cols_maq:
+            c.execute(f"ALTER TABLE maquinas ADD COLUMN {col} REAL")
+    c.execute("CREATE TABLE IF NOT EXISTS config_geral (chave TEXT PRIMARY KEY, valor TEXT)")
+    c.execute("""CREATE TABLE IF NOT EXISTS importacoes_cad (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT, nome TEXT, arquivo TEXT,
+        status TEXT, mensagem TEXT, sugestoes_json TEXT, criado_por_id INTEGER,
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP, atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP)""")
+    # Conversões interrompidas por reinício do servidor não ficam "convertendo" para sempre
+    c.execute("UPDATE importacoes_cad SET status = 'erro', mensagem = 'A conversão foi interrompida "
+              "(o servidor reiniciou). Envie o arquivo de novo.' WHERE status IN ('na_fila', 'convertendo', 'otimizando')")
+
+    # Cadastros da empresa: pessoas, qualificações, tipos de documento, auditoria
+    empresa.criar_tabelas(conn)
+    cols_doc = [r["name"] for r in c.execute("PRAGMA table_info(inspecoes_documento)").fetchall()]
+    for col, tipo_col in (("tipo_documento_id", "INTEGER"), ("status", "TEXT")):
+        if col not in cols_doc:
+            c.execute(f"ALTER TABLE inspecoes_documento ADD COLUMN {col} {tipo_col}")
+
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower()
+    admin_senha = os.getenv("ADMIN_PASSWORD", "").strip()
+    admin = c.execute("SELECT id FROM usuarios WHERE email = ?", (admin_email,)).fetchone()
     if not admin:
+        if not admin_senha:
+            admin_senha = "nexar2026"
+            logger.warning("ADMIN_PASSWORD não definida — admin criado com a senha padrão. Troque antes de usar.")
         c.execute(
             "INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",
-            ("Administrador", "admin@nexar.com", generate_password_hash("nexar2026"), "admin"),
+            ("Administrador", admin_email, generate_password_hash(admin_senha), "admin"),
         )
+    elif admin_senha:
+        # Permite redefinir a senha do admin pelo .env (ex.: antes de uma demo)
+        c.execute("UPDATE usuarios SET senha_hash = ? WHERE id = ?",
+                  (generate_password_hash(admin_senha), admin["id"]))
     conn.commit()
     conn.close()
 
@@ -639,26 +829,125 @@ def load_user(user_id):
     return None
 
 
+def perfil_requerido(*perfis):
+    """Restringe a rota aos perfis indicados (o administrador sempre pode)."""
+    from functools import wraps
+
+    def deco(f):
+        @wraps(f)
+        @login_required
+        def inner(*a, **kw):
+            if current_user.perfil != "admin" and current_user.perfil not in perfis:
+                flash("Seu perfil não tem acesso a esta área.", "danger")
+                return redirect(url_for("inicio_do_perfil"))
+            return f(*a, **kw)
+        return inner
+    return deco
+
+
+def registrar_auditoria(acao: str, entidade: str | None = None, entidade_id=None, detalhe: str | None = None):
+    """Trilha de auditoria (LGPD): quem fez o quê com dados de pessoas e documentos."""
+    try:
+        conn = get_db()
+        conn.execute("INSERT INTO auditoria (usuario_id, acao, entidade, entidade_id, detalhe) VALUES (?,?,?,?,?)",
+                     (current_user.id if current_user.is_authenticated else None, acao, entidade, entidade_id,
+                      (detalhe or "")[:300] or None))
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("[auditoria] falha ao registrar")
+
+
+def destino_do_perfil(perfil: str) -> str:
+    return {"operador": "CadastroOcorrencia", "rh": "pessoas"}.get(perfil, "dashboard")
+
+
+@app.route("/inicio")
+@login_required
+def inicio_do_perfil():
+    return redirect(url_for(destino_do_perfil(current_user.perfil)))
+
+
+@app.context_processor
+def inject_perfil():
+    def pode(*perfis):
+        return current_user.is_authenticated and (current_user.perfil == "admin" or current_user.perfil in perfis)
+    return {"pode": pode, "PERFIS": empresa.PERFIS}
+
+
+@app.template_filter("fromjson")
+def fromjson(valor):
+    try:
+        return json.loads(valor) if valor else []
+    except ValueError:
+        return []
+
+
+@app.template_filter("num_br")
+def num_br(valor, casas: int = 1) -> str:
+    """1234.5 → '1.234,5'. Vazio → '—'."""
+    if valor is None or valor == "":
+        return "—"
+    txt = f"{float(valor):,.{casas}f}"
+    return txt.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+@app.template_filter("moeda")
+def moeda(valor) -> str:
+    return "R$ " + num_br(valor or 0, 2)
+
+
+@app.template_filter("duracao")
+def duracao(horas) -> str:
+    """Horas → '5,2 h' ou '12,4 dias' (acima de 72 h)."""
+    if horas is None:
+        return "—"
+    return f"{num_br(horas / 24, 1)} dias" if horas >= 72 else f"{num_br(horas, 1)} h"
+
+
+@app.template_filter("data_br")
+def data_br(valor) -> str:
+    """'2026-09-25 10:30[:ss]' ou ISO → '25/09/2026 10:30'. Vazio → '—'."""
+    if not valor:
+        return "—"
+    txt = str(valor).strip().replace("T", " ")
+    try:
+        dt = datetime.fromisoformat(txt[:19])
+        return dt.strftime("%d/%m/%Y %H:%M") if len(txt) > 10 else dt.strftime("%d/%m/%Y")
+    except ValueError:
+        return txt[:16]
+
+
+# EN/ES ainda cobrem só parte das telas: ficam desligados até a tradução estar
+# completa. Defina ENABLE_I18N=1 no .env para reativar o seletor de idioma.
+I18N_ATIVO = os.getenv("ENABLE_I18N", "").strip() == "1"
+
+
+def idioma_atual() -> str:
+    return session.get("lang", "pt") if I18N_ATIVO else "pt"
+
+
 @app.context_processor
 def inject_globals():
-    lang = session.get("lang", "pt")
+    lang = idioma_atual()
     return {"t": TRANSLATIONS.get(lang, TRANSLATIONS["pt"]), "lang": lang}
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("10 per minute", methods=["POST"])
 def login():
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         senha = request.form.get("senha", "")
         conn = get_db()
         u = conn.execute(
-            "SELECT * FROM usuarios WHERE email = ? AND ativo = 1", (email,)
+            "SELECT * FROM usuarios WHERE LOWER(email) = ? AND ativo = 1", (email.lower(),)
         ).fetchone()
         conn.close()
         if u and check_password_hash(u["senha_hash"], senha):
             login_user(User(u["id"], u["nome"], u["email"], u["perfil"]))
-            return redirect(url_for("dashboard"))
-        lang = session.get("lang", "pt")
+            return redirect(url_for(destino_do_perfil(u["perfil"])))
+        lang = idioma_atual()
         erro = {"pt": "E-mail ou senha incorretos.", "en": "Invalid email or password.", "es": "Correo o contraseña incorrectos."}.get(lang)
         return render_template("login.html", erro=erro)
     return render_template("login.html")
@@ -701,7 +990,7 @@ def _historico_para_gemini(historico: list[dict]) -> list[dict]:
 @limiter.limit("15 per minute")
 def chat():
     if not gemini_client:
-        return jsonify({"resposta": "⚠️ IA offline — configure GEMINI_API_KEY no .env."}), 503
+        return jsonify({"resposta": MSG_IA_INDISPONIVEL}), 503
     data = request.get_json(silent=True) or {}
     mensagem = (data.get("mensagem") or "").strip()
     historico = data.get("historico") or []
@@ -729,19 +1018,21 @@ def chat():
             logger.exception(f"[chat/{modelo}] erro")
             break
 
-    if ultimo_erro and _should_try_next_model(ultimo_erro):
-        msg = ("⚠️ Todos os modelos da IA falharam (cota, indisponibilidade ou modelo descontinuado). "
-               "Aguarde alguns minutos ou configure uma nova chave em outra conta Google.")
-        return jsonify({"resposta": msg}), 503
-    return jsonify({"resposta": f"Erro ao consultar a IA: {ultimo_erro}"}), 500
+    logger.warning(f"[chat] todos os modelos falharam: {ultimo_erro}")
+    return jsonify({"resposta": MSG_IA_INDISPONIVEL}), 503
 
 
 # ── AI Response (com fallback robusto) ────────────────────────────────────────
 
+MSG_IA_INDISPONIVEL = (
+    "O assistente de IA está indisponível no momento. Tente novamente em alguns minutos."
+)
+
+
 def _fallback_response(prompt: str) -> str:
     """Resposta gerada localmente quando a IA está indisponível."""
     return (
-        "⚠️ IA temporariamente indisponível — diagnóstico genérico:\n\n"
+        "Diagnóstico automático indisponível no momento — roteiro padrão de inspeção:\n\n"
         "1. **Causa provável:** verificar histórico recente da máquina, possíveis falhas mecânicas, "
         "elétricas ou de processo.\n"
         "2. **Componentes a verificar:** sensores principais, atuadores, sistema de refrigeração e "
@@ -752,8 +1043,7 @@ def _fallback_response(prompt: str) -> str:
         "   • Verificar leituras dos sensores e parâmetros do CLP.\n"
         "   • Conferir últimos planos de manutenção preventiva.\n"
         "4. **Quando escalar:** caso o problema persista após inspeção inicial ou represente risco "
-        "à segurança, escalar imediatamente para o engenheiro de manutenção/fabricante.\n\n"
-        "Por favor, configure GEMINI_API_KEY no arquivo .env para diagnósticos personalizados."
+        "à segurança, escalar imediatamente para o engenheiro de manutenção/fabricante."
     )
 
 
@@ -1051,19 +1341,9 @@ def get_ai_response(
 
     # Se nenhum modelo respondeu o diagnóstico → erro
     if not texto_diagnostico:
-        err_str = str(ultimo_erro) if ultimo_erro else ""
-        is_quota = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
-        if ultimo_erro and is_quota:
-            msg = (
-                "❌ Todas as cotas free tier do Gemini foram excedidas neste projeto.\n\n"
-                "**Soluções possíveis:**\n"
-                "1. Aguarde alguns minutos e tente novamente\n"
-                "2. Crie uma **nova chave em outra conta Google**: https://aistudio.google.com/apikey\n"
-                "3. Use um projeto Google Cloud que **nunca teve billing ativado**\n\n"
-            )
-        else:
-            msg = f"❌ Erro ao gerar diagnóstico via Gemini: {ultimo_erro}\n\n"
-        return (msg + _fallback_response(prompt), [], "erro")
+        # Detalhe técnico só no log; o usuário vê o roteiro padrão de inspeção.
+        logger.error(f"[ia] nenhum modelo gerou diagnóstico: {ultimo_erro}")
+        return (_fallback_response(prompt), [], "erro")
 
     # ── 2ª chamada: detecção de componentes (bounding boxes) ──────────────────
     anotacoes: list[dict] = []
@@ -1097,7 +1377,7 @@ def index():
     vai direto para o dashboard.
     """
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
+        return redirect(url_for(destino_do_perfil(current_user.perfil)))
     return render_template("inicialtotem.html")
 
 
@@ -1106,10 +1386,16 @@ def index():
 def dashboard():
     """Dashboard com KPIs, gráfico de tipo e últimas ocorrências."""
     conn = get_db()
-    total       = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias").fetchone()["n"]
-    abertas     = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status = 'Aberta'").fetchone()["n"]
-    resolvidas  = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE status IN ('Resolvida','Fechada')").fetchone()["n"]
-    alto_imp    = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE nivel_impacto = 'Alto' AND status = 'Aberta'").fetchone()["n"]
+    # Mesma definição de "aberta" usada em /analise: tudo que não foi resolvido/fechado.
+    k = conn.execute("""
+        SELECT COUNT(*) AS total,
+               COALESCE(SUM(CASE WHEN COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS abertas,
+               COALESCE(SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS resolvidas,
+               COALESCE(SUM(CASE WHEN nivel_impacto = 'Alto'
+                        AND COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) AS alto_imp
+        FROM ocorrencias
+    """).fetchone()
+    total, abertas, resolvidas, alto_imp = k["total"], k["abertas"], k["resolvidas"], k["alto_imp"]
     total_maq   = conn.execute("SELECT COUNT(*) AS n FROM maquinas").fetchone()["n"]
 
     por_tipo = conn.execute("""
@@ -1149,10 +1435,10 @@ def analise():
     kpis = conn.execute("""
         SELECT
             COUNT(*) as total,
-            SUM(CASE WHEN status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as abertas,
-            SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as resolvidas,
-            SUM(CASE WHEN nivel_impacto = 'Alto'
-                     AND status NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END) as alto_aberto
+            COALESCE(SUM(CASE WHEN COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as abertas,
+            COALESCE(SUM(CASE WHEN status IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as resolvidas,
+            COALESCE(SUM(CASE WHEN nivel_impacto = 'Alto'
+                     AND COALESCE(status,'Aberta') NOT IN ('Resolvida','Fechada') THEN 1 ELSE 0 END),0) as alto_aberto
         FROM ocorrencias
     """).fetchone()
 
@@ -1450,7 +1736,6 @@ def ocorrencia_pdf(oc_id: int):
     imp = row["nivel_impacto"] or "Baixo"
     imp_color = C_RED if imp == "Alto" else (C_AMB if imp == "Médio" else C_GRN)
     imp_bg    = C_REDBG if imp == "Alto" else (C_AMBBG if imp == "Médio" else C_GRNBG)
-    imp_icon  = "🔴" if imp == "Alto" else ("🟡" if imp == "Médio" else "🟢")
 
     # ── Estilos ──────────────────────────────────────────────────────────────
     base = getSampleStyleSheet()
@@ -1549,7 +1834,7 @@ def ocorrencia_pdf(oc_id: int):
         val_color = color if color else C_DARK
         return [
             Paragraph(label.upper(), s_label),
-            Paragraph(f"<font color='#{val_color.hexval()[2:]}'><b>{value}</b></font>", s_value)
+            Paragraph(f"<font color='#{val_color.hexval()[2:]}'><b>{pdf_texto(value)}</b></font>", s_value)
         ]
 
     data_fmt = fmt_data(row["data_ocorrencia"])
@@ -1561,7 +1846,7 @@ def ocorrencia_pdf(oc_id: int):
         [info_cell("Setor",     row["setor_area"] or "—"),info_cell("Data",         data_fmt)],
         [info_cell("Tipo",      row["tipo_ocorrencia"] or "—"),
          info_cell("Recorrente",row["problema_recorrente"] or "—")],
-        [info_cell("Impacto",   f"{imp_icon} {imp}", imp_color),
+        [info_cell("Impacto",   imp, imp_color),
          info_cell("Status",    status, st_color)],
     ]
 
@@ -1584,11 +1869,7 @@ def ocorrencia_pdf(oc_id: int):
 
     # ── Texto limpo (remove marcações básicas) ───────────────────────────────
     def limpar(texto):
-        import re
-        t = texto or ""
-        t = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', t)
-        t = re.sub(r'\*(.+?)\*', r'<i>\1</i>', t)
-        return t
+        return pdf_texto(texto, markdown=True)
 
     # ── Monta documento ──────────────────────────────────────────────────────
     buf = BytesIO()
@@ -1647,6 +1928,17 @@ def ocorrencia_pdf(oc_id: int):
         story.append(Spacer(1, 4))
 
     # Diagrama
+    # Resolução registrada pela manutenção
+    if row["solucao_aplicada"]:
+        story.append(section_header("Resolução", ""))
+        txt = f"<b>Solução aplicada:</b> {pdf_texto(row['solucao_aplicada'])}"
+        if row["componente_real"]:
+            txt += f"<br/><b>Componente que falhou:</b> {pdf_texto(row['componente_real'])}"
+        if row["data_resolucao"]:
+            txt += f"<br/><b>Resolvida em:</b> {pdf_texto(data_br(row['data_resolucao']))}"
+        story.append(Paragraph(txt, box_style("res_box", C_GRNBG, C_GRN)))
+        story.append(Spacer(1, 4))
+
     diag_path = (row["diagrama_url"] or "").lstrip("/")
     if diag_path:
         abs_diag = os.path.join(app.root_path, diag_path)
@@ -1700,8 +1992,8 @@ def ocorrencia_pdf(oc_id: int):
                        ("ROUNDEDCORNERS",(0,0),(-1,-1),9)],
             )
             txt = Table(
-                [[Paragraph(f"<b>{a.get('titulo','')}</b>", s_ann_t)],
-                 [Paragraph(a.get('descricao',''), s_ann_d)]],
+                [[Paragraph(f"<b>{pdf_texto(a.get('titulo',''))}</b>", s_ann_t)],
+                 [Paragraph(pdf_texto(a.get('descricao','')), s_ann_d)]],
                 colWidths=[pw - 2 * margin - 40],
                 style=[("TOPPADDING",(0,0),(-1,-1),0),
                        ("BOTTOMPADDING",(0,0),(-1,-1),0),
@@ -1734,9 +2026,25 @@ def ocorrencia_pdf(oc_id: int):
 @login_required
 def resolver_ocorrencia(ocorrencia_id: int):
     """
-    Marca uma ocorrência como Resolvida.
-    Não exige descrição — basta a confirmação do operador.
+    Marca uma ocorrência como Resolvida, registrando a solução aplicada e o
+    componente que de fato falhou. Esses campos alimentam o agente Nexar IA
+    (get_previous_solutions / get_similar_occurrences) nas próximas ocorrências.
     """
+    data = request.get_json(silent=True) or request.form
+    solucao = (data.get("solucao_aplicada") or "").strip()[:2000]
+    componente = (data.get("componente_real") or "").strip()[:120]
+
+    def _numero(v, maximo):
+        try:
+            n = float(str(v).replace(",", ".")) if v not in (None, "") else None
+        except ValueError:
+            return None
+        return n if n is not None and 0 <= n <= maximo else None
+    horas = _numero(data.get("horas_trabalho"), 2000)
+    custo = _numero(data.get("custo_pecas"), 10_000_000)
+    if len(solucao) < 5:
+        return jsonify({"ok": False, "erro": "Descreva a solução aplicada (mínimo de 5 caracteres)."}), 400
+
     try:
         conn = get_db()
         oc = conn.execute(
@@ -1747,22 +2055,18 @@ def resolver_ocorrencia(ocorrencia_id: int):
             return jsonify({"ok": False, "erro": "Ocorrência não encontrada."}), 404
         if oc["status"] in ("Resolvida", "Fechada"):
             conn.close()
-            return jsonify({
-                "ok": False,
-                "erro": f"Ocorrência já está {oc['status']}.",
-            }), 409
+            return jsonify({"ok": False, "erro": f"Esta ocorrência já está {oc['status'].lower()}."}), 409
 
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(
             """UPDATE ocorrencias
-               SET status='Resolvida',
-                   data_resolucao=?, resolvido_por_id=?
+               SET status='Resolvida', data_resolucao=?, resolvido_por_id=?,
+                   solucao_aplicada=?, componente_real=?, horas_trabalho=?, custo_pecas=?
                WHERE id = ?""",
-            (agora, current_user.id, ocorrencia_id),
+            (agora, current_user.id, solucao, componente or None, horas, custo, ocorrencia_id),
         )
         conn.commit()
 
-        # Busca dados atualizados pra resposta (UI atualiza inline)
         row = conn.execute(
             "SELECT o.status, o.data_resolucao, u.nome AS resolvido_por_nome "
             "FROM ocorrencias o "
@@ -1779,9 +2083,28 @@ def resolver_ocorrencia(ocorrencia_id: int):
             "data_resolucao": row["data_resolucao"],
             "resolvido_por_nome": row["resolvido_por_nome"],
         })
-    except Exception as e:
+    except Exception:
         logger.exception("[ocorrencia] falha ao resolver")
-        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"ok": False, "erro": "Não foi possível salvar. Tente novamente."}), 500
+
+
+@app.route("/ocorrencias/<int:ocorrencia_id>/iniciar", methods=["POST"])
+@login_required
+def iniciar_atendimento(ocorrencia_id: int):
+    """Aberta → Em andamento (técnico assumiu o atendimento)."""
+    conn = get_db()
+    try:
+        oc = conn.execute("SELECT status FROM ocorrencias WHERE id = ?", (ocorrencia_id,)).fetchone()
+        if not oc:
+            return jsonify({"ok": False, "erro": "Ocorrência não encontrada."}), 404
+        if (oc["status"] or "Aberta") != "Aberta":
+            return jsonify({"ok": False, "erro": f"Esta ocorrência já está {oc['status'].lower()}."}), 409
+        conn.execute("UPDATE ocorrencias SET status = 'Em andamento' WHERE id = ?", (ocorrencia_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    logger.info(f"[ocorrencia] em andamento id={ocorrencia_id} por user_id={current_user.id}")
+    return jsonify({"ok": True, "status": "Em andamento"})
 
 
 @app.route("/suporte")
@@ -1793,46 +2116,78 @@ def solicitacao():
 @app.route("/CadastroOcorrencia")
 @login_required
 def CadastroOcorrencia():
+    """
+    Nova ocorrência guiada pelo 3D: máquina → peça tocada no modelo CAD →
+    sintoma e perguntas rápidas → diagnóstico com as soluções que já funcionaram.
+    Só máquinas com CAD 3D aparecem (pré-requisito para registrar ocorrência).
+    """
     conn = get_db()
-    maquinas = conn.execute("SELECT id, nome, setor FROM maquinas ORDER BY nome").fetchall()
+    maquinas = maquinas_com_cad(conn)
+    abertas = {r["maquina_id"]: r["n"] for r in conn.execute(
+        "SELECT maquina_id, COUNT(*) AS n FROM ocorrencias "
+        "WHERE status IN ('Aberta', 'Em andamento') GROUP BY maquina_id")}
     conn.close()
+    for m in maquinas:
+        m["abertas"] = abertas.get(m["id"], 0)
     preselect = request.args.get("maquina", type=int)
-    return render_template("CadastroOcorrencia.html", maquinas=maquinas, preselect_maquina=preselect)
+    prefill = {}
+
+    # Ocorrência aberta a partir de uma inspeção por foto (Sensor Visual)
+    inspecao_id = request.args.get("inspecao", type=int)
+    if inspecao_id:
+        conn = get_db()
+        p = conn.execute("SELECT * FROM percepcoes WHERE id = ?", (inspecao_id,)).fetchone()
+        conn.close()
+        if p:
+            try:
+                anomalias = json.loads(p["anomalias_json"] or "[]")
+            except Exception:
+                anomalias = []
+            preselect = p["maquina_id"] or preselect
+            linhas = [f"Inspeção por foto nº {inspecao_id} — Índice de Saúde {p['score_saude']}/100."]
+            for n, a in enumerate(anomalias, 1):
+                linhas.append(
+                    f"{n}. {a.get('rotulo', '')} ({a.get('severidade', '')}) em {a.get('componente', '—')}: "
+                    f"{a.get('descricao', '')}"
+                    + (f" Possível causa: {a['causa_provavel']}" if a.get("causa_provavel") else "")
+                )
+            principal = anomalias[0] if anomalias else {}
+            prefill = {
+                "texto": "\n".join(linhas),
+                "componente": sensor_componente_3d(p["maquina_id"], anomalias),
+                "risco": p["severidade_max"] == "critico",
+                "inspecao_id": inspecao_id,
+                "imagem_url": p["imagem_url"],
+                "rotulo": principal.get("rotulo"),
+            }
+    if preselect and preselect not in {m["id"] for m in maquinas}:
+        preselect = None
+    return render_template("CadastroOcorrencia.html", maquinas=maquinas,
+                           preselect_maquina=preselect, prefill=prefill)
 
 
-@app.route("/registrar_ocorrencia", methods=["POST"])
-@login_required
-def registrar_ocorrencia():
+def _nome_componente(maquina_id, component_id) -> str | None:
+    """Nome do componente no modelo 3D da máquina, ou None se não existir."""
+    if not maquina_id or not component_id:
+        return None
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    return next((c["name"] for c in modelos_3d.componentes_da_config(cfg)
+                 if c["component_id"] == component_id), None)
+
+
+def diagnosticar_ocorrencia(campos: dict) -> dict:
     """
-    Registra uma ocorrência, gera diagnóstico via IA e renderiza solucao.html.
-    Em caso de erro, retorna JSON (se for fetch) ou re-renderiza o formulário
-    com mensagem clara — nunca silencia falhas.
+    Monta o contexto da máquina (dados, diagrama, histórico e soluções já
+    aplicadas) e gera o diagnóstico da IA. Usado pela web e pela API mobile.
+    O nome do operador não é enviado ao provedor de IA (minimização de dados).
+    Retorna {resposta_ia, anotacoes, ia_status, diagrama_url}.
     """
-    # ── Validação dos campos ─────────────────────────────────────────────────
-    obrigatorios = ["nome_operador", "setor_area", "descricao",
-                    "tipo_ocorrencia", "nivel_impacto", "problema_recorrente",
-                    "detalhamento_tecnico"]
-    faltando = [c for c in obrigatorios if not (request.form.get(c) or "").strip()]
-    if faltando:
-        msg = f"Campos obrigatórios não preenchidos: {', '.join(faltando)}."
-        logger.warning(f"[ocorrencia] {msg}")
-        flash(msg, "danger")
-        return redirect(url_for("CadastroOcorrencia"))
-
-    maquina_id           = request.form.get("maquina_id") or None
-    data_ocorrencia      = normalizar_data(request.form.get("data_ocorrencia", ""))
-    nome_operador        = request.form.get("nome_operador", "").strip()
-    setor_area           = request.form.get("setor_area", "").strip()
-    descricao            = request.form.get("descricao", "").strip()
-    tipo_ocorrencia      = request.form.get("tipo_ocorrencia", "").strip()
-    nivel_impacto        = request.form.get("nivel_impacto", "").strip()
-    problema_recorrente  = request.form.get("problema_recorrente", "").strip()
-    detalhamento_tecnico = request.form.get("detalhamento_tecnico", "").strip()
-
-    # ── Contexto da máquina ──────────────────────────────────────────────────
+    maquina_id = campos.get("maquina_id")
     maquina_info = ""
     diagrama_path = None
-    maquina_nome = ""
     diagrama_url = None
 
     try:
@@ -1845,14 +2200,19 @@ def registrar_ocorrencia():
                 (maquina_id,),
             ).fetchone()
             historico_maquina = conn.execute(
-                "SELECT descricao, resposta_ia FROM ocorrencias "
+                "SELECT descricao FROM ocorrencias "
                 "WHERE maquina_id = ? ORDER BY data_registro DESC LIMIT 3",
+                (maquina_id,),
+            ).fetchall()
+            solucoes = conn.execute(
+                "SELECT descricao, solucao_aplicada, componente_real FROM ocorrencias "
+                "WHERE maquina_id = ? AND solucao_aplicada IS NOT NULL AND solucao_aplicada != '' "
+                "ORDER BY data_resolucao DESC LIMIT 5",
                 (maquina_id,),
             ).fetchall()
             conn.close()
 
             if maquina:
-                maquina_nome = maquina["nome"]
                 maquina_info = (
                     f"Máquina: {maquina['nome']} | Modelo: {maquina['modelo'] or '—'} | "
                     f"Fabricante: {maquina['fabricante'] or '—'} | Ano: {maquina['ano'] or '—'}\n"
@@ -1864,21 +2224,29 @@ def registrar_ocorrencia():
             if historico_maquina:
                 maquina_info += "\nÚltimas ocorrências desta máquina:\n"
                 for h in historico_maquina:
-                    desc = (h["descricao"] or "")[:80]
-                    maquina_info += f"- {desc}\n"
+                    maquina_info += f"- {(h['descricao'] or '')[:80]}\n"
+            if solucoes:
+                maquina_info += ("\nSoluções já aplicadas pela manutenção nesta máquina "
+                                 "(considere-as ao formular a causa provável):\n")
+                for r in solucoes:
+                    comp = f" | componente: {r['componente_real']}" if r["componente_real"] else ""
+                    maquina_info += (f"- Problema: {(r['descricao'] or '')[:80]} → "
+                                     f"Solução: {(r['solucao_aplicada'] or '')[:160]}{comp}\n")
     except Exception:
         logger.exception("Erro ao carregar contexto da máquina")
         # Continua mesmo sem contexto da máquina — não é fatal.
 
-    # ── Prompt para a IA ─────────────────────────────────────────────────────
     prompt = f"""{maquina_info}
 DADOS DA OCORRÊNCIA:
-- Operador: {nome_operador}
-- Data: {data_ocorrencia}
-- Setor: {setor_area}
-- Tipo: {tipo_ocorrencia} | Impacto: {nivel_impacto} | Recorrente: {problema_recorrente}
-- Descrição: {descricao}
-- Detalhamento técnico: {detalhamento_tecnico}
+- Data: {campos.get('data_ocorrencia') or '—'}
+- Setor: {campos.get('setor_area') or '—'}
+- Tipo: {campos.get('tipo_ocorrencia') or '—'} | Impacto: {campos.get('nivel_impacto') or '—'} | Recorrente: {campos.get('problema_recorrente') or '—'}
+- Descrição: {campos.get('descricao') or ''}
+- Detalhamento técnico: {campos.get('detalhamento_tecnico') or '—'}
+{f"- Local indicado pelo operador no modelo 3D da máquina: {campos['componente_apontado_nome']} (considere-o ao formular a causa provável, sem descartar outras hipóteses)" if campos.get('componente_apontado_nome') else ''}
+{f"- Sintoma observado: {diagnostico_local.nome_sintoma(campos.get('sintoma'))}" if diagnostico_local.nome_sintoma(campos.get('sintoma')) else ''}
+{"- A máquina está PARADA." if campos.get('maquina_parada') else ''}
+{"- Há RISCO PARA PESSOAS: priorize isolamento e segurança." if campos.get('risco_pessoas') else ''}
 
 {"O diagrama técnico da máquina está anexado — referencie componentes visíveis nele. " if diagrama_path else ""}Gere um diagnóstico técnico COMPLETO, OBRIGATORIAMENTE com TODAS as 4 seções abaixo (não pule nenhuma):
 
@@ -1897,51 +2265,800 @@ Liste 3-5 critérios objetivos (com valores numéricos quando aplicável) que in
 Use linguagem técnica em português. Foque em ações práticas imediatas. Seja DETALHADO em cada seção."""
 
     resposta_ia, anotacoes, ia_status = get_ai_response(prompt, diagrama_path)
+    if ia_status != "ok" and campos.get("componente_apontado_nome"):
+        # Sem IA: roteiro montado com a peça apontada, o sintoma e o que já funcionou nela
+        hist = solucoes_da_peca(maquina_id, campos.get("componente_apontado"))
+        resposta_ia = diagnostico_local.montar_diagnostico(
+            campos["componente_apontado_nome"], campos.get("sintoma"), hist["itens"],
+            parada=bool(campos.get("maquina_parada")), risco=bool(campos.get("risco_pessoas")))
+        ia_status = "local"
     logger.info(f"[ocorrencia] IA respondeu — status={ia_status}, len={len(resposta_ia)}, anotacoes={len(anotacoes)}")
-    anotacoes_json = json.dumps(anotacoes, ensure_ascii=False) if anotacoes else None
+    return {"resposta_ia": resposta_ia, "anotacoes": anotacoes,
+            "ia_status": ia_status, "diagrama_url": diagrama_url}
 
-    # ── Persistência ─────────────────────────────────────────────────────────
+
+def _sim(valor) -> bool:
+    return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
+
+
+@app.route("/registrar_ocorrencia", methods=["POST"])
+@login_required
+def registrar_ocorrencia():
+    """
+    Registra a ocorrência apontada no 3D, gera o diagnóstico e abre a página da
+    ocorrência. Exige máquina com CAD 3D e a peça tocada no modelo.
+    """
+    def erro(msg):
+        logger.warning(f"[ocorrencia] {msg}")
+        flash(msg, "danger")
+        destino = url_for("CadastroOcorrencia", maquina=request.form.get("maquina_id") or None)
+        return redirect(destino)
+
+    try:
+        maquina_id = int(request.form.get("maquina_id") or 0)
+    except ValueError:
+        maquina_id = 0
+    if not maquina_tem_cad(maquina_id):
+        return erro("Escolha uma máquina com modelo CAD 3D.")
+
+    componente = (request.form.get("componente_apontado") or "").strip()[:60]
+    componente_nome = _nome_componente(maquina_id, componente)
+    if not componente_nome:
+        return erro("Toque na peça do modelo 3D onde está o problema.")
+
+    sintoma = (request.form.get("sintoma") or "").strip()[:30]
+    sintoma_nome = diagnostico_local.nome_sintoma(sintoma)
+    if not sintoma_nome:
+        return erro("Escolha o que está acontecendo com a peça.")
+    texto = (request.form.get("texto") or "").strip()[:2000]
+    if sintoma == "outro" and len(texto) < 5:
+        return erro("Descreva o que você viu.")
+
+    parada = _sim(request.form.get("maquina_parada"))
+    risco = _sim(request.form.get("risco_pessoas"))
+    codigo_alarme = (request.form.get("codigo_alarme") or "").strip()[:40]
+    impacto = request.form.get("nivel_impacto") or ""
+    if impacto not in ("Alto", "Médio", "Baixo"):
+        impacto = "Alto" if (parada or risco) else "Médio"
+    tipo = "Segurança" if risco else ("Qualidade" if sintoma == "medida" else "Manutenção")
+
+    conn = get_db()
+    maq = conn.execute("SELECT setor FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    recorrente = conn.execute(
+        "SELECT COUNT(*) AS n FROM ocorrencias WHERE maquina_id = ? AND componente_apontado = ? "
+        "AND data_registro >= datetime('now', '-60 days')", (maquina_id, componente)).fetchone()["n"]
+    conn.close()
+
+    descricao = f"{sintoma_nome}: {componente_nome}"
+    if texto:
+        descricao += f" — {texto.splitlines()[0][:160]}"
+    detalhes = [f"Peça indicada no 3D: {componente_nome}", f"Sintoma: {sintoma_nome}",
+                f"Máquina parada: {'Sim' if parada else 'Não'}",
+                f"Risco para pessoas: {'Sim' if risco else 'Não'}"]
+    if codigo_alarme:
+        detalhes.append(f"Código de alarme: {codigo_alarme}")
+    if texto:
+        detalhes += ["", texto]
+
+    campos = {
+        "maquina_id": maquina_id,
+        "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "nome_operador": current_user.nome,
+        "setor_area": (maq["setor"] if maq else "") or "",
+        "descricao": descricao,
+        "tipo_ocorrencia": tipo,
+        "nivel_impacto": impacto,
+        "problema_recorrente": "Sim" if recorrente else "Não",
+        "detalhamento_tecnico": "\n".join(detalhes),
+        "componente_apontado": componente,
+        "componente_apontado_nome": componente_nome,
+        "sintoma": sintoma, "maquina_parada": parada, "risco_pessoas": risco,
+    }
+    diag = diagnosticar_ocorrencia(campos)
+    anotacoes_json = json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None
+
     try:
         conn = get_db()
         cursor = conn.execute(
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
-            (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
-             tipo_ocorrencia, nivel_impacto, problema_recorrente,
-             detalhamento_tecnico, resposta_ia, ia_status, anotacoes_json, diagrama_url),
+                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url,
+                componente_apontado, sintoma, maquina_parada, risco_pessoas, status
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+            (maquina_id, campos["data_ocorrencia"], campos["nome_operador"], campos["setor_area"],
+             descricao, tipo, impacto, campos["problema_recorrente"], campos["detalhamento_tecnico"],
+             diag["resposta_ia"], diag["ia_status"], anotacoes_json, diag["diagrama_url"],
+             componente, sintoma, int(parada), int(risco)),
         )
         ocorrencia_id = cursor.lastrowid
+        inspecao_id = request.form.get("inspecao_id", type=int)
+        if inspecao_id:
+            conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (ocorrencia_id, inspecao_id))
         conn.commit()
         conn.close()
-        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={ia_status}")
-    except Exception as e:
+        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={diag['ia_status']}")
+    except Exception:
         logger.exception("Falha ao persistir a ocorrência")
-        flash(f"Erro ao salvar a ocorrência: {e}", "danger")
-        return redirect(url_for("CadastroOcorrencia"))
+        return erro("Não foi possível salvar a ocorrência. Tente novamente.")
 
-    dados = {
-        "id": ocorrencia_id,
-        "maquina_nome": maquina_nome,
-        "data_ocorrencia": data_ocorrencia,
-        "nome_operador": nome_operador,
-        "setor_area": setor_area,
-        "descricao": descricao,
-        "tipo_ocorrencia": tipo_ocorrencia,
-        "nivel_impacto": nivel_impacto,
-        "problema_recorrente": problema_recorrente,
-        "detalhamento_tecnico": detalhamento_tecnico,
-    }
+    # Post/Redirect/Get: recarregar a página não duplica a ocorrência.
+    return redirect(url_for("ver_ocorrencia", oc_id=ocorrencia_id))
+
+
+@app.route("/ocorrencia/<int:oc_id>")
+@login_required
+def ver_ocorrencia(oc_id: int):
+    """Página de detalhe da ocorrência (diagnóstico IA + diagrama anotado)."""
+    conn = get_db()
+    row = conn.execute(
+        "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome "
+        "FROM ocorrencias o "
+        "LEFT JOIN maquinas m ON o.maquina_id = m.id "
+        "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
+        "WHERE o.id = ?", (oc_id,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash("Ocorrência não encontrada.", "danger")
+        return redirect(url_for("historico"))
+    try:
+        anotacoes = json.loads(row["anotacoes_ia"] or "[]")
+    except Exception:
+        anotacoes = []
+    dados = dict(row)
+    dados["status"] = row["status"] or "Aberta"
+    ctx3d = contexto_3d(row)
+    sol = solucoes_da_peca(row["maquina_id"], row["componente_apontado"], limite=6)
+    solucoes_peca = [x for x in sol["itens"] if x["id"] != oc_id][:4]
     return render_template(
         "solucao.html",
+        solucoes_peca=solucoes_peca,
+        sintoma_nome=diagnostico_local.nome_sintoma(row["sintoma"]),
         dados=dados,
-        resposta_ia=resposta_ia,
-        ia_status=ia_status,
-        diagrama_url=diagrama_url,
+        resposta_ia=row["resposta_ia"],
+        ia_status=row["ia_status"],
+        diagrama_url=row["diagrama_url"],
         anotacoes=anotacoes,
+        ctx3d=ctx3d,
     )
+
+
+# ── Importação de CAD (STEP → modelo 3D) ──────────────────────────────────────
+CAD_MAX_MB = 400
+
+
+@app.before_request
+def _limite_upload_cad():
+    # CAD de fabricante passa fácil de 100 MB; o resto do sistema segue com o limite padrão
+    if request.endpoint == "cad_importar" and request.method == "POST":
+        request.max_content_length = CAD_MAX_MB * 1024 * 1024
+
+
+def _atualizar_importacao(job_id, status, mensagem, sugestoes=None):
+    conn = get_db()
+    if sugestoes is None:
+        conn.execute("UPDATE importacoes_cad SET status=?, mensagem=?, atualizado_em=CURRENT_TIMESTAMP WHERE id=?",
+                     (status, mensagem, job_id))
+    else:
+        conn.execute("UPDATE importacoes_cad SET status=?, mensagem=?, sugestoes_json=?, atualizado_em=CURRENT_TIMESTAMP "
+                     "WHERE id=?", (status, mensagem, json.dumps(sugestoes, ensure_ascii=False), job_id))
+    conn.commit()
+    conn.close()
+
+
+@app.route("/maquinas/cad", methods=["GET"])
+@perfil_requerido("manutencao")
+def cad_lista():
+    conn = get_db()
+    jobs = conn.execute("SELECT i.*, u.nome AS autor FROM importacoes_cad i LEFT JOIN usuarios u ON u.id = i.criado_por_id "
+                        "ORDER BY i.id DESC LIMIT 30").fetchall()
+    conn.close()
+    return render_template("cad_importar.html", jobs=jobs, modelos=modelos_3d.modelos_cad_disponiveis(),
+                           max_mb=CAD_MAX_MB)
+
+
+@app.route("/maquinas/cad/importar", methods=["POST"])
+@perfil_requerido("manutencao")
+def cad_importar():
+    arq = request.files.get("arquivo")
+    nome = (request.form.get("nome") or "").strip()[:80]
+    if not arq or not arq.filename:
+        flash("Escolha o arquivo STEP (.step/.stp) ou um .zip com o STEP.", "danger")
+        return redirect(url_for("cad_lista"))
+    if not nome:
+        nome = os.path.splitext(secure_filename(arq.filename))[0] or "Modelo importado"
+    ext = arq.filename.lower().rsplit(".", 1)[-1]
+    if ext not in ("step", "stp", "zip"):
+        flash("Formato não suportado. Envie .step, .stp ou .zip.", "danger")
+        return redirect(url_for("cad_lista"))
+    slug_modelo = cad_import.slug_livre(nome)
+    origem_dir = os.path.join(cad_import.PASTA_ORIGEM, slug_modelo)
+    os.makedirs(origem_dir, exist_ok=True)
+    caminho = os.path.join(origem_dir, f"origem.{ext}")
+    arq.save(caminho)
+    try:
+        steps = cad_import.extrair_steps(caminho, origem_dir)
+    except ValueError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("cad_lista"))
+    os.makedirs(os.path.join(cad_import.PASTA_MODELOS, slug_modelo), exist_ok=True)
+    conn = get_db()
+    job_id = conn.execute("INSERT INTO importacoes_cad (slug, nome, arquivo, status, mensagem, criado_por_id) "
+                          "VALUES (?,?,?,?,?,?)", (slug_modelo, nome, os.path.basename(steps[0]) if len(steps) == 1
+                                                   else f"{len(steps)} arquivos STEP", "na_fila",
+                                                   "Na fila para conversão…", current_user.id)).lastrowid
+    conn.commit()
+    conn.close()
+    registrar_auditoria("cad_importado", "importacao_cad", job_id, f"{nome} ({len(steps)} arquivo(s) STEP)")
+    cad_import.converter_em_segundo_plano(job_id, steps, os.path.join(cad_import.PASTA_MODELOS, slug_modelo, "modelo.glb"),
+                                          _atualizar_importacao)
+    return redirect(url_for("cad_job", job_id=job_id))
+
+
+@app.route("/maquinas/cad/<int:job_id>")
+@perfil_requerido("manutencao")
+def cad_job(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job:
+        flash("Importação não encontrada.", "danger")
+        return redirect(url_for("cad_lista"))
+    return render_template("cad_mapear.html", job=job)
+
+
+@app.route("/api/cad/<int:job_id>")
+@perfil_requerido("manutencao")
+def api_cad_job(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job:
+        return jsonify({"erro": "Importação não encontrada."}), 404
+    return jsonify({"id": job["id"], "status": job["status"], "mensagem": job["mensagem"], "nome": job["nome"],
+                    "slug": job["slug"], "glb": f"/static/models3d/{job['slug']}/modelo.glb",
+                    "sugestoes": json.loads(job["sugestoes_json"] or "[]")})
+
+
+@app.route("/api/cad/<int:job_id>/salvar", methods=["POST"])
+@perfil_requerido("manutencao")
+def api_cad_salvar(job_id: int):
+    conn = get_db()
+    job = conn.execute("SELECT * FROM importacoes_cad WHERE id = ?", (job_id,)).fetchone()
+    conn.close()
+    if not job or job["status"] not in ("mapear", "pronto"):
+        return jsonify({"ok": False, "erro": "Esta importação ainda não pode ser salva."}), 409
+    dados = request.get_json(silent=True) or {}
+    comps = []
+    for c in dados.get("componentes") or []:
+        nome = str(c.get("nome") or "").strip()[:80]
+        nos = [str(n)[:160] for n in (c.get("nos") or []) if str(n).strip()][:400]
+        cid = re.sub(r"[^a-z0-9_]", "", str(c.get("id") or "").lower())[:40]
+        if nome and nos and cid:
+            comps.append({"id": cid, "nome": nome, "nos": nos, "tipo": str(c.get("tipo") or "mecânico")[:20],
+                          "cor": str(c.get("cor") or "")[:7] or None,
+                          "explode": c.get("explode") if isinstance(c.get("explode"), list) else [0, 0, 0]})
+    if len(comps) < 2:
+        return jsonify({"ok": False, "erro": "Selecione pelo menos 2 componentes."}), 400
+    nome_modelo = (dados.get("nome") or job["nome"]).strip()[:80]
+    rot = dados.get("rotacao") if isinstance(dados.get("rotacao"), list) else None
+    rot = [float(v) for v in rot[:3]] if rot else None
+    cad_import.salvar_modelo(job["slug"], nome_modelo, f"Importado pelo sistema a partir de {job['arquivo']}", comps, rot)
+    modelos_3d._ler_modelo_cad.cache_clear()
+    _atualizar_importacao(job_id, "pronto", f"Modelo “{nome_modelo}” disponível no cadastro de máquinas ({len(comps)} componentes).")
+    registrar_auditoria("cad_modelo_salvo", "importacao_cad", job_id, f"{nome_modelo} · {len(comps)} componentes")
+    return jsonify({"ok": True, "slug": job["slug"]})
+
+
+# ── Mapa da fábrica ───────────────────────────────────────────────────────────
+
+def _posicoes_padrao(maquinas: list[dict]) -> None:
+    """Máquinas sem posição: agrupa por setor em uma grade (o gestor ajusta arrastando)."""
+    sem = [m for m in maquinas if m["x"] is None or m["y"] is None]
+    if not sem:
+        return
+    setores = sorted({m["setor"] or "Sem setor" for m in sem})
+    cols = min(3, len(setores)) or 1
+    linhas_grade = -(-len(setores) // cols)
+    for i, setor in enumerate(setores):
+        cx, cy = i % cols, i // cols
+        grupo = [m for m in sem if (m["setor"] or "Sem setor") == setor]
+        for j, m in enumerate(grupo):
+            m["x"] = round((cx + 0.5) / cols * 100 + (j - (len(grupo) - 1) / 2) * 11, 1)
+            m["y"] = round((cy + 0.55) / linhas_grade * 100, 1)
+
+
+def dados_mapa_fabrica() -> list[dict]:
+    conn = get_db()
+    lista = []
+    for r in conn.execute("SELECT id, nome, setor, modelo, fabricante, modelo_3d, mapa_x, mapa_y FROM maquinas ORDER BY nome"):
+        abertas = conn.execute(
+            "SELECT id, descricao, nivel_impacto, maquina_parada, risco_pessoas, "
+            "COALESCE(data_ocorrencia, data_registro) AS quando, status FROM ocorrencias "
+            "WHERE maquina_id = ? AND status IN ('Aberta', 'Em andamento') ORDER BY quando DESC", (r["id"],)).fetchall()
+        parada = any(o["maquina_parada"] for o in abertas)
+        status = "parada" if parada else ("atencao" if abertas else "ok")
+        lista.append({
+            "id": r["id"], "nome": r["nome"], "setor": r["setor"], "modelo": r["modelo"], "fabricante": r["fabricante"],
+            "cad": modelos_3d.eh_cad(modelos_3d.ler_config(r["modelo_3d"])),
+            "x": r["mapa_x"], "y": r["mapa_y"], "status": status,
+            "risco": any(o["risco_pessoas"] for o in abertas),
+            "abertas": [{"id": o["id"], "descricao": o["descricao"], "impacto": o["nivel_impacto"],
+                         "parada": bool(o["maquina_parada"]), "quando": data_br(o["quando"]), "status": o["status"]}
+                        for o in abertas[:4]],
+            "total_abertas": len(abertas),
+        })
+    conn.close()
+    _posicoes_padrao(lista)
+    return lista
+
+
+@app.route("/fabrica")
+@login_required
+def mapa_fabrica():
+    return render_template("fabrica.html", maquinas=dados_mapa_fabrica(),
+                           pode_editar=current_user.perfil in ("admin", "manutencao"))
+
+
+@app.route("/api/fabrica")
+@login_required
+def api_mapa_fabrica():
+    return jsonify(dados_mapa_fabrica())
+
+
+@app.route("/api/fabrica/posicoes", methods=["POST"])
+@perfil_requerido("manutencao")
+def api_mapa_posicoes():
+    dados = request.get_json(silent=True) or {}
+    conn = get_db()
+    n = 0
+    for mid, pos in (dados.get("posicoes") or {}).items():
+        try:
+            x, y = float(pos[0]), float(pos[1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if 0 <= x <= 100 and 0 <= y <= 100:
+            n += conn.execute("UPDATE maquinas SET mapa_x = ?, mapa_y = ? WHERE id = ?",
+                              (round(x, 2), round(y, 2), int(mid))).rowcount
+    conn.commit()
+    conn.close()
+    registrar_auditoria("mapa_fabrica_alterado", "maquina", None, f"{n} posição(ões)")
+    return jsonify({"ok": True, "salvas": n})
+
+
+# ── Mapa de calor: falhas por peça no modelo 3D ───────────────────────────────
+
+def _maquinas_mesmo_modelo(conn, maquina_id: int, cfg: dict | None) -> list[int]:
+    ids = [maquina_id]
+    if cfg and cfg.get("modelo"):
+        for r in conn.execute("SELECT id, modelo_3d FROM maquinas WHERE id != ?", (maquina_id,)):
+            c2 = modelos_3d.ler_config(r["modelo_3d"])
+            if c2 and c2.get("modelo") == cfg["modelo"]:
+                ids.append(r["id"])
+    return ids
+
+
+def falhas_por_componente(maquina_id: int, frota: bool = False) -> dict:
+    """
+    Para cada peça do modelo 3D: falhas, em aberto, última falha, soluções e custo.
+    Casa a ocorrência pela peça apontada no 3D ou pelo "componente que falhou".
+    frota=True soma as máquinas com o mesmo modelo CAD.
+    """
+    conn = get_db()
+    m = conn.execute("SELECT id, nome, modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    if not m:
+        conn.close()
+        return {}
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    comps = modelos_3d.componentes_da_config(cfg)
+    irmas = _maquinas_mesmo_modelo(conn, maquina_id, cfg)
+    ids = irmas if frota else [maquina_id]
+    marcas = ",".join("?" * len(ids))
+    ocs = conn.execute(
+        "SELECT o.id, o.maquina_id, o.descricao, o.status, o.componente_apontado, o.componente_real, "
+        "o.solucao_aplicada, o.data_resolucao, o.horas_trabalho, o.custo_pecas, "
+        "COALESCE(o.data_ocorrencia, o.data_registro) AS quando, mq.nome AS maquina_nome "
+        f"FROM ocorrencias o JOIN maquinas mq ON mq.id = o.maquina_id WHERE o.maquina_id IN ({marcas}) "
+        "ORDER BY quando DESC", ids).fetchall()
+    valor_hora = indicadores.custo_hora(conn)
+    conn.close()
+    palavras = modelos_3d.palavras_do_modelo(cfg)
+    resultado = []
+    for c in comps:
+        cid = c["component_id"]
+        termos = palavras.get(cid, []) + [modelos_3d._normalizar_texto(c["name"])]
+        itens = [o for o in ocs if o["componente_apontado"] == cid or (
+            o["componente_real"] and any(t in modelos_3d._normalizar_texto(o["componente_real"]) for t in termos))]
+        resultado.append({
+            "id": cid, "nome": c["name"], "tipo": c["type"],
+            "falhas": len(itens),
+            "abertas": sum(1 for o in itens if o["status"] not in ("Resolvida", "Fechada")),
+            "ultima": data_br(itens[0]["quando"]) if itens else None,
+            "custo": sum((o["custo_pecas"] or 0) + (o["horas_trabalho"] or 0) * valor_hora for o in itens),
+            "ocorrencias": [{"id": o["id"], "descricao": o["descricao"], "status": o["status"],
+                             "solucao": o["solucao_aplicada"], "quando": data_br(o["quando"]),
+                             "maquina": o["maquina_nome"]} for o in itens[:4]],
+        })
+    resultado.sort(key=lambda x: (-x["falhas"], x["nome"]))
+    return {"maquina": {"id": m["id"], "nome": m["nome"]}, "frota": frota,
+            "maquinas_na_frota": len(irmas),
+            "componentes": resultado}
+
+
+@app.route("/api/maquinas/<int:mid>/calor")
+@login_required
+def api_calor(mid: int):
+    return jsonify(falhas_por_componente(mid, frota=request.args.get("frota") == "1"))
+
+
+@app.route("/maquinas/<int:mid>/3d")
+@login_required
+def maquina_3d(mid: int):
+    conn = get_db()
+    m = conn.execute("SELECT * FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    if not m:
+        flash("Máquina não encontrada.", "danger")
+        return redirect(url_for("maquinas"))
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    if not cfg:
+        flash("Esta máquina ainda não tem modelo 3D.", "warning")
+        return redirect(url_for("maquinas"))
+    return render_template("maquina_3d.html", m=m, cfg=cfg, tem_cad=modelos_3d.eh_cad(cfg))
+
+
+# ── Indicadores de manutenção (MTTR, MTBF, disponibilidade, custo) ────────────
+
+@app.route("/indicadores")
+@perfil_requerido("manutencao")
+def pagina_indicadores():
+    dias = request.args.get("dias", type=int) or 90
+    if dias not in (30, 90, 180, 365):
+        dias = 90
+    conn = get_db()
+    dados = indicadores.calcular(conn, dias, nomes_componentes=_nome_componente)
+    conn.close()
+    return render_template("indicadores.html", d=dados, dias=dias)
+
+
+@app.route("/indicadores/custo-hora", methods=["POST"])
+@perfil_requerido("manutencao")
+def indicadores_custo_hora():
+    try:
+        valor = float((request.form.get("custo_hora") or "").replace(",", "."))
+    except ValueError:
+        valor = -1
+    if not 0 < valor < 10000:
+        flash("Informe o custo da hora em reais (ex.: 85,00).", "danger")
+    else:
+        conn = get_db()
+        conn.execute("INSERT INTO config_geral (chave, valor) VALUES ('custo_hora_manutencao', ?) "
+                     "ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", (str(valor),))
+        conn.commit()
+        conn.close()
+        registrar_auditoria("custo_hora_alterado", "config", None, f"R$ {valor:.2f}")
+        flash(f"Custo da hora de manutenção atualizado para R$ {valor:.2f}.".replace(".", ","), "success")
+    return redirect(url_for("pagina_indicadores", dias=request.form.get("dias") or 90))
+
+
+# ── Configurações (administrador) ─────────────────────────────────────────────
+
+@app.route("/configuracoes")
+@perfil_requerido()
+def configuracoes():
+    conn = get_db()
+    usuarios = conn.execute("SELECT id, nome, email, perfil, ativo, criado_em FROM usuarios ORDER BY ativo DESC, nome").fetchall()
+    tipos = [empresa.tipo_para_dict(r) for r in conn.execute("SELECT * FROM tipos_documento ORDER BY ativo DESC, setor, nome")]
+    auditoria = conn.execute(
+        "SELECT a.*, u.nome AS usuario FROM auditoria a LEFT JOIN usuarios u ON u.id = a.usuario_id "
+        "ORDER BY a.id DESC LIMIT 80").fetchall()
+    sincronizacoes = conn.execute("SELECT * FROM sync_rh ORDER BY id DESC LIMIT 15").fetchall()
+    tem_chave = bool(conn.execute("SELECT 1 FROM config_geral WHERE chave = 'integracao_rh_token_hash'").fetchone())
+    conn.close()
+    return render_template("configuracoes.html", usuarios=usuarios, tipos=tipos, auditoria=auditoria,
+                           qualificacoes=empresa.QUALIFICACOES, aba=request.args.get("aba") or "usuarios",
+                           sincronizacoes=sincronizacoes, tem_chave=tem_chave,
+                           token_novo=session.pop("token_rh_novo", None),
+                           url_api=url_for("api_rh_colaboradores", _external=True))
+
+
+@app.route("/configuracoes/usuarios", methods=["POST"])
+@perfil_requerido()
+def config_usuario_salvar():
+    uid = request.form.get("id", type=int)
+    nome = (request.form.get("nome") or "").strip()[:120]
+    email = (request.form.get("email") or "").strip().lower()[:160]
+    perfil = request.form.get("perfil") or "operador"
+    senha = request.form.get("senha") or ""
+    ativo = 1 if request.form.get("ativo", "1") == "1" else 0
+    if perfil not in empresa.PERFIS:
+        perfil = "operador"
+    if not nome or "@" not in email:
+        flash("Informe nome e e-mail válidos.", "danger")
+        return redirect(url_for("configuracoes", aba="usuarios"))
+    conn = get_db()
+    try:
+        if uid:
+            if uid == current_user.id and (perfil != "admin" or not ativo):
+                flash("Você não pode tirar o seu próprio acesso de administrador.", "danger")
+                return redirect(url_for("configuracoes", aba="usuarios"))
+            conn.execute("UPDATE usuarios SET nome=?, email=?, perfil=?, ativo=? WHERE id=?", (nome, email, perfil, ativo, uid))
+            if senha:
+                if len(senha) < 8:
+                    flash("A senha precisa ter pelo menos 8 caracteres.", "danger")
+                    return redirect(url_for("configuracoes", aba="usuarios"))
+                conn.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (generate_password_hash(senha), uid))
+            acao = "usuario_alterado"
+        else:
+            if len(senha) < 8:
+                flash("A senha precisa ter pelo menos 8 caracteres.", "danger")
+                return redirect(url_for("configuracoes", aba="usuarios"))
+            uid = conn.execute("INSERT INTO usuarios (nome, email, senha_hash, perfil, ativo) VALUES (?,?,?,?,?)",
+                               (nome, email, generate_password_hash(senha), perfil, ativo)).lastrowid
+            acao = "usuario_criado"
+        conn.commit()
+    except sqlite3.IntegrityError:
+        flash("Já existe um usuário com esse e-mail.", "danger")
+        return redirect(url_for("configuracoes", aba="usuarios"))
+    finally:
+        conn.close()
+    registrar_auditoria(acao, "usuario", uid, f"{email} · {empresa.PERFIS[perfil]}")
+    flash(f"Usuário {nome} salvo.", "success")
+    return redirect(url_for("configuracoes", aba="usuarios"))
+
+
+@app.route("/configuracoes/tipos", methods=["POST"])
+@perfil_requerido()
+def config_tipo_salvar():
+    tid = request.form.get("id", type=int)
+    nome = (request.form.get("nome") or "").strip()[:120]
+    if not nome:
+        flash("Informe o nome do tipo de documento.", "danger")
+        return redirect(url_for("configuracoes", aba="tipos"))
+    quals = [q for q in request.form.getlist("qualificacoes") if q in empresa.QUALIFICACOES]
+    campos = "\n".join(l.strip()[:120] for l in (request.form.get("campos") or "").splitlines() if l.strip())
+    dados = (nome, (request.form.get("setor") or "").strip()[:80], (request.form.get("descricao") or "").strip()[:300],
+             campos, ",".join(quals), 1 if request.form.get("exige_maquina") else 0,
+             0 if request.form.get("inativo") else 1)
+    conn = get_db()
+    try:
+        if tid:
+            conn.execute("UPDATE tipos_documento SET nome=?, setor=?, descricao=?, campos_obrigatorios=?, "
+                         "qualificacoes_exigidas=?, exige_maquina=?, ativo=? WHERE id=?", dados + (tid,))
+        else:
+            tid = conn.execute("INSERT INTO tipos_documento (nome, setor, descricao, campos_obrigatorios, "
+                               "qualificacoes_exigidas, exige_maquina, ativo) VALUES (?,?,?,?,?,?,?)", dados).lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        flash("Já existe um tipo de documento com esse nome.", "danger")
+        return redirect(url_for("configuracoes", aba="tipos"))
+    finally:
+        conn.close()
+    registrar_auditoria("tipo_documento_salvo", "tipo_documento", tid, nome)
+    flash(f"Tipo de documento “{nome}” salvo.", "success")
+    return redirect(url_for("configuracoes", aba="tipos"))
+
+
+# ── Integração com o sistema de RH ────────────────────────────────────────────
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _config(conn, chave: str) -> str | None:
+    r = conn.execute("SELECT valor FROM config_geral WHERE chave = ?", (chave,)).fetchone()
+    return r["valor"] if r else None
+
+
+def sincronizar_rh(lista, completo: bool, origem: str) -> dict:
+    conn = get_db()
+    try:
+        res = empresa.aplicar_colaboradores(conn, lista, completo)
+        conn.execute("INSERT INTO sync_rh (origem, recebidos, criados, atualizados, desligados, erros) VALUES (?,?,?,?,?,?)",
+                     (origem[:80], res["recebidos"], res["criados"], res["atualizados"], res["desligados"],
+                      json.dumps(res["erros"], ensure_ascii=False) if res["erros"] else None))
+        conn.commit()
+    finally:
+        conn.close()
+    return res
+
+
+@app.route("/api/integracao/rh/colaboradores", methods=["POST"])
+@csrf.exempt
+@limiter.limit("30 per minute")
+def api_rh_colaboradores():
+    """
+    Entrada para o sistema de RH (TOTVS, Senior, integrador...). Autenticação:
+    Authorization: Bearer <chave gerada em Configurações → Integrações>.
+    Corpo: {"colaboradores": [...], "modo": "parcial"|"completo", "origem": "TOTVS"}.
+    """
+    auth = request.headers.get("Authorization", "")
+    conn = get_db()
+    esperado = _config(conn, "integracao_rh_token_hash")
+    conn.close()
+    if not esperado or not auth.startswith("Bearer ") or not secrets.compare_digest(_hash_token(auth[7:].strip()), esperado):
+        return jsonify({"ok": False, "erro": "Chave de integração inválida."}), 401
+    dados = request.get_json(silent=True) or {}
+    origem = str(dados.get("origem") or "Sistema de RH")[:60]
+    res = sincronizar_rh(dados.get("colaboradores"), dados.get("modo") == "completo", origem)
+    logger.info(f"[integracao/rh] {origem}: {res['criados']} novos, {res['atualizados']} atualizados, "
+                f"{res['desligados']} desligados, {len(res['erros'])} erros")
+    return jsonify({"ok": True, **res})
+
+
+@app.route("/configuracoes/integracao/chave", methods=["POST"])
+@perfil_requerido()
+def config_integracao_chave():
+    conn = get_db()
+    if request.form.get("acao") == "revogar":
+        conn.execute("DELETE FROM config_geral WHERE chave = 'integracao_rh_token_hash'")
+        conn.commit()
+        conn.close()
+        registrar_auditoria("integracao_rh_chave_revogada", "config")
+        flash("Chave de integração revogada. O sistema de RH não consegue mais enviar dados.", "success")
+        return redirect(url_for("configuracoes", aba="integracoes"))
+    token = "nxr_" + secrets.token_urlsafe(32)
+    conn.execute("INSERT INTO config_geral (chave, valor) VALUES ('integracao_rh_token_hash', ?) "
+                 "ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor", (_hash_token(token),))
+    conn.commit()
+    conn.close()
+    registrar_auditoria("integracao_rh_chave_gerada", "config")
+    session["token_rh_novo"] = token   # mostrado uma única vez
+    return redirect(url_for("configuracoes", aba="integracoes"))
+
+
+@app.route("/configuracoes/integracao/simular", methods=["POST"])
+@perfil_requerido()
+def config_integracao_simular():
+    """Demonstração: um envio como o sistema de RH faria (renovações e uma admissão)."""
+    hoje = date.today()
+    def daqui(dias):
+        return (hoje + timedelta(days=dias)).isoformat()
+    lista = [
+        {"matricula": "10234", "nome": "Marcos Pereira", "qualificacoes": {"NR-10": daqui(730)}},
+        {"matricula": "10240", "nome": "Ana Lima", "qualificacoes": {"ASO": daqui(365)}},
+        {"matricula": "10301", "nome": "Rafael Gomes", "setor": "Manutenção", "funcao": "Eletricista de manutenção",
+         "vinculo": "CLT", "gestor": "Fernanda Costa", "admissao": hoje.isoformat(),
+         "qualificacoes": {"ASO": daqui(365), "NR-10": daqui(730), "Integração": daqui(365)}},
+    ]
+    res = sincronizar_rh(lista, False, "Simulação do sistema de RH")
+    registrar_auditoria("integracao_rh_simulada", "config", None, f"{res['criados']} novos, {res['atualizados']} atualizados")
+    flash(f"Envio simulado recebido: {res['criados']} admissão(ões), {res['atualizados']} atualização(ões). "
+          "Confira em Pessoas e habilitações.", "success")
+    return redirect(url_for("configuracoes", aba="integracoes"))
+
+
+# ── Pessoas (RH) ──────────────────────────────────────────────────────────────
+
+def _resumo_qualificacoes(conn) -> tuple[dict, list[dict]]:
+    """Qualificações por pessoa e a lista de vencimentos (vencidas + próximas 30 dias)."""
+    por_pessoa: dict[int, dict] = {}
+    vencimentos = []
+    for r in conn.execute(
+            "SELECT q.colaborador_id, q.tipo, q.valido_ate, c.nome, c.matricula, c.setor, c.ativo "
+            "FROM qualificacoes q JOIN colaboradores c ON c.id = q.colaborador_id ORDER BY q.valido_ate"):
+        st = empresa.situacao(r["valido_ate"])
+        por_pessoa.setdefault(r["colaborador_id"], {})[r["tipo"]] = {"valido_ate": r["valido_ate"], "situacao": st}
+        if r["ativo"] and st in ("vencida", "vence_em_breve"):
+            dias = (empresa.para_data(r["valido_ate"]) - date.today()).days
+            vencimentos.append({"colaborador_id": r["colaborador_id"], "nome": r["nome"], "matricula": r["matricula"],
+                                "setor": r["setor"], "tipo": r["tipo"], "valido_ate": r["valido_ate"],
+                                "situacao": st, "dias": dias})
+    return por_pessoa, vencimentos
+
+
+@app.route("/pessoas")
+@perfil_requerido("rh", "manutencao")
+def pessoas():
+    busca = (request.args.get("q") or "").strip()
+    setor = request.args.get("setor") or ""
+    filtro = request.args.get("situacao") or ""
+    conn = get_db()
+    lista = conn.execute("SELECT * FROM colaboradores ORDER BY ativo DESC, nome").fetchall()
+    quals, vencimentos = _resumo_qualificacoes(conn)
+    setores = sorted({r["setor"] for r in lista if r["setor"]})
+    conn.close()
+    bq = empresa.normalizar(busca)
+    itens = []
+    for r in lista:
+        q = quals.get(r["id"], {})
+        if bq and bq not in empresa.normalizar(f"{r['nome']} {r['matricula']} {r['funcao'] or ''}"):
+            continue
+        if setor and r["setor"] != setor:
+            continue
+        sits = {v["situacao"] for v in q.values()}
+        if filtro == "vencida" and "vencida" not in sits:
+            continue
+        if filtro == "vence_em_breve" and "vence_em_breve" not in sits:
+            continue
+        if filtro == "inativo" and r["ativo"]:
+            continue
+        itens.append({"p": r, "q": q})
+    ativos = sum(1 for r in lista if r["ativo"])
+    stats = {"ativos": ativos, "vencidas": sum(1 for v in vencimentos if v["situacao"] == "vencida"),
+             "em_breve": sum(1 for v in vencimentos if v["situacao"] == "vence_em_breve")}
+    registrar_auditoria("pessoas_listadas", "colaborador", None, busca or None)
+    return render_template("pessoas.html", itens=itens, vencimentos=vencimentos, stats=stats, setores=setores,
+                           busca=busca, setor=setor, filtro=filtro, qualificacoes=empresa.QUALIFICACOES,
+                           pode_editar=current_user.perfil in ("admin", "rh"))
+
+
+@app.route("/pessoas/nova", methods=["GET", "POST"])
+@app.route("/pessoas/<int:pid>", methods=["GET", "POST"])
+@perfil_requerido("rh")
+def pessoa_form(pid: int | None = None):
+    conn = get_db()
+    pessoa = conn.execute("SELECT * FROM colaboradores WHERE id = ?", (pid,)).fetchone() if pid else None
+    if pid and not pessoa:
+        conn.close()
+        flash("Pessoa não encontrada.", "danger")
+        return redirect(url_for("pessoas"))
+    if request.method == "POST":
+        mat = re.sub(r"\D", "", request.form.get("matricula") or "")[:20]
+        nome = (request.form.get("nome") or "").strip()[:120]
+        if not mat or not nome:
+            conn.close()
+            flash("Matrícula (só números) e nome são obrigatórios.", "danger")
+            return redirect(request.url)
+        adm = empresa.para_data(request.form.get("admissao"))
+        dados = (mat, nome, (request.form.get("setor") or "").strip()[:80], (request.form.get("funcao") or "").strip()[:80],
+                 request.form.get("vinculo") or "CLT", (request.form.get("gestor") or "").strip()[:120],
+                 adm.isoformat() if adm else None, 1 if request.form.get("ativo", "1") == "1" else 0)
+        try:
+            if pessoa:
+                conn.execute("UPDATE colaboradores SET matricula=?, nome=?, setor=?, funcao=?, vinculo=?, gestor=?, "
+                             "admissao=?, ativo=? WHERE id=?", dados + (pid,))
+            else:
+                pid = conn.execute("INSERT INTO colaboradores (matricula, nome, setor, funcao, vinculo, gestor, admissao, "
+                                   "ativo) VALUES (?,?,?,?,?,?,?,?)", dados).lastrowid
+            for q in empresa.QUALIFICACOES:
+                empresa.salvar_qualificacao(conn, pid, q, empresa.para_data(request.form.get(f"q_{q}")))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            flash("Já existe outra pessoa com essa matrícula.", "danger")
+            return redirect(request.url)
+        conn.close()
+        registrar_auditoria("pessoa_salva", "colaborador", pid, f"{mat} · {nome}")
+        flash(f"{nome} salvo(a).", "success")
+        return redirect(url_for("pessoas"))
+    quals = empresa.qualificacoes_de(conn, pid) if pid else {}
+    conn.close()
+    if pid:
+        registrar_auditoria("pessoa_consultada", "colaborador", pid)
+    return render_template("pessoa_form.html", pessoa=pessoa, quals=quals, qualificacoes=empresa.QUALIFICACOES,
+                           vinculos=empresa.VINCULOS)
+
+
+@app.route("/pessoas/importar", methods=["POST"])
+@perfil_requerido("rh")
+def pessoas_importar():
+    arq = request.files.get("planilha")
+    if not arq or not arq.filename.lower().endswith((".csv", ".txt")):
+        flash("Envie a planilha em CSV (no Excel: Salvar como → CSV).", "danger")
+        return redirect(url_for("pessoas"))
+    conn = get_db()
+    try:
+        res = empresa.importar_csv(conn, arq.read(2_000_000))
+        conn.commit()
+    finally:
+        conn.close()
+    registrar_auditoria("pessoas_importadas", "colaborador", None,
+                        f"{res['criados']} novas, {res['atualizados']} atualizadas")
+    flash(f"Importação concluída: {res['criados']} nova(s), {res['atualizados']} atualizada(s).", "success")
+    for e in res["erros"]:
+        flash(e, "warning")
+    return redirect(url_for("pessoas"))
+
+
+@app.route("/pessoas/modelo.csv")
+@perfil_requerido("rh")
+def pessoas_modelo_csv():
+    from flask import Response
+    return Response(empresa.modelo_csv(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=modelo_pessoas.csv"})
 
 
 # ── Sensor Visual (percepção industrial aumentada) ────────────────────────────
@@ -1951,12 +3068,33 @@ os.makedirs(SENSOR_FOLDER, exist_ok=True)
 _SENSOR_EXT = {"png", "jpg", "jpeg"}
 
 
+def sensor_componente_3d(maquina_id, anomalias: list[dict]) -> str | None:
+    """Peça do modelo 3D da máquina mais provável para as anomalias vistas na foto."""
+    if not maquina_id or not anomalias:
+        return None
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    for a in anomalias:   # a primeira anomalia é a mais grave
+        texto = " ".join(str(a.get(k) or "") for k in ("componente", "rotulo", "descricao"))
+        achados = modelos_3d.componentes_citados("1. Causa provavel\n" + texto, cfg, limite=1)
+        if achados:
+            return achados[0]["component_id"]
+    return None
+
+
+def _componente_json(maquina_id, cid):
+    nome = _nome_componente(maquina_id, cid) if cid else None
+    return {"id": cid, "nome": nome} if nome else None
+
+
 @app.route("/sensor")
 @login_required
 def sensor():
     """Página do Sensor Visual: captura de foto e análise de anomalias por IA."""
     conn = get_db()
-    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    maquinas_lista = maquinas_com_cad(conn)
     recentes = conn.execute("""
         SELECT p.id, p.imagem_url, p.num_anomalias, p.severidade_max,
                p.score_saude, p.confirmado, p.criado_em, m.nome AS maquina_nome
@@ -1970,7 +3108,7 @@ def sensor():
         maquinas=maquinas_lista,
         recentes=recentes,
         taxonomia=sensor_visual.TAXONOMIA_DEFEITOS,
-        ia_online=gemini_client is not None,
+        ia_online=nexa_ia._get_client() is not None,
     )
 
 
@@ -1981,7 +3119,7 @@ def sensor_analisar():
     """Recebe uma foto, roda a detecção de anomalias e registra a percepção."""
     _sensor_client = nexa_ia._get_client()
     if not _sensor_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
@@ -2028,17 +3166,18 @@ def sensor_analisar():
         return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
 
     anomalias = resultado["anomalias"]
+    componente_3d = sensor_componente_3d(maquina_id, anomalias)
     try:
         conn = get_db()
         cursor = conn.execute(
             """INSERT INTO percepcoes
                (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
-                num_anomalias, severidade_max, score_saude, criado_por_id)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                num_anomalias, severidade_max, score_saude, componente_3d, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 maquina_id, imagem_url, contexto, resultado["modelo"],
                 json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], current_user.id,
+                resultado["severidade_max"], resultado["score"], componente_3d, current_user.id,
             ),
         )
         percepcao_id = cursor.lastrowid
@@ -2046,11 +3185,13 @@ def sensor_analisar():
         conn.close()
     except Exception as e:
         logger.exception("[sensor] erro ao salvar percepção")
-        return jsonify({"erro": f"Erro ao salvar percepção: {e}"}), 500
+        return jsonify({"erro": "Não foi possível salvar a inspeção. Tente novamente."}), 500
 
     return jsonify({
         "id": percepcao_id,
         "imagem_url": imagem_url,
+        "maquina_id": maquina_id,
+        "componente_3d": _componente_json(maquina_id, componente_3d),
         "anomalias": anomalias,
         "score": resultado["score"],
         "severidade_max": resultado["severidade_max"],
@@ -2204,7 +3345,7 @@ def sensor_laudo_pdf(percepcao_id: int):
 
     def info_cell(label, value):
         return [Paragraph(label.upper(), s_label),
-                Paragraph(f"<b>{value}</b>", s_value)]
+                Paragraph(f"<b>{pdf_texto(value)}</b>", s_value)]
 
     buf = BytesIO()
     pw, ph = A4
@@ -2218,7 +3359,7 @@ def sensor_laudo_pdf(percepcao_id: int):
         canvas.setFont("Helvetica", 8)
         now_str = dt_mod.datetime.now().strftime("%d/%m/%Y %H:%M")
         canvas.drawString(margin, 5 * mm, f"Nexar QRQC · Sensor Visual · Gerado em {now_str}")
-        canvas.drawRightString(pw - margin, 5 * mm, f"Percepção #{percepcao_id} · Página {doc.page}")
+        canvas.drawRightString(pw - margin, 5 * mm, f"Inspeção nº {percepcao_id} · Página {doc.page}")
         canvas.setFillColor(score_color)
         canvas.rect(0, 13.5 * mm, pw, 1.5 * mm, fill=1, stroke=0)
         canvas.restoreState()
@@ -2298,18 +3439,18 @@ def sensor_laudo_pdf(percepcao_id: int):
                        ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")],
             )
             linhas = [[Paragraph(
-                f"<b>{a.get('rotulo', '')}</b> &nbsp;"
+                f"<b>{pdf_texto(a.get('rotulo', ''))}</b> &nbsp;"
                 f"<font color='{SEV_COR.get(sev)}' size=7><b>{SEV_LABEL.get(sev, sev.upper())} · {conf}%</b></font>",
                 s_ann_t)]]
             if a.get("componente") or a.get("descricao"):
                 linhas.append([Paragraph(
-                    f"<b>{a.get('componente', '')}:</b> {a.get('descricao', '')}", s_ann_d)])
+                    f"<b>{pdf_texto(a.get('componente', ''))}:</b> {pdf_texto(a.get('descricao', ''))}", s_ann_d)])
             if a.get("causa_provavel"):
                 linhas.append([Paragraph(
-                    f"<font color='#B45309'><b>Possível causa:</b></font> {a['causa_provavel']}", s_ann_d)])
+                    f"<font color='#B45309'><b>Possível causa:</b></font> {pdf_texto(a['causa_provavel'])}", s_ann_d)])
             if a.get("recomendacao"):
                 linhas.append([Paragraph(
-                    f"<font color='#1D4ED8'><b>Ação:</b></font> {a['recomendacao']}", s_ann_d)])
+                    f"<font color='#1D4ED8'><b>Ação:</b></font> {pdf_texto(a['recomendacao'])}", s_ann_d)])
             txt = Table(linhas, colWidths=[pw - 2 * margin - 40],
                         style=[("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
                                ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)])
@@ -2364,6 +3505,9 @@ def sensor_get(percepcao_id: int):
         "resumo": sensor_visual._resumo(anomalias, row["score_saude"]),
         "confirmado": bool(row["confirmado"]),
         "maquina_nome": row["maquina_nome"],
+        "maquina_id": row["maquina_id"],
+        "componente_3d": _componente_json(row["maquina_id"], row["componente_3d"]),
+        "ocorrencia_id": row["ocorrencia_id"],
         "contexto": row["contexto"],
         "criado_em": row["criado_em"],
         "status": "ok" if anomalias else "sem_anomalia",
@@ -2410,11 +3554,35 @@ def sensor_historico():
 
 # ── Máquinas ──────────────────────────────────────────────────────────────────
 
+def maquinas_com_cad(conn) -> list[dict]:
+    """
+    Máquinas aptas a receber ocorrências: só as que têm o modelo 3D do fabricante
+    (CAD). A ocorrência é registrada apontando a peça no 3D.
+    """
+    lista = []
+    for r in conn.execute("SELECT id, nome, setor, modelo, fabricante, modelo_3d FROM maquinas ORDER BY nome"):
+        cfg = modelos_3d.ler_config(r["modelo_3d"])
+        if modelos_3d.eh_cad(cfg):
+            lista.append({"id": r["id"], "nome": r["nome"], "setor": r["setor"], "modelo": r["modelo"],
+                          "fabricante": r["fabricante"], "modelo_3d_nome": cfg.get("nome") or "Modelo do fabricante"})
+    return lista
+
+
+def maquina_tem_cad(maquina_id) -> bool:
+    if not maquina_id:
+        return False
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    conn.close()
+    return bool(m) and modelos_3d.eh_cad(modelos_3d.ler_config(m["modelo_3d"]))
+
+
 @app.route("/maquinas")
 @login_required
 def maquinas():
     conn = get_db()
     lista = conn.execute("SELECT * FROM maquinas ORDER BY nome").fetchall()
+    cad_ids = {m["id"] for m in maquinas_com_cad(conn)}
     rows = conn.execute("""
         SELECT maquina_id,
                COUNT(*) AS total,
@@ -2425,11 +3593,27 @@ def maquinas():
     """).fetchall()
     conn.close()
     stats = {r["maquina_id"]: r for r in rows}
-    return render_template("maquinas.html", maquinas=lista, stats=stats)
+    return render_template("maquinas.html", maquinas=lista, stats=stats, cad_ids=cad_ids)
+
+
+def _config_3d_do_form(atual: str | None) -> dict | None:
+    """
+    Lê o campo 'modelo_3d' do formulário de máquina:
+    '' = sem modelo, '__manter__' = mantém o atual (ex.: CAD já importado),
+    o nome de uma família de modelo em código ou 'cad:<slug>' (modelo do fabricante).
+    """
+    escolha = (request.form.get("modelo_3d") or "").strip()
+    if escolha == "__manter__":
+        return modelos_3d.ler_config(atual)
+    if escolha in modelos_3d.FAMILIAS:
+        return {"fonte": "familia", "familia": escolha}
+    if escolha.startswith("cad:"):
+        return modelos_3d.ler_config(json.dumps({"fonte": "cad", "modelo": escolha[4:]}))
+    return None
 
 
 @app.route("/maquinas/cadastro", methods=["GET", "POST"])
-@login_required
+@perfil_requerido("manutencao")
 def cadastro_maquina():
     if request.method == "POST":
         nome       = request.form.get("nome", "").strip()
@@ -2445,11 +3629,13 @@ def cadastro_maquina():
 
         try:
             conn = get_db()
+            cfg3d = _config_3d_do_form(None)
             cursor = conn.execute(
-                "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao) VALUES (?,?,?,?,?,?)",
-                (nome, modelo, fabricante, ano, setor, descricao),
+                "INSERT INTO maquinas (nome, modelo, fabricante, ano, setor, descricao, modelo_3d) VALUES (?,?,?,?,?,?,?)",
+                (nome, modelo, fabricante, ano, setor, descricao, modelos_3d.config_para_salvar(cfg3d)),
             )
             maquina_id = cursor.lastrowid
+            modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             conn.commit()
 
             arquivos = request.files.getlist("diagramas")
@@ -2476,14 +3662,15 @@ def cadastro_maquina():
             flash(f"Máquina '{nome}' cadastrada com sucesso.", "success")
         except Exception as e:
             logger.exception("Erro ao cadastrar máquina")
-            flash(f"Erro ao cadastrar máquina: {e}", "danger")
+            flash("Não foi possível cadastrar a máquina. Tente novamente.", "danger")
         return redirect(url_for("maquinas"))
 
-    return render_template("cadastro_maquina.html")
+    return render_template("cadastro_maquina.html", familias_3d=modelos_3d.familias_disponiveis(),
+                           modelos_cad=modelos_3d.modelos_cad_disponiveis(), cfg3d=None)
 
 
 @app.route("/maquinas/<int:maquina_id>/editar", methods=["GET", "POST"])
-@login_required
+@perfil_requerido("manutencao")
 def editar_maquina(maquina_id: int):
     conn = get_db()
     maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
@@ -2506,10 +3693,13 @@ def editar_maquina(maquina_id: int):
             return redirect(url_for("editar_maquina", maquina_id=maquina_id))
 
         try:
+            cfg3d = _config_3d_do_form(maquina["modelo_3d"])
             conn.execute(
-                "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=? WHERE id=?",
-                (nome, modelo, fabricante, ano, setor, descricao, maquina_id),
+                "UPDATE maquinas SET nome=?, modelo=?, fabricante=?, ano=?, setor=?, descricao=?, modelo_3d=? WHERE id=?",
+                (nome, modelo, fabricante, ano, setor, descricao,
+                 modelos_3d.config_para_salvar(cfg3d), maquina_id),
             )
+            modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             arquivos = request.files.getlist("diagramas")
             pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
             os.makedirs(pasta, exist_ok=True)
@@ -2531,12 +3721,15 @@ def editar_maquina(maquina_id: int):
             flash(f"Máquina '{nome}' atualizada com sucesso.", "success")
         except Exception as e:
             logger.exception("Erro ao editar máquina")
-            flash(f"Erro ao atualizar: {e}", "danger")
+            flash("Não foi possível atualizar a máquina. Tente novamente.", "danger")
         conn.close()
         return redirect(url_for("maquinas"))
 
     conn.close()
-    return render_template("cadastro_maquina.html", maquina=maquina)
+    return render_template("cadastro_maquina.html", maquina=maquina,
+                           familias_3d=modelos_3d.familias_disponiveis(),
+                           modelos_cad=modelos_3d.modelos_cad_disponiveis(),
+                           cfg3d=modelos_3d.ler_config(maquina["modelo_3d"]))
 
 
 @app.route("/enviar", methods=["POST"])
@@ -2614,7 +3807,7 @@ def enviar():
         logger.info(f"[suporte] ticket criado — protocolo={protocolo} prioridade={prioridade}")
     except Exception as e:
         logger.exception("[suporte] falha ao persistir ticket")
-        return jsonify({"ok": False, "erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"ok": False, "erro": "Não foi possível salvar. Tente novamente."}), 500
 
     # Notificação por email (best-effort — não bloqueia o sucesso)
     email_ok = enviar_email_suporte(ticket, anexos_paths)
@@ -2639,6 +3832,48 @@ def enviar():
 
 # ── QRQC 3D AI ───────────────────────────────────────────────────────────────
 
+def contexto_3d(oc) -> dict:
+    """
+    Modelo 3D da máquina da ocorrência e o que destacar nele:
+    análise do agente (se houver) ou componentes citados no diagnóstico,
+    mais a peça que o operador indicou ao registrar.
+    """
+    ctx = {"cfg3d": None, "catalogo": [], "destaques": [], "apontado": None,
+           "diagnostico": None}
+    if not oc["maquina_id"]:
+        return ctx
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (oc["maquina_id"],)).fetchone()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    diag = conn.execute("SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc["id"],)).fetchone()
+    diag_comps = []
+    if diag:
+        ctx["diagnostico"] = dict(diag)
+        ctx["diagnostico"]["recommended_actions"] = json.loads(diag["recommended_actions"] or "[]")
+        diag_comps = [dict(r) for r in conn.execute(
+            "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)).fetchall()]
+    conn.close()
+    ctx["cfg3d"] = cfg
+    ctx["catalogo"] = modelos_3d.componentes_da_config(cfg)
+    if diag_comps:
+        ctx["destaques"] = [{"component_id": c["component_id"], "component_name": c["component_name"],
+                             "severity": c["severity"], "reason": c["reason"],
+                             "probability": c["probability"], "fonte": "agente"} for c in diag_comps]
+    elif oc["ia_status"] == "local" and oc["componente_apontado"]:
+        pass  # roteiro local: o destaque é a peça apontada pelo operador (abaixo)
+    elif oc["ia_status"] == "ok":
+        # Só quando o texto veio da IA (o roteiro padrão cita peças genéricas)
+        ctx["destaques"] = modelos_3d.componentes_citados(oc["resposta_ia"] or "", cfg)
+    apontado = oc["componente_apontado"] if "componente_apontado" in oc.keys() else None
+    nome = next((c["name"] for c in ctx["catalogo"] if c["component_id"] == apontado), None)
+    if nome:
+        ctx["apontado"] = {"component_id": apontado, "component_name": nome}
+        if oc["ia_status"] == "local" and not diag_comps:
+            ctx["destaques"] = [{"component_id": apontado, "component_name": nome,
+                                 "severity": "high", "fonte": "historico"}]
+    return ctx
+
+
 @app.route("/qrqc3d/<int:oc_id>")
 @login_required
 def qrqc3d(oc_id: int):
@@ -2650,44 +3885,89 @@ def qrqc3d(oc_id: int):
         return redirect(url_for("historico"))
 
     maquina = None
-    componentes = []
-    diagnostico = None
-    diag_componentes = []
-
     if oc["maquina_id"]:
-        maquina = conn.execute(
-            "SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)
-        ).fetchone()
-        componentes = conn.execute(
-            "SELECT * FROM machine_components WHERE maquina_id = ?", (oc["maquina_id"],)
-        ).fetchall()
-
-    diag = conn.execute(
-        "SELECT * FROM ai_diagnoses WHERE ocorrencia_id = ?", (oc_id,)
-    ).fetchone()
-    if diag:
-        diagnostico = dict(diag)
-        diagnostico["recommended_actions"] = json.loads(
-            diag["recommended_actions"] or "[]"
-        )
-        diag_componentes = conn.execute(
-            "SELECT * FROM ai_diagnosis_components WHERE diagnosis_id = ?", (diag["id"],)
-        ).fetchall()
-
+        maquina = conn.execute("SELECT * FROM maquinas WHERE id = ?", (oc["maquina_id"],)).fetchone()
     conn.close()
-
-    lang = session.get("lang", "pt")
-    t = TRANSLATIONS.get(lang, TRANSLATIONS["pt"])
+    ctx = contexto_3d(oc)
     return render_template(
         "qrqc3d.html",
         ocorrencia=oc,
         maquina=maquina,
-        componentes=[dict(c) for c in componentes],
-        diagnostico=diagnostico,
-        diag_componentes=[dict(c) for c in diag_componentes],
-        t=t,
-        lang=lang,
+        cfg3d=ctx["cfg3d"],
+        catalogo=ctx["catalogo"],
+        diagnostico=ctx["diagnostico"],
+        destaques=ctx["destaques"],
+        apontado=ctx["apontado"],
     )
+
+
+def solucoes_da_peca(maquina_id, cid: str | None, limite: int = 5) -> dict:
+    """
+    Soluções que já funcionaram nesta peça: ocorrências resolvidas desta máquina e
+    das máquinas com o mesmo modelo CAD (um robô aprende com o outro). Casa pela
+    peça apontada no 3D ou pelo "componente que falhou" registrado na resolução.
+    """
+    vazio = {"componente": cid, "itens": [], "total": 0}
+    if not maquina_id or not cid:
+        return vazio
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    if not cfg:
+        conn.close()
+        return vazio
+    irmas = [maquina_id]
+    if cfg.get("modelo"):
+        for r in conn.execute("SELECT id, modelo_3d FROM maquinas WHERE id != ?", (maquina_id,)):
+            c2 = modelos_3d.ler_config(r["modelo_3d"])
+            if c2 and c2.get("modelo") == cfg["modelo"]:
+                irmas.append(r["id"])
+    marcas = ",".join("?" * len(irmas))
+    linhas = conn.execute(
+        "SELECT o.id, o.maquina_id, o.descricao, o.solucao_aplicada, o.componente_real, "
+        "o.componente_apontado, o.data_resolucao, m.nome AS maquina_nome "
+        f"FROM ocorrencias o JOIN maquinas m ON m.id = o.maquina_id WHERE o.maquina_id IN ({marcas}) "
+        "AND o.solucao_aplicada IS NOT NULL AND o.solucao_aplicada != '' "
+        "ORDER BY o.data_resolucao DESC", irmas
+    ).fetchall()
+    conn.close()
+    nome = next((c["name"] for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), cid)
+    termos = modelos_3d.palavras_do_modelo(cfg).get(cid, []) + [modelos_3d._normalizar_texto(nome)]
+    itens = []
+    for r in linhas:
+        alvo = modelos_3d._normalizar_texto(r["componente_real"] or "")
+        if r["componente_apontado"] == cid or (alvo and any(t in alvo for t in termos)):
+            itens.append({"id": r["id"], "descricao": r["descricao"], "solucao": r["solucao_aplicada"],
+                          "componente": r["componente_real"], "data": data_br(r["data_resolucao"]),
+                          "maquina": r["maquina_nome"], "mesma_maquina": r["maquina_id"] == int(maquina_id)})
+    # Primeiro as desta máquina, depois as das máquinas iguais (cada grupo do mais recente)
+    itens.sort(key=lambda x: not x["mesma_maquina"])
+    return {"componente": nome, "itens": itens[:limite], "total": len(itens)}
+
+
+@app.route("/api/maquinas/<int:mid>/componentes/<cid>/historico")
+@login_required
+def api_componente_historico(mid: int, cid: str):
+    """Soluções que já funcionaram neste componente (esta máquina e as de mesmo modelo)."""
+    return jsonify(solucoes_da_peca(mid, cid))
+
+
+@app.route("/api/maquinas/<int:mid>/componentes/<cid>/sintomas")
+@login_required
+def api_componente_sintomas(mid: int, cid: str):
+    """Sintomas possíveis para a peça (pelo tipo dela) + soluções que já funcionaram."""
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    comp = next((c for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), None)
+    if not comp:
+        return jsonify({"erro": "Peça não encontrada no modelo."}), 404
+    return jsonify({
+        "componente": {"id": cid, "nome": comp["name"], "tipo": comp["type"], "descricao": comp["description"]},
+        "sintomas": diagnostico_local.sintomas_do_tipo(comp["type"]),
+        "historico": solucoes_da_peca(mid, cid),
+    })
 
 
 @app.route("/api/ai/analisar/<int:oc_id>", methods=["POST"])
@@ -2705,6 +3985,9 @@ def api_ai_analisar(oc_id: int):
 
     oc_dict = dict(oc)
     machine_id = oc["maquina_id"]
+    m3d = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (machine_id,)).fetchone()
+    if m3d and modelos_3d.sincronizar_componentes(conn, machine_id, modelos_3d.ler_config(m3d["modelo_3d"])):
+        conn.commit()
     conn.close()
 
     logger.info(f"[qrqc3d] iniciando análise Nexa IA — oc={oc_id} maquina={machine_id}")
@@ -2784,6 +4067,23 @@ def api_ai_diagnostico(oc_id: int):
     result["components"] = [dict(c) for c in comps]
     conn.close()
     return jsonify(result)
+
+
+@app.route("/api/maquinas/<int:mid>/modelo3d")
+@login_required
+def api_modelo3d(mid: int):
+    """Configuração do modelo 3D + catálogo de componentes, consumidos pelo visualizador."""
+    conn = get_db()
+    m = conn.execute("SELECT id, nome, modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    if not m:
+        return jsonify({"erro": "Máquina não encontrada."}), 404
+    cfg = modelos_3d.ler_config(m["modelo_3d"])
+    return jsonify({
+        "maquina": {"id": m["id"], "nome": m["nome"]},
+        "modelo": cfg,
+        "componentes": modelos_3d.componentes_da_config(cfg),
+    })
 
 
 @app.route("/api/machines/<int:mid>/components", methods=["GET"])
@@ -2928,12 +4228,11 @@ def mobile_login():
 @csrf.exempt
 @_mobile_auth
 def mobile_maquinas():
+    # Só máquinas com CAD 3D recebem ocorrências
     conn = get_db()
-    rows = conn.execute(
-        "SELECT id, nome, setor FROM maquinas ORDER BY nome"
-    ).fetchall()
+    lista = maquinas_com_cad(conn)
     conn.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify([{"id": m["id"], "nome": m["nome"], "setor": m["setor"]} for m in lista])
 
 
 @app.route("/api/mobile/ocorrencias")
@@ -2960,6 +4259,10 @@ def mobile_ocorrencias_get():
 @_mobile_auth
 @limiter.limit("20 per minute")
 def mobile_ocorrencias_post():
+    """
+    Cria a ocorrência na hora (o app espera no máximo 15 s) e gera o
+    diagnóstico da IA em segundo plano — ele aparece na web ao abrir a ocorrência.
+    """
     data = request.get_json(silent=True) or {}
     maquina_id = data.get("maquina_id")
     descricao = (data.get("descricao") or "").strip()
@@ -2967,33 +4270,90 @@ def mobile_ocorrencias_post():
         return jsonify({"erro": "maquina_id e descricao são obrigatórios"}), 400
 
     conn = get_db()
+    maq = conn.execute("SELECT setor FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
+    if not maq:
+        conn.close()
+        return jsonify({"erro": "Máquina não encontrada"}), 404
+    if not maquina_tem_cad(maquina_id):
+        conn.close()
+        return jsonify({"erro": "Esta máquina não tem modelo CAD 3D e não pode receber ocorrências."}), 422
+    componente = (data.get("componente_id") or "").strip()[:60] or None
+    componente_nome = _nome_componente(maquina_id, componente)
+    if not componente_nome:
+        componente = None
+    campos = {
+        "maquina_id": maquina_id,
+        "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "setor_area": (data.get("setor_area") or maq["setor"] or "").strip(),
+        "descricao": descricao,
+        "tipo_ocorrencia": data.get("tipo_ocorrencia") or "Manutenção",
+        "nivel_impacto": data.get("nivel_impacto") or "Médio",
+        "problema_recorrente": data.get("problema_recorrente") or "Não informado",
+        "detalhamento_tecnico": (data.get("detalhamento_tecnico") or "").strip(),
+        "componente_apontado": componente,
+        "componente_apontado_nome": componente_nome,
+    }
     cur = conn.execute(
         """INSERT INTO ocorrencias
-           (maquina_id, descricao, tipo_ocorrencia, nivel_impacto,
-            status, data_ocorrencia, data_registro)
-           VALUES (?,?,?,?,'Aberta',date('now'),datetime('now'))""",
-        (
-            maquina_id,
-            descricao,
-            data.get("tipo_ocorrencia", "Falha mecânica"),
-            data.get("nivel_impacto", "Médio"),
-        ),
+           (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
+            tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
+            componente_apontado, ia_status, status, data_registro)
+           VALUES (?,?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
+        (maquina_id, campos["data_ocorrencia"], request.mobile_user["nome"],
+         campos["setor_area"], descricao, campos["tipo_ocorrencia"],
+         campos["nivel_impacto"], campos["problema_recorrente"], campos["detalhamento_tecnico"],
+         componente),
     )
     conn.commit()
     oc_id = cur.lastrowid
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
+
+    def _diagnosticar_em_segundo_plano():
+        try:
+            diag = diagnosticar_ocorrencia(campos)
+            c = get_db()
+            c.execute(
+                "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
+                (diag["resposta_ia"], diag["ia_status"],
+                 json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
+                 diag["diagrama_url"], oc_id),
+            )
+            c.commit()
+            c.close()
+        except Exception:
+            logger.exception(f"[mobile] falha no diagnóstico em segundo plano oc={oc_id}")
+
+    import threading
+    threading.Thread(target=_diagnosticar_em_segundo_plano, daemon=True).start()
     return jsonify({"ok": True, "id": oc_id})
+
+
+@app.route("/api/mobile/logout", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+def mobile_logout():
+    """Revoga o token do aparelho."""
+    token = request.headers.get("Authorization", "")[7:]
+    conn = get_db()
+    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
 
 
 _DOC_SYSTEM = (
     "Você é um auditor especializado em documentos industriais e formulários técnicos. "
-    "Analisa documentos fotografados e identifica problemas com rigor profissional. "
+    "Analisa documentos fotografados, extrai os dados principais e identifica problemas com rigor profissional. "
     "Retorna APENAS JSON válido, sem texto antes ou depois."
 )
 
 _DOC_SCHEMA = (
-    '{"problemas": [{'
+    '{"extraido": {"numero": "número do documento ou null", "data_documento": "AAAA-MM-DD ou null", '
+    '"equipamento": "equipamento/máquina/local como escrito, ou null", '
+    '"pessoas": [{"nome": "nome como escrito", "matricula": "matrícula como escrita ou null", '
+    '"papel": "executante|emitente|responsavel|colaborador"}]}, '
+    '"problemas": [{'
     '"tipo": "erro_calculo|campo_incorreto|dado_faltante|inconsistencia|erro_ortografico|outro", '
     '"campo": "nome do campo ou região do documento", '
     '"descricao": "descrição objetiva do problema encontrado", '
@@ -3002,49 +4362,45 @@ _DOC_SCHEMA = (
     '}], "score": 0-100, "resumo": "resumo em 1 frase"}'
 )
 
+DOC_FOLDER = os.path.join("static", "uploads", "documentos")
+os.makedirs(DOC_FOLDER, exist_ok=True)
 
-@app.route("/api/mobile/inspecao/documento", methods=["POST"])
-@csrf.exempt
-@_mobile_auth
-@limiter.limit("10 per minute")
-def mobile_inspecao_documento():
+
+def _tipo_documento(conn, ref) -> dict | None:
+    """Tipo de documento pelo id ou pelo nome (o app manda o nome)."""
+    if not ref:
+        return None
+    if str(ref).isdigit():
+        r = conn.execute("SELECT * FROM tipos_documento WHERE id = ?", (int(ref),)).fetchone()
+    else:
+        r = conn.execute("SELECT * FROM tipos_documento WHERE LOWER(nome) = LOWER(?)", (str(ref).strip(),)).fetchone()
+    return empresa.tipo_para_dict(r)
+
+
+def _ler_documento_com_ia(img, tipo: dict | None) -> tuple[dict | None, str | None]:
+    """Envia só a imagem e as regras do tipo para a IA (o cadastro da empresa não sai daqui)."""
     openai_client = nexa_ia._get_client()
     if not openai_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
-
-    arquivo = request.files.get("foto")
-    if not arquivo:
-        return jsonify({"erro": "Nenhuma foto enviada."}), 400
-
-    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:100]
-
-    try:
-        img = Image.open(arquivo.stream)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-    except Exception:
-        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
-
+        return None, "A leitura por IA está indisponível no momento."
     import base64
     from io import BytesIO
     buf = BytesIO()
     img.save(buf, format="JPEG", quality=90)
     b64 = base64.b64encode(buf.getvalue()).decode()
-
-    ctx = f"Tipo de documento: {tipo_doc}\n" if tipo_doc else ""
+    ctx = ""
+    if tipo:
+        ctx = f"Tipo de documento: {tipo['nome']}\n"
+        if tipo["campos"]:
+            ctx += ("Campos obrigatórios deste tipo (reporte como dado_faltante os que estiverem em branco "
+                    "ou ilegíveis):\n" + "\n".join(f"- {c}" for c in tipo["campos"]) + "\n")
     user_prompt = (
         f"{ctx}"
-        "Analise este documento e identifique TODOS os problemas:\n"
-        "- Erros de cálculo (somas, médias, valores incorretos)\n"
-        "- Campos preenchidos incorretamente ou com dados inconsistentes\n"
-        "- Dados obrigatórios faltantes\n"
-        "- Inconsistências entre campos relacionados\n"
-        "- Erros ortográficos em campos técnicos importantes\n\n"
-        "Se o documento estiver correto, retorne problemas: [].\n"
-        "Seja rigoroso — só reporte problemas realmente visíveis.\n\n"
+        "1) Extraia o número, a data, o equipamento/local e TODAS as pessoas citadas (nome e matrícula, como escritos).\n"
+        "2) Identifique TODOS os problemas: erros de cálculo, campos incorretos ou inconsistentes, "
+        "dados obrigatórios faltantes (assinaturas, datas, responsáveis), erros em termos técnicos.\n"
+        "Se o documento estiver correto, retorne problemas: []. Só reporte o que for visível.\n\n"
         f"Retorne APENAS JSON neste formato:\n{_DOC_SCHEMA}"
     )
-
     try:
         resp = openai_client.chat.completions.create(
             model="gpt-4o",
@@ -3052,34 +4408,178 @@ def mobile_inspecao_documento():
                 {"role": "system", "content": _DOC_SYSTEM},
                 {"role": "user", "content": [
                     {"type": "text", "text": user_prompt},
-                    {"type": "image_url", "image_url": {
-                        "url": f"data:image/jpeg;base64,{b64}",
-                        "detail": "high",
-                    }},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}", "detail": "high"}},
                 ]},
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=1500,
+            max_tokens=1800,
         )
-        content = (resp.choices[0].message.content or "").strip()
-        result = json.loads(content)
+        return json.loads((resp.choices[0].message.content or "").strip()), None
     except Exception as e:
         err = str(e)
         if "credit_balance_exhausted" in err or "insufficient_quota" in err:
-            return jsonify({"erro": "Créditos OpenAI esgotados."}), 200
-        logger.exception("[mobile/doc] erro OpenAI")
-        return jsonify({"erro": f"Falha na análise: {err[:200]}"}), 502
+            logger.error("[documento] créditos OpenAI esgotados")
+        else:
+            logger.exception("[documento] erro OpenAI")
+        return None, "Não foi possível ler o documento com a IA agora."
 
-    result.setdefault("modelo", "gpt-4o")
-    result.setdefault("score", 100 if not result.get("problemas") else max(
-        0, 100 - len(result["problemas"]) * 15))
-    result.setdefault("resumo", "Análise concluída.")
-    logger.info(
-        f"[mobile/doc] user={request.mobile_user['user_id']} "
-        f"problemas={len(result.get('problemas', []))}"
-    )
-    return jsonify(result)
+
+def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: list[str] | None = None) -> tuple[dict, int]:
+    """
+    Lê a foto do documento com a IA e confere o que foi lido contra o cadastro da
+    empresa (pessoas e habilitações, máquinas). Com a IA fora do ar, a conferência
+    roda com os dados informados à mão (matrículas e máquina). Guarda no histórico.
+    Retorna (json, status_http). Usado pela web e pelo app.
+    """
+    if not arquivo or not arquivo.filename:
+        return {"erro": "Nenhuma foto enviada."}, 400
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else "jpg"
+    if ext not in _SENSOR_EXT:
+        return {"erro": "Formato inválido. Envie PNG ou JPG."}, 400
+    try:
+        img = Image.open(arquivo.stream)
+        img.load()
+        if img.mode in ("RGBA", "P", "LA"):
+            img = img.convert("RGB")
+    except Exception:
+        return {"erro": "Não foi possível processar a imagem."}, 400
+
+    conn = get_db()
+    tipo = _tipo_documento(conn, tipo_ref)
+    conn.close()
+    matriculas = [re.sub(r"\D", "", m) for m in (matriculas or []) if re.sub(r"\D", "", m)]
+
+    lido, erro_ia = _ler_documento_com_ia(img, tipo)
+    if lido is None and not matriculas and not maquina_id:
+        return {"erro": f"{erro_ia} Informe as matrículas e a máquina em “Conferir sem IA” para seguir.",
+                "sem_ia": True}, 503
+
+    nome_arquivo = f"{secrets.token_hex(8)}.jpg"
+    caminho = os.path.join(DOC_FOLDER, nome_arquivo)
+    img.save(caminho, format="JPEG", quality=88)
+    imagem_url = f"/{caminho.replace(os.sep, '/')}"
+
+    lido = lido or {}
+    extraido = lido.get("extraido") if isinstance(lido.get("extraido"), dict) else {}
+    pessoas_lidas = [p for p in (extraido.get("pessoas") or []) if isinstance(p, dict)]
+    ja = {re.sub(r"\D", "", str(p.get("matricula") or "")) for p in pessoas_lidas}
+    pessoas_lidas += [{"matricula": m, "papel": "informado"} for m in matriculas if m not in ja]
+    extraido["pessoas"] = pessoas_lidas
+    problemas = [p for p in (lido.get("problemas") or []) if isinstance(p, dict)]
+
+    conn = get_db()
+    conf = empresa.conferir(conn, tipo, extraido, maquina_id_informada=maquina_id)
+    status = empresa.status_final(conf, problemas)
+    score = lido.get("score")
+    if not isinstance(score, (int, float)):
+        score = 100 if not problemas else max(0, 100 - len(problemas) * 15)
+    if status == "bloqueado":
+        score = min(score, 40)
+    resultado = {
+        "status": status,
+        "tipo_documento": tipo["nome"] if tipo else (str(tipo_ref) if tipo_ref else "Documento"),
+        "tipo": tipo,
+        "extraido": extraido,
+        "problemas": problemas,
+        "conferencia": conf,
+        "score": int(score),
+        "resumo": lido.get("resumo") or ("Conferência feita com os dados informados (sem leitura por IA)."
+                                         if erro_ia else "Análise concluída."),
+        "leitura_ia": erro_ia is None,
+        "aviso_ia": erro_ia,
+        "modelo": "gpt-4o" if erro_ia is None else "manual",
+    }
+    try:
+        cur = conn.execute(
+            """INSERT INTO inspecoes_documento
+               (imagem_url, tipo_documento, tipo_documento_id, maquina_id, resultado_json, score, num_problemas,
+                modelo_ia, status, criado_por_id) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (imagem_url, resultado["tipo_documento"], tipo["id"] if tipo else None,
+             (conf["maquina"] or {}).get("id"), json.dumps(resultado, ensure_ascii=False), resultado["score"],
+             len(problemas) + sum(1 for c in conf["conferencias"] if c["severidade"] in ("alto", "medio")),
+             resultado["modelo"], status, user_id),
+        )
+        resultado["id"] = cur.lastrowid
+        conn.commit()
+    except Exception:
+        logger.exception("[documento] erro ao salvar a inspeção")
+    finally:
+        conn.close()
+    resultado["imagem_url"] = imagem_url
+    logger.info(f"[documento] user={user_id} status={status} problemas={len(problemas)} "
+                f"conferencias={len(conf['conferencias'])}")
+    return resultado, 200
+
+
+@app.route("/api/mobile/inspecao/documento", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+@limiter.limit("10 per minute")
+def mobile_inspecao_documento():
+    tipo_doc = (request.form.get("tipo_documento") or "").strip()[:120]
+    dados, status = analisar_documento(request.files.get("foto"), tipo_doc, request.mobile_user["user_id"])
+    return jsonify(dados), status
+
+
+@app.route("/inspecao-documento")
+@login_required
+def inspecao_documento():
+    """Inspeção de documento: leitura por IA + conferência com o cadastro da empresa."""
+    conn = get_db()
+    maquinas_lista = conn.execute("SELECT id, nome FROM maquinas ORDER BY nome").fetchall()
+    tipos = [empresa.tipo_para_dict(r) for r in
+             conn.execute("SELECT * FROM tipos_documento WHERE ativo = 1 ORDER BY setor, nome")]
+    recentes = conn.execute("""
+        SELECT d.id, d.imagem_url, d.tipo_documento, d.score, d.num_problemas, d.status, d.criado_em,
+               m.nome AS maquina_nome
+        FROM inspecoes_documento d LEFT JOIN maquinas m ON m.id = d.maquina_id
+        ORDER BY d.criado_em DESC, d.id DESC LIMIT 24
+    """).fetchall()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(status = 'bloqueado'), 0) AS bloqueados, "
+        "COALESCE(SUM(status = 'pendencias'), 0) AS pendencias, COALESCE(SUM(status = 'aprovado'), 0) AS aprovados "
+        "FROM inspecoes_documento").fetchone()
+    conn.close()
+    return render_template("inspecao_documento.html", maquinas=maquinas_lista, recentes=recentes,
+                           tipos=tipos, stats=dict(total), ia_online=nexa_ia._get_client() is not None)
+
+
+@app.route("/api/documento/analisar", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def api_documento_analisar():
+    try:
+        maquina_id = int(request.form.get("maquina_id") or 0) or None
+    except ValueError:
+        maquina_id = None
+    matriculas = re.split(r"[,;\s]+", request.form.get("matriculas") or "")
+    dados, status = analisar_documento(request.files.get("foto"), request.form.get("tipo_id"),
+                                       current_user.id, maquina_id=maquina_id, matriculas=matriculas)
+    if status == 200:
+        registrar_auditoria("documento_inspecionado", "inspecao_documento", dados.get("id"),
+                            f"{dados['tipo_documento']} · {dados['status']}")
+    return jsonify(dados), status
+
+
+@app.route("/api/documento/<int:doc_id>")
+@login_required
+def api_documento_get(doc_id: int):
+    conn = get_db()
+    r = conn.execute(
+        "SELECT d.*, m.nome AS maquina_nome FROM inspecoes_documento d "
+        "LEFT JOIN maquinas m ON m.id = d.maquina_id WHERE d.id = ?", (doc_id,)).fetchone()
+    conn.close()
+    if not r:
+        return jsonify({"erro": "Inspeção não encontrada."}), 404
+    try:
+        dados = json.loads(r["resultado_json"] or "{}")
+    except ValueError:
+        dados = {}
+    dados.update({"id": r["id"], "imagem_url": r["imagem_url"], "tipo_documento": r["tipo_documento"],
+                  "maquina_nome": r["maquina_nome"], "criado_em": data_br(r["criado_em"])})
+    registrar_auditoria("documento_consultado", "inspecao_documento", doc_id)
+    return jsonify(dados)
 
 
 @app.route("/api/mobile/sensor/analisar", methods=["POST"])
@@ -3089,7 +4589,7 @@ def mobile_inspecao_documento():
 def mobile_sensor_analisar():
     _sensor_client = nexa_ia._get_client()
     if not _sensor_client:
-        return jsonify({"erro": "IA offline — configure OPENAI_API_KEY no .env."}), 503
+        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
@@ -3131,18 +4631,19 @@ def mobile_sensor_analisar():
         return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
 
     anomalias = resultado["anomalias"]
+    componente_3d = sensor_componente_3d(maquina_id, anomalias)
     user_id = request.mobile_user["user_id"]
     try:
         conn = get_db()
         cursor = conn.execute(
             """INSERT INTO percepcoes
                (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
-                num_anomalias, severidade_max, score_saude, criado_por_id)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                num_anomalias, severidade_max, score_saude, componente_3d, criado_por_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 maquina_id, imagem_url, contexto, resultado["modelo"],
                 json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], user_id,
+                resultado["severidade_max"], resultado["score"], componente_3d, user_id,
             ),
         )
         percepcao_id = cursor.lastrowid
@@ -3150,11 +4651,13 @@ def mobile_sensor_analisar():
         conn.close()
     except Exception as e:
         logger.exception("[mobile/sensor] erro ao salvar percepção")
-        return jsonify({"erro": f"Erro ao salvar: {e}"}), 500
+        return jsonify({"erro": "Não foi possível salvar. Tente novamente."}), 500
 
     return jsonify({
         "id": percepcao_id,
         "imagem_url": imagem_url,
+        "maquina_id": maquina_id,
+        "componente_3d": _componente_json(maquina_id, componente_3d),
         "anomalias": anomalias,
         "score": resultado["score"],
         "severidade_max": resultado["severidade_max"],

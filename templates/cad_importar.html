@@ -1,0 +1,100 @@
+{% extends 'menu.html' %}
+{% block title %}Importar CAD 3D — Nexar QRQC{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/empresa.css" />
+<style>
+  .cad-drop { border:2px dashed var(--border); border-radius:var(--radius); padding:26px 16px; text-align:center; background:var(--bg-input);
+    color:var(--text-muted); cursor:pointer; display:block; }
+  .cad-drop:hover { border-color:var(--primary); color:var(--primary); }
+  .cad-drop i { font-size:32px; display:block; margin-bottom:8px; }
+  .cad-drop input { display:none; }
+  .cad-passos { font-size:12.5px; color:var(--text-muted); line-height:1.7; margin:12px 0 0; padding-left:18px; }
+  .cad-st { font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .cad-st-pronto { background:#D1FAE5; color:#065F46; } .cad-st-erro { background:#FEE2E2; color:#991B1B; }
+  .cad-st-mapear { background:#E0F2FE; color:#075985; } .cad-st-conv { background:#FEF3C7; color:#92400E; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-cube"></i> Importar CAD 3D</div>
+  <div class="topbar-actions"><a href="{{ url_for('maquinas') }}" class="btn btn-ghost btn-sm"><i class="fas fa-cogs"></i> Máquinas</a></div>
+</div>
+
+<div class="page-body">
+  <div class="em-grid">
+    <form class="card em-form" method="POST" action="{{ url_for('cad_importar') }}" enctype="multipart/form-data" id="formCad">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="card-header"><span class="card-title"><i class="fas fa-file-arrow-up"></i> Novo modelo</span></div>
+      <div class="card-body">
+        <label class="form-label" for="cadNome">Nome do modelo</label>
+        <input class="form-control" id="cadNome" name="nome" maxlength="80" placeholder="Ex.: Gerador diesel 500 kVA" />
+        <label class="cad-drop" id="cadDrop">
+          <i class="fas fa-cubes"></i>
+          <b id="cadArquivoNome">Escolher arquivo STEP</b>
+          <div style="font-size:11.5px; margin-top:4px;">.step, .stp ou .zip com o STEP · até {{ max_mb }} MB</div>
+          <input type="file" name="arquivo" id="cadArquivo" accept=".step,.stp,.zip" required />
+        </label>
+        <div class="em-acoes"><button class="btn btn-primary" id="cadEnviar"><i class="fas fa-upload"></i> Enviar e converter</button></div>
+        <ol class="cad-passos">
+          <li>O sistema converte o STEP em modelo 3D leve (pode levar alguns minutos em CAD grande).</li>
+          <li>Sugere os componentes pelos nomes das peças; parafusos e porcas acompanham a peça mais próxima.</li>
+          <li>Você confere na prévia 3D, ajusta nomes e tipos e salva.</li>
+          <li>O modelo aparece no cadastro de máquinas, pronto para receber ocorrências.</li>
+        </ol>
+      </div>
+    </form>
+
+    <div style="display:flex; flex-direction:column; gap:16px; min-width:0;">
+      <div class="card">
+        <div class="card-header"><span class="card-title"><i class="fas fa-clock-rotate-left"></i> Importações</span></div>
+        <div class="em-tabela-wrap">
+          <table class="em-tabela">
+            <thead><tr><th>Modelo</th><th>Situação</th><th>Enviado</th><th></th></tr></thead>
+            <tbody>
+            {% for j in jobs %}
+              {% set cls = {'pronto': 'pronto', 'erro': 'erro', 'mapear': 'mapear'}.get(j.status, 'conv') %}
+              <tr>
+                <td><b>{{ j.nome }}</b><small>{{ j.arquivo }}</small></td>
+                <td><span class="cad-st cad-st-{{ cls }}">{{ {'pronto': 'Pronto', 'erro': 'Erro', 'mapear': 'Conferir componentes',
+                      'na_fila': 'Na fila', 'convertendo': 'Convertendo', 'otimizando': 'Otimizando'}.get(j.status, j.status) }}</span>
+                    <small>{{ j.mensagem or '' }}</small></td>
+                <td>{{ j.criado_em | data_br }}<small>{{ j.autor or '' }}</small></td>
+                <td><a class="btn btn-outline btn-sm" href="{{ url_for('cad_job', job_id=j.id) }}">Abrir</a></td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="em-vazio">Nenhuma importação ainda.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title"><i class="fas fa-cubes-stacked"></i> Modelos disponíveis</span></div>
+        <div class="card-body em-tags" style="margin:0;">
+          {% for slug, nome in modelos %}<span class="em-tag em-q-valida"><i class="fas fa-cube"></i> {{ nome }}</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const arq = document.getElementById('cadArquivo');
+  arq.addEventListener('change', () => {
+    const f = arq.files[0];
+    if (!f) return;
+    document.getElementById('cadArquivoNome').textContent = `${f.name} (${(f.size / 1e6).toFixed(1)} MB)`;
+    const nome = document.getElementById('cadNome');
+    if (!nome.value) nome.value = f.name.replace(/\.(step|stp|zip)$/i, '').replace(/[_-]+/g, ' ');
+  });
+  document.getElementById('formCad').addEventListener('submit', () => {
+    const b = document.getElementById('cadEnviar');
+    b.disabled = true;
+    b.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Enviando…';
+  });
+</script>
+{% endblock %}

@@ -69,7 +69,7 @@
   <!-- Tabela -->
   <div class="card">
     <div class="table-wrapper">
-      <table class="table" id="tabelaHistorico">
+      <table class="table table-cards" id="tabelaHistorico">
         <thead>
           <tr>
             <th>#</th>
@@ -90,10 +90,10 @@
               data-impacto="{{ o.nivel_impacto }}"
               data-status="{{ o.status or 'Aberta' }}"
               data-data="{{ o.data_ocorrencia[:10] if o.data_ocorrencia else '' }}">
-            <td style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
-            <td><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
-            <td style="font-size:13px;">{{ o.nome_operador }}</td>
-            <td>
+            <td class="c-id" style="color:var(--text-muted); font-size:12px;">{{ o.id }}</td>
+            <td class="c-maq"><span style="font-weight:600; font-size:13px;">{{ o.maquina_nome or '—' }}</span></td>
+            <td class="c-op" style="font-size:13px;">{{ o.nome_operador }}</td>
+            <td class="c-tipo">
               {% if o.tipo_ocorrencia == 'Qualidade' %}
                 <span class="badge badge-primary">{{ o.tipo_ocorrencia }}</span>
               {% elif o.tipo_ocorrencia == 'Segurança' %}
@@ -104,24 +104,26 @@
                 <span class="badge badge-info">{{ o.tipo_ocorrencia }}</span>
               {% endif %}
             </td>
-            <td>
+            <td class="c-imp">
               {% if o.nivel_impacto == 'Alto' %}
-                <span class="badge badge-danger">🔴 Alto</span>
+                <span class="badge badge-danger">Alto</span>
               {% elif o.nivel_impacto == 'Médio' %}
-                <span class="badge badge-warning">🟡 Médio</span>
+                <span class="badge badge-warning">Médio</span>
+              {% elif o.nivel_impacto %}
+                <span class="badge badge-success">Baixo</span>
               {% else %}
-                <span class="badge badge-success">🟢 Baixo</span>
+                <span style="color:var(--text-light);">—</span>
               {% endif %}
             </td>
-            <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;">
+            <td class="c-desc" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;">
               {{ o.descricao }}
             </td>
-            <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+            <td class="c-data" style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
               {% if o.data_ocorrencia %}
                 {{ o.data_ocorrencia[:10].split('-')|reverse|join('/') }}
               {% endif %}
             </td>
-            <td class="status-cell">
+            <td class="c-status status-cell">
               {% if o.status in ('Resolvida', 'Fechada') %}
                 <span class="badge badge-success">{{ o.status }}</span>
               {% elif o.status == 'Em andamento' %}
@@ -130,7 +132,7 @@
                 <span class="badge badge-info">{{ o.status or 'Aberta' }}</span>
               {% endif %}
             </td>
-            <td>
+            <td class="c-acao">
               <button class="btn btn-ghost btn-icon btn-abrir-modal"
                       data-id="{{ o.id }}"
                       data-maquina="{{ (o.maquina_nome or '—') | e }}"
@@ -143,6 +145,10 @@
                       data-resposta="{{ (o.resposta_ia or '') | e }}"
                       data-diagrama="{{ (o.diagrama_url or '') | e }}"
                       data-anotacoes="{{ (o.anotacoes_ia or '') | e }}"
+                      data-solucao="{{ (o.solucao_aplicada or '') | e }}"
+                      data-componente="{{ (o.componente_real or '') | e }}"
+                      data-resolvido-por="{{ (o.resolvido_por_nome or '') | e }}"
+                      data-data-resolucao="{{ (o.data_resolucao or '') | e }}"
                       title="{{ t.ver_detalhes }}">
                 <i class="fas fa-eye" style="color:var(--primary);"></i>
               </button>
@@ -156,6 +162,14 @@
             </td>
           </tr>
           {% endfor %}
+          {% if ocorrencias %}
+          <tr id="linhaSemResultado" style="display:none;">
+            <td colspan="9" style="text-align:center; padding:40px; color:var(--text-muted);">
+              <i class="fas fa-filter-circle-xmark" style="font-size:28px; opacity:.35; display:block; margin-bottom:10px;"></i>
+              Nenhuma ocorrência encontrada para os filtros selecionados.
+            </td>
+          </tr>
+          {% endif %}
         </tbody>
       </table>
     </div>
@@ -225,6 +239,9 @@
                  style="max-width:100%; max-height:280px; object-fit:contain; display:block; border-radius:var(--radius-sm);" />
             <div id="modalAnnotationLayer" style="position:absolute; inset:8px; pointer-events:none;"></div>
           </div>
+          <a id="modalDiagPdf" href="#" target="_blank" class="btn btn-outline btn-sm" style="display:none;">
+            <i class="fas fa-file-pdf"></i> Abrir documentação técnica (PDF)
+          </a>
           <div id="modalAnotacoesList" style="display:none; flex-direction:column; gap:4px;"></div>
         </div>
 
@@ -236,6 +253,17 @@
           <i class="fas fa-robot"></i> {{ t.diag_ia }}
         </div>
         <div id="modalResposta" class="modal-diagnosis"></div>
+
+        <div id="modalResolucaoWrap" style="display:none;">
+          <div class="modal-section-label">
+            <i class="fas fa-circle-check" style="color:var(--success);"></i> Resolução
+          </div>
+          <div class="modal-text-block" style="border-left:3px solid var(--success);">
+            <div id="modalSolucao" style="white-space:pre-wrap;"></div>
+            <div id="modalComponenteReal" style="margin-top:8px; font-size:12.5px; color:var(--text-muted);"></div>
+            <div id="modalResolvidoPor" style="margin-top:4px; font-size:12px; color:var(--text-muted);"></div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -243,14 +271,15 @@
     <!-- Rodapé -->
     <div class="modal-ftr">
       <button onclick="closeModal()" class="btn btn-outline btn-sm">{{ t.fechar }}</button>
-      <a id="modal3dBtn" href="#"
-         class="btn btn-sm" style="background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;border:none;">
-        <i class="fas fa-cube"></i> QRQC 3D AI
-      </a>
-      <a id="modalPdfBtn" href="#" target="_blank"
-         class="btn btn-outline btn-sm" style="color:#EF4444; border-color:#FECACA;">
+      <a id="modalPdfBtn" href="#" target="_blank" class="btn btn-outline btn-sm">
         <i class="fas fa-file-pdf"></i> Baixar PDF
       </a>
+      <a id="modalAbrirBtn" href="#" class="btn btn-primary btn-sm">
+        <i class="fas fa-up-right-from-square"></i> Abrir ocorrência
+      </a>
+      <button id="modalIniciarBtn" class="btn btn-outline btn-sm" onclick="iniciarOcorrencia()" style="display:none;">
+        <i class="fas fa-play"></i> Iniciar atendimento
+      </button>
       <button id="modalResolverBtn" class="btn btn-sm" onclick="resolverOcorrencia()"
               style="background:var(--success); color:#fff; border:none; display:none;">
         <i class="fas fa-check-circle"></i> {{ t.marcar_resolvida }}
@@ -375,6 +404,13 @@
 
   /* Mobile */
   @media (max-width: 640px) {
+    /* Modal ocupa a tela inteira no celular */
+    #modalOverlay { padding: 0 !important; }
+    .modal-box { max-height: 100dvh; height: 100dvh; border-radius: 0; }
+    .modal-hdr { padding: 14px 16px; }
+    .modal-col { padding: 16px; }
+    .modal-ftr { flex-wrap: wrap; padding: 10px 12px; }
+    .modal-ftr .btn { flex: 1 1 45%; justify-content: center; min-height: 44px; }
     .modal-body-2col { grid-template-columns: 1fr; overflow-y: auto; }
     .modal-col-left { border-right: none; border-bottom: 1px solid var(--border); overflow-y: visible; }
     .modal-col-right { overflow-y: visible; }
@@ -384,6 +420,8 @@
 {% endblock %}
 
 {% block scripts %}
+{% include 'partials/modal_resolver.html' %}
+<script src="/static/js/ocorrencia_acoes.js"></script>
 <script>
   const I18N = {
     marcar_resolvida: "{{ t.marcar_resolvida }}",
@@ -393,9 +431,24 @@
 
   const POR_PAGINA = 10;
   let paginaAtual = 1;
-  let linhasFiltradas = [];
+  // Escapa texto antes de inserir via innerHTML (evita XSS com dados do usuário/IA)
+  function esc(v) {
+    return String(v ?? '').replace(/[&<>"']/g, c => (
+      {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // 'YYYY-MM-DD HH:MM' ou 'YYYY-MM-DDTHH:MM' → 'DD/MM/YYYY HH:MM'
+  function fmtDataHora(raw) {
+    if (!raw) return '—';
+    const [d, h] = String(raw).replace('T', ' ').split(' ');
+    const partes = (d || '').split('-');
+    if (partes.length !== 3) return raw;
+    return partes.reverse().join('/') + (h ? ' ' + h.slice(0, 5) : '');
+  }
+
 
   const todasLinhas = Array.from(document.querySelectorAll('#tableBody tr[data-id]'));
+  let linhasFiltradas = todasLinhas.slice();
 
   // ── Filtro ────────────────────────────────────────────────────────────────
   function filtrar() {
@@ -420,7 +473,7 @@
 
   // ── Paginação ─────────────────────────────────────────────────────────────
   function renderPagina() {
-    const lista = linhasFiltradas.length ? linhasFiltradas : todasLinhas;
+    const lista = linhasFiltradas;
     const total = lista.length;
     const totalPags = Math.max(1, Math.ceil(total / POR_PAGINA));
     paginaAtual = Math.min(paginaAtual, totalPags);
@@ -430,15 +483,15 @@
     todasLinhas.forEach(r => r.style.display = 'none');
     lista.slice(inicio, fim).forEach(r => r.style.display = '');
 
-    const vazia = document.getElementById('linhaVazia');
-    if (vazia) vazia.style.display = total === 0 ? '' : 'none';
+    const semResultado = document.getElementById('linhaSemResultado');
+    if (semResultado) semResultado.style.display = total === 0 ? '' : 'none';
 
     document.getElementById('contadorRegistros').textContent = total + ' registro(s)';
 
     const de  = total === 0 ? 0 : inicio + 1;
     const ate = Math.min(fim, total);
     document.getElementById('paginacaoInfo').textContent =
-      total === 0 ? 'Nenhum resultado' : `${de}–${ate} de ${total}`;
+      total === 0 ? '' : `${de}–${ate} de ${total}`;
 
     const wrap = document.getElementById('paginacaoBtns');
     wrap.innerHTML = '';
@@ -479,7 +532,7 @@
       const ocId = this.dataset.id;
       document.getElementById('modalId').textContent = ocId;
       document.getElementById('modalPdfBtn').href = `/ocorrencia/${ocId}/pdf`;
-      document.getElementById('modal3dBtn').href = `/qrqc3d/${ocId}`;
+      document.getElementById('modalAbrirBtn').href = `/ocorrencia/${ocId}`;
 
       // Accent bar por nível de impacto
       const accentCor = impacto === 'Alto'  ? 'var(--danger)'
@@ -492,33 +545,37 @@
       const corSt = (st === 'Resolvida' || st === 'Fechada') ? 'badge-success'
                   : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
       document.getElementById('modalStatusBadge').innerHTML =
-        `<span class="badge ${corSt}">${st}</span>`;
+        `<span class="badge ${corSt}">${esc(st)}</span>`;
 
       // Chips de identificação
-      const dataFmt = dataRaw
-        ? dataRaw.replace(/T.+/, '').split('-').reverse().join('/')
-        : '—';
+      const dataFmt = fmtDataHora(dataRaw);
       const tipoCls = {
         Qualidade: 'badge-primary', Segurança: 'badge-danger',
         Produção: 'badge-warning',  Manutenção: 'badge-info'
       }[tipo] || 'badge-info';
       const impCls  = impacto === 'Alto' ? 'badge-danger'
                     : impacto === 'Médio' ? 'badge-warning' : 'badge-success';
-      const impIcon = impacto === 'Alto' ? '🔴' : impacto === 'Médio' ? '🟡' : '🟢';
-
       document.getElementById('modalChipsRow').innerHTML = [
-        `<span class="modal-chip"><i class="fas fa-cogs"></i> ${maquina}</span>`,
-        `<span class="modal-chip"><i class="fas fa-user"></i> ${operador}</span>`,
-        `<span class="modal-chip"><i class="fas fa-calendar-alt"></i> ${dataFmt}</span>`,
-        `<span class="badge ${tipoCls}" style="font-size:12px; padding:4px 10px;">${tipo}</span>`,
-        `<span class="badge ${impCls}"  style="font-size:12px; padding:4px 10px;">${impIcon} ${impacto}</span>`,
+        `<span class="modal-chip"><i class="fas fa-cogs"></i> ${esc(maquina)}</span>`,
+        `<span class="modal-chip"><i class="fas fa-user"></i> ${esc(operador)}</span>`,
+        `<span class="modal-chip"><i class="fas fa-calendar-alt"></i> ${esc(dataFmt)}</span>`,
+        tipo ? `<span class="badge ${tipoCls}" style="font-size:12px; padding:4px 10px;">${esc(tipo)}</span>` : '',
+        impacto ? `<span class="badge ${impCls}"  style="font-size:12px; padding:4px 10px;">Impacto ${esc(impacto.toLowerCase())}</span>` : '',
       ].join('');
 
       // Botão resolver
-      const resolverBtn = document.getElementById('modalResolverBtn');
-      resolverBtn.style.display = (st === 'Aberta' || st === 'Em andamento') ? '' : 'none';
-      resolverBtn.disabled = false;
-      resolverBtn.innerHTML = `<i class="fas fa-check-circle"></i> ${I18N.marcar_resolvida}`;
+      botaoAtual = this;
+      atualizarAcoesModal(st);
+
+      // Resolução (quando já resolvida)
+      const solucao = this.dataset.solucao || '';
+      document.getElementById('modalResolucaoWrap').style.display = solucao ? '' : 'none';
+      document.getElementById('modalSolucao').textContent = solucao;
+      document.getElementById('modalComponenteReal').textContent =
+        this.dataset.componente ? 'Componente: ' + this.dataset.componente : '';
+      const por = this.dataset.resolvidoPor, quando = this.dataset.dataResolucao;
+      document.getElementById('modalResolvidoPor').textContent =
+        por ? `Resolvida por ${por}${quando ? ' em ' + fmtDataHora(quando) : ''}` : '';
 
       // Descrição
       document.getElementById('modalDescricao').textContent = this.dataset.descricao || '—';
@@ -542,8 +599,13 @@
       layer.innerHTML = ''; listWrap.innerHTML = '';
       listWrap.style.display = 'none'; cntWrap.style.display = 'none';
 
+      const ehPdf = /\.pdf$/i.test(diagrama || '');
+      document.getElementById('modalDiagWrap').style.display = ehPdf ? 'none' : 'inline-block';
+      const pdfLink = document.getElementById('modalDiagPdf');
+      pdfLink.style.display = ehPdf ? 'inline-flex' : 'none';
+      if (ehPdf) pdfLink.href = diagrama;
       if (diagrama) {
-        document.getElementById('modalDiagrama').src = diagrama;
+        if (!ehPdf) document.getElementById('modalDiagrama').src = diagrama;
         wrap.style.display = '';
         try {
           const anots = JSON.parse(this.dataset.anotacoes || '[]');
@@ -555,9 +617,10 @@
               const cor = a.tipo === 'critico' ? '#EF4444'
                         : a.tipo === 'atencao' ? '#F59E0B' : '#3B82F6';
               const marker = document.createElement('div');
+              const ax = Number(a.x) || 0, ay = Number(a.y) || 0, ar = Number(a.raio) || 4;
               marker.style.cssText = `
-                position:absolute; left:${a.x}%; top:${a.y}%;
-                width:${a.raio*2}%; aspect-ratio:1/1;
+                position:absolute; left:${ax}%; top:${ay}%;
+                width:${ar*2}%; aspect-ratio:1/1;
                 transform:translate(-50%,-50%);
                 border:3px solid ${cor}; border-radius:50%;
                 background:${cor}33;
@@ -581,8 +644,8 @@
                   color:#fff;display:flex;align-items:center;justify-content:center;
                   font-size:10px;font-weight:700;flex-shrink:0;">${i+1}</div>
                 <div style="flex:1;">
-                  <strong style="color:${cor};font-size:12px;">${a.titulo}</strong>
-                  <div style="color:var(--text-muted);margin-top:2px;line-height:1.4;">${a.descricao}</div>
+                  <strong style="color:${cor};font-size:12px;">${esc(a.titulo)}</strong>
+                  <div style="color:var(--text-muted);margin-top:2px;line-height:1.4;">${esc(a.descricao)}</div>
                 </div>`;
               listWrap.appendChild(item);
             });
@@ -597,41 +660,55 @@
   });
 
   // ── Resolver ocorrência ───────────────────────────────────────────────────
-  async function resolverOcorrencia() {
-    const id  = document.getElementById('modalId').textContent;
-    const btn = document.getElementById('modalResolverBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Salvando...';
+  let botaoAtual = null;   // botão "ver detalhes" da linha aberta no modal
 
+  function atualizarAcoesModal(st) {
+    const aberta = st === 'Aberta' || st === 'Em andamento';
+    document.getElementById('modalResolverBtn').style.display = aberta ? '' : 'none';
+    document.getElementById('modalIniciarBtn').style.display = st === 'Aberta' ? '' : 'none';
+    const cor = (st === 'Resolvida' || st === 'Fechada') ? 'badge-success'
+              : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
+    document.getElementById('modalStatusBadge').innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+  }
+
+  function atualizarLinha(id, st) {
+    const row = document.querySelector(`tr[data-id="${id}"]`);
+    if (!row) return;
+    row.dataset.status = st;
+    const cor = st === 'Resolvida' ? 'badge-success' : st === 'Em andamento' ? 'badge-warning' : 'badge-info';
+    row.querySelector('.status-cell').innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+    const eyeBtn = row.querySelector('.btn-abrir-modal');
+    if (eyeBtn) eyeBtn.dataset.status = st;
+    const card = document.querySelector(`.oc-card[data-id="${id}"] .oc-card-status`);
+    if (card) card.innerHTML = `<span class="badge ${cor}">${esc(st)}</span>`;
+  }
+
+  function iniciarOcorrencia() {
+    const id = document.getElementById('modalId').textContent;
+    OcorrenciaAcoes.iniciarAtendimento(id, () => {
+      atualizarAcoesModal('Em andamento');
+      atualizarLinha(id, 'Em andamento');
+    });
+  }
+
+  function resolverOcorrencia() {
+    const id = document.getElementById('modalId').textContent;
+    let sugestoes = [];
     try {
-      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-      const res  = await fetch(`/ocorrencias/${id}/resolver`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrf },
-      });
-      const data = await res.json();
-      if (!data.ok) throw new Error(data.erro || 'Erro desconhecido');
-
-      document.getElementById('modalStatusBadge').innerHTML =
-        '<span class="badge badge-success">Resolvida</span>';
-      btn.style.display = 'none';
-
-      const row = document.querySelector(`tr[data-id="${id}"]`);
-      if (row) {
-        row.dataset.status = 'Resolvida';
-        row.querySelector('.status-cell').innerHTML =
-          '<span class="badge badge-success">Resolvida</span>';
-        const eyeBtn = row.querySelector('.btn-abrir-modal');
-        if (eyeBtn) eyeBtn.dataset.status = 'Resolvida';
+      sugestoes = JSON.parse(botaoAtual?.dataset.anotacoes || '[]').map(a => a.titulo);
+    } catch (e) { /* sem sugestões */ }
+    OcorrenciaAcoes.abrirResolucao(id, sugestoes, (data) => {
+      atualizarAcoesModal('Resolvida');
+      atualizarLinha(id, 'Resolvida');
+      if (botaoAtual) {
+        botaoAtual.dataset.solucao = document.getElementById('rsSolucao').value;
       }
-
-      if (document.getElementById('statusSelect').value === 'Aberta') filtrar();
-
-    } catch (err) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-check-circle"></i> Marcar como Resolvida';
-      alert('Erro ao resolver: ' + err.message);
-    }
+      document.getElementById('modalResolucaoWrap').style.display = '';
+      document.getElementById('modalSolucao').textContent = botaoAtual?.dataset.solucao || '';
+      document.getElementById('modalResolvidoPor').textContent =
+        data.resolvido_por_nome ? `Resolvida por ${data.resolvido_por_nome}` : '';
+      filtrar();
+    });
   }
 
   // ── Fecha modal ───────────────────────────────────────────────────────────
@@ -640,6 +717,10 @@
   }
   document.getElementById('modalOverlay').addEventListener('click', function (e) {
     if (e.target === this) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    // Com o modal de resolução aberto, o ESC fecha só ele
+    if (e.key === 'Escape' && !e.defaultPrevented) closeModal();
   });
 
   // ── Export Excel ─────────────────────────────────────────────────────────
@@ -653,6 +734,15 @@
     });
     window.location.href = `/historico/export?${params}`;
   }
+
+  // Linha inteira clicável (principalmente no celular, onde vira card)
+  todasLinhas.forEach(r => {
+    r.style.cursor = 'pointer';
+    r.addEventListener('click', e => {
+      if (e.target.closest('button, a')) return;
+      r.querySelector('.btn-abrir-modal')?.click();
+    });
+  });
 
   // ── Init ──────────────────────────────────────────────────────────────────
   filtrar();

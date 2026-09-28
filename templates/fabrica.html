@@ -1,0 +1,277 @@
+{% extends 'menu.html' %}
+{% block title %}Mapa da fábrica — Nexar QRQC{% endblock %}
+
+{% block head %}
+<style>
+  .fb-topo { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .fb-resumo { display:flex; gap:8px; flex-wrap:wrap; }
+  .fb-chip { display:inline-flex; align-items:center; gap:7px; padding:7px 12px; border-radius:999px; font-size:13px; font-weight:600;
+    background:var(--bg-card); border:1px solid var(--border); }
+  .fb-chip i { font-size:12px; }
+  .fb-chip.parada { color:#991B1B; border-color:#FECACA; background:#FEF2F2; }
+  .fb-chip.atencao { color:#92400E; border-color:#FDE68A; background:#FFFBEB; }
+  .fb-chip.ok { color:#065F46; border-color:#A7F3D0; background:#ECFDF5; }
+  .fb-acoes { margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .fb-acoes [hidden] { display:none !important; }
+  .fb-atualizado { font-size:12px; color:var(--text-muted); }
+
+  .fb-grid { display:grid; grid-template-columns: minmax(0, 1fr) 330px; gap:16px; align-items:start; }
+  .fb-planta {
+    position:relative; width:100%; aspect-ratio: 16 / 9; min-height:360px; border-radius:var(--radius);
+    background-color:#F8FAFC; border:2px solid #CBD5E1; overflow:hidden;
+    background-image: linear-gradient(#E2E8F0 1px, transparent 1px), linear-gradient(90deg, #E2E8F0 1px, transparent 1px);
+    background-size: 5% 8.9%;
+    touch-action: pan-y;
+  }
+  .fb-planta.editando { outline:3px dashed var(--primary); outline-offset:3px; touch-action:none; }
+  .fb-zona { position:absolute; border:1.5px dashed #94A3B8; border-radius:14px; background:rgba(255,255,255,.55); pointer-events:none; }
+  .fb-zona span { position:absolute; top:6px; left:10px; font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:#64748B; }
+  .fb-maq { position:absolute; transform:translate(-50%, -50%); display:flex; flex-direction:column; align-items:center; gap:4px;
+    border:none; background:none; padding:4px; cursor:pointer; font:inherit; z-index:2; }
+  .fb-planta.editando .fb-maq { cursor:grab; }
+  .fb-maq.arrastando { cursor:grabbing; z-index:5; }
+  .fb-pino { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:18px;
+    box-shadow:0 0 0 3px #fff, 0 4px 12px rgba(15,23,42,.25); position:relative; }
+  .fb-maq.ok .fb-pino { background:#059669; }
+  .fb-maq.atencao .fb-pino { background:#D97706; }
+  .fb-maq.parada .fb-pino { background:#DC2626; animation: fb-pulso 1.4s ease-in-out infinite; }
+  @keyframes fb-pulso { 50% { box-shadow:0 0 0 3px #fff, 0 0 0 9px rgba(220,38,38,.25); } }
+  .fb-pino b { position:absolute; top:-8px; right:-8px; min-width:20px; height:20px; border-radius:999px; background:#0F172A; color:#fff;
+    font-size:11px; display:flex; align-items:center; justify-content:center; padding:0 5px; box-shadow:0 0 0 2px #fff; }
+  .fb-status-ic { position:absolute; bottom:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:#fff; display:flex;
+    align-items:center; justify-content:center; font-size:11px; }
+  .fb-maq.ok .fb-status-ic { color:#059669; } .fb-maq.atencao .fb-status-ic { color:#D97706; } .fb-maq.parada .fb-status-ic { color:#DC2626; }
+  .fb-nome { font-size:12px; font-weight:600; color:var(--text); background:rgba(255,255,255,.95); padding:2px 8px; border-radius:6px;
+    white-space:nowrap; box-shadow:0 1px 3px rgba(15,23,42,.12); }
+  .fb-maq.sel .fb-pino { outline:3px solid var(--primary); outline-offset:3px; }
+
+  .fb-painel { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
+  .fb-painel-cab { padding:14px 16px; border-bottom:1px solid var(--border); }
+  .fb-painel-cab h3 { margin:0; font-size:15px; }
+  .fb-painel-cab small { color:var(--text-muted); font-size:12.5px; }
+  .fb-painel-corpo { padding:12px 16px 16px; display:flex; flex-direction:column; gap:8px; }
+  .fb-linha { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);
+    background:none; font:inherit; color:inherit; text-align:left; cursor:pointer; width:100%; min-height:44px; }
+  .fb-linha:hover { border-color:var(--primary); }
+  .fb-bola { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  .fb-bola.ok { background:#059669; } .fb-bola.atencao { background:#D97706; } .fb-bola.parada { background:#DC2626; }
+  .fb-linha span { flex:1; min-width:0; }
+  .fb-linha b { display:block; font-size:13.5px; }
+  .fb-linha small { color:var(--text-muted); font-size:12px; }
+  .fb-oc { display:block; padding:9px 11px; border-radius:var(--radius-sm); background:var(--bg-page); text-decoration:none; color:var(--text); font-size:13px; }
+  .fb-oc small { display:block; color:var(--text-muted); font-size:11.5px; margin-top:2px; }
+  .fb-oc .parou { color:#B91C1C; font-weight:600; }
+  .fb-botoes { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  .fb-dica { font-size:12px; color:var(--text-muted); margin-top:10px; }
+
+  @media (max-width: 1100px) { .fb-grid { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 767px) {
+    .fb-planta { aspect-ratio: 1 / 1; min-height:300px; }
+    .fb-zona span { display:none; }
+    .fb-pino { width:34px; height:34px; font-size:14px; border-radius:10px; }
+    .fb-nome { font-size:10.5px; padding:1px 5px; max-width:96px; overflow:hidden; text-overflow:ellipsis; }
+    .fb-acoes { margin-left:0; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-map-location-dot"></i> Mapa da fábrica</div>
+</div>
+
+<div class="page-body">
+  <div class="fb-topo">
+    <div class="fb-resumo" id="resumo" aria-live="polite"></div>
+    <div class="fb-acoes">
+      <span class="fb-atualizado" id="atualizado"></span>
+      {% if pode_editar %}
+      <button type="button" class="btn btn-outline btn-sm" id="btnEditar"><i class="fas fa-up-down-left-right"></i> Posicionar máquinas</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="btnCancelar" hidden>Cancelar</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btnSalvar" hidden><i class="fas fa-check"></i> Salvar posições</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="fb-grid">
+    <div>
+      <div class="fb-planta" id="planta" role="region" aria-label="Planta da fábrica"></div>
+      <p class="fb-dica" id="dica"><i class="fas fa-hand-pointer"></i> Toque numa máquina para ver a situação. A página atualiza sozinha a cada minuto.</p>
+    </div>
+    <aside class="fb-painel" id="painel" aria-live="polite"></aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const $ = (id) => document.getElementById(id);
+  let maquinas = {{ maquinas | tojson }};
+  let selecionada = null, editando = false, posicoesOriginais = null;
+
+  const STATUS = {
+    parada: { txt: 'Parada', ic: 'fa-circle-stop', ordem: 0 },
+    atencao: { txt: 'Com ocorrência aberta', ic: 'fa-triangle-exclamation', ordem: 1 },
+    ok: { txt: 'Operando', ic: 'fa-circle-check', ordem: 2 },
+  };
+
+  function el(tag, attrs = {}, ...filhos) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') e.className = v;
+      else if (k === 'style') e.style.cssText = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v);
+    }
+    filhos.forEach(f => f != null && e.append(f));
+    return e;
+  }
+  const ic = (c) => el('i', { class: 'fas ' + c, 'aria-hidden': 'true' });
+  const iconeMaquina = (m) => /rob/i.test(m.nome) ? 'fa-robot' : (/torno/i.test(m.nome) ? 'fa-gears' : 'fa-industry');
+
+  function resumo() {
+    const n = { parada: 0, atencao: 0, ok: 0 };
+    maquinas.forEach(m => n[m.status]++);
+    $('resumo').replaceChildren(...['parada', 'atencao', 'ok'].map(s =>
+      el('span', { class: `fb-chip ${s}` }, ic(STATUS[s].ic), `${n[s]} ${s === 'ok' ? 'operando' : s === 'parada' ? 'parada(s)' : 'com ocorrência'}`)));
+    $('atualizado').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function desenhar() {
+    const planta = $('planta');
+    planta.replaceChildren();
+    // Zonas: retângulo em volta das máquinas de cada setor
+    const setores = {};
+    maquinas.forEach(m => (setores[m.setor || 'Sem setor'] ||= []).push(m));
+    Object.entries(setores).forEach(([nome, lista]) => {
+      const xs = lista.map(m => m.x), ys = lista.map(m => m.y);
+      const x0 = Math.max(1, Math.min(...xs) - 8), x1 = Math.min(99, Math.max(...xs) + 8);
+      const y0 = Math.max(1, Math.min(...ys) - 17), y1 = Math.min(99, Math.max(...ys) + 15);
+      planta.append(el('div', { class: 'fb-zona', style: `left:${x0}%;top:${y0}%;width:${x1 - x0}%;height:${y1 - y0}%` }, el('span', {}, nome)));
+    });
+    maquinas.forEach(m => {
+      const pino = el('span', { class: 'fb-pino' }, ic(iconeMaquina(m)), el('span', { class: 'fb-status-ic' }, ic(STATUS[m.status].ic)));
+      if (m.total_abertas) pino.append(el('b', {}, String(m.total_abertas)));
+      const b = el('button', { type: 'button', class: `fb-maq ${m.status}${selecionada === m.id ? ' sel' : ''}`, 'data-id': m.id,
+                               style: `left:${m.x}%;top:${m.y}%`,
+                               'aria-label': `${m.nome}: ${STATUS[m.status].txt}${m.total_abertas ? ', ' + m.total_abertas + ' ocorrência(s) aberta(s)' : ''}` },
+                    pino, el('span', { class: 'fb-nome' }, m.nome));
+      b.addEventListener('click', () => { if (!editando) selecionar(m.id); });
+      b.addEventListener('pointerdown', (ev) => arrastar(ev, m, b));
+      planta.append(b);
+    });
+  }
+
+  function painel() {
+    const p = $('painel');
+    const m = maquinas.find(x => x.id === selecionada);
+    if (!m) {
+      const ordenadas = [...maquinas].sort((a, b) => STATUS[a.status].ordem - STATUS[b.status].ordem || a.nome.localeCompare(b.nome));
+      p.replaceChildren(
+        el('div', { class: 'fb-painel-cab' }, el('h3', {}, 'Máquinas'), el('small', {}, 'Primeiro as que pedem atenção')),
+        el('div', { class: 'fb-painel-corpo' }, ...ordenadas.map(x =>
+          el('button', { type: 'button', class: 'fb-linha', onclick: () => selecionar(x.id) },
+             el('i', { class: `fb-bola ${x.status}`, 'aria-hidden': 'true' }),
+             el('span', {}, el('b', {}, x.nome), el('small', {}, `${STATUS[x.status].txt}${x.total_abertas ? ' · ' + x.total_abertas + ' aberta(s)' : ''} · ${x.setor || '—'}`)),
+             ic('fa-chevron-right')))));
+      return;
+    }
+    const corpo = el('div', { class: 'fb-painel-corpo' });
+    corpo.append(el('span', { class: `fb-chip ${m.status}`, style: 'align-self:flex-start' }, ic(STATUS[m.status].ic), STATUS[m.status].txt,
+                    m.risco ? ' · risco para pessoas' : ''));
+    if (m.abertas.length) {
+      m.abertas.forEach(o => corpo.append(el('a', { class: 'fb-oc', href: `/ocorrencia/${o.id}` },
+        o.descricao, el('small', {}, `#${o.id} · ${o.quando} · ${o.status} · impacto ${o.impacto || '—'}`,
+          o.parada ? el('span', { class: 'parou' }, ' · máquina parou') : null))));
+      if (m.total_abertas > m.abertas.length) corpo.append(el('small', { class: 'fb-dica' }, `+ ${m.total_abertas - m.abertas.length} ocorrência(s)`));
+    } else {
+      corpo.append(el('small', { class: 'fb-dica', style: 'margin:0' }, 'Nenhuma ocorrência aberta.'));
+    }
+    const botoes = el('div', { class: 'fb-botoes' });
+    if (m.cad) {
+      botoes.append(el('a', { class: 'btn btn-primary btn-sm', href: `/CadastroOcorrencia?maquina=${m.id}` }, ic('fa-plus'), ' Nova ocorrência'),
+                    el('a', { class: 'btn btn-outline btn-sm', href: `/maquinas/${m.id}/3d` }, ic('fa-fire'), ' 3D e falhas'));
+    } else {
+      botoes.append(el('small', { class: 'fb-dica', style: 'margin:0' }, 'Sem CAD 3D: vincule o modelo para receber ocorrências.'));
+    }
+    corpo.append(botoes);
+    p.replaceChildren(
+      el('div', { class: 'fb-painel-cab' },
+        el('button', { type: 'button', class: 'btn btn-ghost btn-sm', style: 'float:right', onclick: () => selecionar(null) }, ic('fa-xmark'), ' Fechar'),
+        el('h3', {}, m.nome), el('small', {}, [m.setor, m.fabricante, m.modelo].filter(Boolean).join(' · '))),
+      corpo);
+  }
+
+  function selecionar(id) {
+    selecionada = id;
+    document.querySelectorAll('.fb-maq').forEach(b => b.classList.toggle('sel', +b.dataset.id === id));
+    painel();
+    if (id && window.matchMedia('(max-width: 1100px)').matches) $('painel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── Posicionar máquinas (arrastar) ──────────────────────────────────────
+  function arrastar(ev, m, botao) {
+    if (!editando) return;
+    ev.preventDefault();
+    const planta = $('planta').getBoundingClientRect();
+    botao.setPointerCapture(ev.pointerId);
+    botao.classList.add('arrastando');
+    const mover = (e) => {
+      m.x = Math.min(97, Math.max(3, (e.clientX - planta.left) / planta.width * 100));
+      m.y = Math.min(95, Math.max(6, (e.clientY - planta.top) / planta.height * 100));
+      botao.style.left = m.x + '%';
+      botao.style.top = m.y + '%';
+    };
+    const soltar = () => {
+      botao.removeEventListener('pointermove', mover);
+      botao.classList.remove('arrastando');
+      desenhar();
+    };
+    botao.addEventListener('pointermove', mover);
+    botao.addEventListener('pointerup', soltar, { once: true });
+    botao.addEventListener('pointercancel', soltar, { once: true });
+  }
+
+  function modoEdicao(ativo) {
+    editando = ativo;
+    $('planta').classList.toggle('editando', ativo);
+    $('btnEditar').hidden = ativo;
+    $('btnSalvar').hidden = !ativo;
+    $('btnCancelar').hidden = !ativo;
+    $('dica').replaceChildren(ic(ativo ? 'fa-up-down-left-right' : 'fa-hand-pointer'),
+      ativo ? ' Arraste cada máquina para o lugar dela na planta e salve.' : ' Toque numa máquina para ver a situação. A página atualiza sozinha a cada minuto.');
+  }
+
+  $('btnEditar')?.addEventListener('click', () => {
+    posicoesOriginais = maquinas.map(m => [m.id, m.x, m.y]);
+    selecionar(null);
+    modoEdicao(true);
+  });
+  $('btnCancelar')?.addEventListener('click', () => {
+    posicoesOriginais.forEach(([id, x, y]) => { const m = maquinas.find(q => q.id === id); m.x = x; m.y = y; });
+    modoEdicao(false);
+    desenhar();
+  });
+  $('btnSalvar')?.addEventListener('click', async () => {
+    const posicoes = Object.fromEntries(maquinas.map(m => [m.id, [m.x, m.y]]));
+    const r = await fetch('/api/fabrica/posicoes', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ posicoes }) });
+    if (r.ok) { modoEdicao(false); desenhar(); }
+    else alert('Não foi possível salvar as posições.');
+  });
+
+  // Atualiza a situação das máquinas a cada minuto (fora do modo de edição)
+  setInterval(async () => {
+    if (editando || document.hidden) return;
+    const r = await fetch('/api/fabrica');
+    if (!r.ok) return;
+    maquinas = await r.json();
+    resumo(); desenhar(); painel();
+  }, 60000);
+
+  resumo(); desenhar(); painel();
+})();
+</script>
+{% endblock %}

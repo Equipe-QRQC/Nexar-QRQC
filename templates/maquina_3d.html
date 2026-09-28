@@ -1,0 +1,103 @@
+{% extends 'menu.html' %}
+{% block title %}{{ m.nome }} — 3D e falhas{% endblock %}
+
+{% block head %}
+{% include 'partials/three_importmap.html' %}
+<link rel="stylesheet" href="/static/css/viewer3d.css" />
+<link rel="stylesheet" href="/static/css/nova_ocorrencia.css" />
+<style>
+  .mc-layout { display:grid; grid-template-columns: minmax(0, 1fr) 400px; height: calc(100vh - 60px); min-height: 560px; }
+  .mc-palco { display:flex; flex-direction:column; min-width:0; min-height:0; border-right:1px solid var(--border); }
+  .mc-painel { overflow-y:auto; background:var(--bg-page); }
+  .mc-bloco { background:var(--bg-card); border-bottom:1px solid var(--border); padding:16px 18px; }
+  .mc-bloco h2 { font-size:15px; margin:0 0 4px; }
+  .mc-sub { font-size:12.5px; color:var(--text-muted); }
+  .mc-acoes { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .mc-seg { display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+  .mc-seg button { border:none; background:var(--bg-card); padding:8px 12px; font:600 12.5px var(--font); color:var(--text-muted); cursor:pointer; min-height:36px; }
+  .mc-seg button + button { border-left:1px solid var(--border); }
+  .mc-seg button.ativo { background:var(--primary-light); color:var(--primary-dark); }
+  .mc-legenda { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:12px; color:var(--text-muted); flex-wrap:wrap; }
+  .mc-grad { width:120px; height:10px; border-radius:5px; background:linear-gradient(90deg, #FCA5A5, #991B1B); }
+  .mc-zero { width:14px; height:10px; border-radius:3px; background:#E2E6EB; border:1px solid #CBD5E1; display:inline-block; }
+  .mc-lista { display:flex; flex-direction:column; gap:6px; }
+  .mc-item { border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-card); }
+  .mc-item > button { width:100%; display:grid; grid-template-columns: 14px minmax(0,1fr) auto; gap:10px; align-items:center;
+    padding:10px 12px; border:none; background:none; font:inherit; color:inherit; text-align:left; cursor:pointer; min-height:44px; }
+  .mc-cor { width:14px; height:14px; border-radius:4px; }
+  .mc-nome { font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mc-nome small { display:block; font-weight:400; font-size:11.5px; color:var(--text-muted); }
+  .mc-n { font-size:13px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .mc-n small { font-weight:600; font-size:11px; color:#B91C1C; background:#FEE2E2; border-radius:999px; padding:1px 6px; margin-left:4px; }
+  .mc-item.aberto { border-color:var(--primary); box-shadow:0 0 0 1px var(--primary); }
+  .mc-det { padding:0 12px 12px 36px; display:none; }
+  .mc-item.aberto .mc-det { display:block; }
+  .mc-oc { display:block; font-size:12.5px; padding:8px 10px; border-radius:6px; background:var(--bg-page); margin-top:6px; text-decoration:none; color:var(--text); }
+  .mc-oc b { font-weight:600; } .mc-oc small { display:block; color:var(--text-muted); margin-top:2px; }
+  .mc-oc .sol { color:#047857; }
+  @media (max-width: 900px) {
+    .mc-layout { display:flex; flex-direction:column; height:auto; }
+    .mc-palco { border-right:none; border-bottom:1px solid var(--border); }
+    .mc-palco .no-stage { flex:none; height:50vh; min-height:300px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-cube"></i> {{ m.nome }}</div>
+  <div class="topbar-actions">
+    <a href="{{ url_for('maquinas') }}" class="btn btn-ghost btn-sm"><i class="fas fa-cogs"></i> Máquinas</a>
+  </div>
+</div>
+
+<div class="mc-layout">
+  <section class="mc-palco">
+    <div class="no-palco-barra">
+      <span class="no-palco-titulo"><i class="fas fa-fire"></i> Mapa de calor de falhas</span>
+      <button type="button" class="v3d-btn" id="btnEnquadrar" title="Enquadrar" aria-label="Enquadrar a máquina"><i class="fas fa-expand"></i></button>
+      <button type="button" class="v3d-btn" id="btnRaioX"><i class="fas fa-x-ray"></i> Raio-X</button>
+    </div>
+    <div class="no-stage" id="stage">
+      <div class="no-stage-carregando" id="carregando"><i class="fas fa-circle-notch fa-spin"></i> Carregando o modelo 3D…</div>
+    </div>
+  </section>
+
+  <section class="mc-painel">
+    <div class="mc-bloco">
+      <h2>{{ m.nome }}</h2>
+      <div class="mc-sub">{{ m.setor or 'Sem setor' }}{% if m.fabricante %} · {{ m.fabricante }}{% endif %}{% if m.modelo %} {{ m.modelo }}{% endif %}
+        · {{ cfg.nome or 'Modelo 3D' }}</div>
+      <div class="mc-acoes">
+        {% if tem_cad %}<a class="btn btn-primary btn-sm" href="{{ url_for('CadastroOcorrencia', maquina=m.id) }}"><i class="fas fa-plus"></i> Nova ocorrência</a>{% endif %}
+        {% if pode('manutencao') %}<a class="btn btn-outline btn-sm" href="{{ url_for('pagina_indicadores') }}"><i class="fas fa-gauge-high"></i> Indicadores</a>{% endif %}
+      </div>
+    </div>
+    <div class="mc-bloco">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <div class="mc-seg" id="segEscopo" role="group" aria-label="Escopo">
+          <button type="button" data-frota="0" class="ativo">Esta máquina</button>
+          <button type="button" data-frota="1" id="btnFrota">Frota do modelo</button>
+        </div>
+        <div class="mc-seg" id="segCalor" role="group" aria-label="Cores">
+          <button type="button" data-calor="1" class="ativo">Calor</button>
+          <button type="button" data-calor="0">Cores reais</button>
+        </div>
+      </div>
+      <div class="mc-legenda" id="legenda">
+        <span><span class="mc-zero"></span> sem falha</span>
+        <span>1</span><span class="mc-grad" aria-hidden="true"></span><span id="legMax">—</span><span>falhas</span>
+      </div>
+    </div>
+    <div class="mc-bloco" style="border-bottom:none;">
+      <h2 style="margin-bottom:10px;">Peças por número de falhas</h2>
+      <div class="mc-lista" id="lista"></div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>window.MAQUINA_3D = { id: {{ m.id }} };</script>
+<script type="module" src="/static/js/maquina_3d.js"></script>
+{% endblock %}

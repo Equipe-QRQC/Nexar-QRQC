@@ -13,8 +13,11 @@ import sqlite3
 logger = logging.getLogger("nexar.nexa_ia")
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+DB_PATH = os.getenv("DATABASE_PATH") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "qrqc.db")
 
 _openai_client = None
+
+MSG_INDISPONIVEL = "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."
 
 
 def _get_client():
@@ -31,7 +34,7 @@ def _get_client():
 
 
 def _db():
-    conn = sqlite3.connect("qrqc.db")
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -216,7 +219,7 @@ _TOOL_MAP = {
     "get_machine_documentation": _get_machine_documentation,
 }
 
-_SYSTEM_PROMPT = """Você é a Nexa IA — agente especialista em diagnóstico de falhas industriais.
+_SYSTEM_PROMPT = """Você é a Nexar IA — agente especialista em diagnóstico de falhas industriais.
 
 REGRAS ABSOLUTAS:
 1. Chame get_machine_components ANTES de criar o diagnóstico final.
@@ -275,7 +278,8 @@ def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
     """
     client = _get_client()
     if not client:
-        return {"error": "OPENAI_API_KEY não configurada — configure no .env"}
+        logger.warning("[nexa_ia] OPENAI_API_KEY não configurada")
+        return {"error": MSG_INDISPONIVEL}
 
     user_msg = (
         f"Analise esta ocorrência industrial:\n\n"
@@ -310,14 +314,13 @@ def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
         except Exception as api_err:
             err_msg = str(api_err)
             if "credit_balance_exhausted" in err_msg or "insufficient_quota" in err_msg:
-                return {
-                    "error": "Créditos OpenAI esgotados. Acesse platform.openai.com/settings/organization/billing para adicionar créditos.",
-                    "_steps": steps_log,
-                }
+                logger.error("[nexa_ia] créditos OpenAI esgotados")
+                return {"error": MSG_INDISPONIVEL, "_steps": steps_log}
             if "invalid_api_key" in err_msg or "Incorrect API key" in err_msg:
-                return {"error": "OPENAI_API_KEY inválida. Verifique o arquivo .env.", "_steps": steps_log}
+                logger.error("[nexa_ia] OPENAI_API_KEY inválida")
+                return {"error": MSG_INDISPONIVEL, "_steps": steps_log}
             logger.error(f"[nexa_ia] erro na API OpenAI: {api_err}")
-            return {"error": f"Erro na API OpenAI: {err_msg[:200]}", "_steps": steps_log}
+            return {"error": MSG_INDISPONIVEL, "_steps": steps_log}
 
         msg = resp.choices[0].message
         messages.append(msg)
@@ -348,10 +351,10 @@ def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
                 diagnosis = _extract_json(content)
             except Exception as exc:
                 logger.error(f"[nexa_ia] falha ao parsear JSON: {exc}\n{content[:500]}")
-                diagnosis = {"error": f"Resposta inválida da IA: {exc}", "raw": content[:500]}
+                diagnosis = {"error": "A IA retornou uma resposta inválida. Tente analisar novamente."}
 
             diagnosis["_steps"] = steps_log
             diagnosis["_model"] = OPENAI_MODEL
             return diagnosis
 
-    return {"error": "Agente excedeu limite de iterações", "_steps": steps_log}
+    return {"error": "A análise não foi concluída. Tente novamente.", "_steps": steps_log}

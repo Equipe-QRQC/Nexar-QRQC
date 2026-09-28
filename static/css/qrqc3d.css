@@ -5,45 +5,42 @@
 /* ── Layout principal ─────────────────────────────── */
 .qrqc3d-layout {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr) 380px;
   gap: 16px;
-  height: calc(100vh - 80px);
-  padding: 16px 24px 24px;
-  box-sizing: border-box;
+  height: calc(100vh - 110px);
+  min-height: 560px;
 }
+.qrqc3d-layout .viewer-card { min-height: 0; }
+.qrqc3d-layout .panel-info { overflow-y: auto; }
 
 @media (max-width: 1100px) {
-  .qrqc3d-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: 420px auto auto;
-    height: auto;
-  }
+  .qrqc3d-layout { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .qrqc3d-layout .viewer-card { height: 62vh; min-height: 380px; }
 }
 
-/* ── Viewer 3D ────────────────────────────────────── */
-.viewer-card {
-  grid-row: 1 / 3;
-  background: var(--sidebar-bg);
-  border-radius: var(--radius);
-  overflow: hidden;
-  position: relative;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
+/* Número da hipótese com a cor da gravidade (igual às etiquetas do 3D) */
+.hyp-num {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 11px; font-weight: 700; background: #D97706;
 }
+.hyp-num.sev-high { background: #DC2626; }
+.hyp-num.sev-low  { background: #2563EB; }
 
-@media (max-width: 1100px) {
-  .viewer-card { grid-row: auto; }
+/* Histórico de soluções da peça selecionada */
+.comp-hist-item {
+  display: block; text-decoration: none; color: inherit;
+  padding: 8px 10px; margin-bottom: 6px;
+  border: 1px solid var(--border); border-left: 3px solid var(--success);
+  border-radius: var(--radius-sm); background: var(--bg-card);
+  transition: var(--transition);
 }
-
-#three-canvas {
-  width: 100%;
-  flex: 1;
-  display: block;
-  cursor: grab;
-}
-#three-canvas:active { cursor: grabbing; }
+.comp-hist-item:hover { border-color: var(--primary); }
+.comp-hist-top { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-muted); }
+.comp-hist-top b { color: var(--text); }
+.comp-hist-prob { font-size: 12.5px; color: var(--text); margin: 2px 0; }
+.comp-hist-sol { font-size: 12px; color: #047857; }
+.comp-hist-vazio { font-size: 12px; color: var(--text-muted); }
 
 .viewer-toolbar {
   display: flex;

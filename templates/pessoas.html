@@ -1,0 +1,114 @@
+{% extends 'menu.html' %}
+{% block title %}Pessoas e habilitações — Nexar QRQC{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/css/empresa.css" />
+{% endblock %}
+
+{% block content %}
+<div class="topbar">
+  <div class="topbar-title"><i class="fas fa-id-card"></i> Pessoas e habilitações</div>
+  {% if pode_editar %}
+  <div class="topbar-actions">
+    <button type="button" class="btn btn-outline btn-sm" id="btnImportar"><i class="fas fa-file-csv"></i> Importar planilha</button>
+    <a href="{{ url_for('pessoa_form') }}" class="btn btn-primary btn-sm"><i class="fas fa-user-plus"></i> Nova pessoa</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="page-body">
+  {% if pode_editar %}
+  <form class="card em-importar" id="formImportar" method="POST" action="{{ url_for('pessoas_importar') }}" enctype="multipart/form-data" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <div class="card-body">
+      <p><b>Importe do sistema de RH ou de uma planilha.</b> Cada linha cria ou atualiza a pessoa pela matrícula;
+         as colunas de habilitação (ASO, NR-10…) recebem a data de validade. Não inclua salário nem dados que o sistema não usa.</p>
+      <div class="em-importar-linha">
+        <input type="file" name="planilha" accept=".csv,text/csv" class="form-control" required />
+        <button class="btn btn-primary btn-sm"><i class="fas fa-upload"></i> Importar</button>
+        <a href="{{ url_for('pessoas_modelo_csv') }}" class="btn btn-ghost btn-sm"><i class="fas fa-download"></i> Baixar modelo</a>
+      </div>
+    </div>
+  </form>
+  {% endif %}
+
+  <div class="em-stats">
+    <a href="?" class="em-stat"><span>Pessoas ativas</span><b>{{ stats.ativos }}</b></a>
+    <a href="?situacao=vencida" class="em-stat em-stat-vermelho"><span>Habilitações vencidas</span><b>{{ stats.vencidas }}</b></a>
+    <a href="?situacao=vence_em_breve" class="em-stat em-stat-ambar"><span>Vencem em 30 dias</span><b>{{ stats.em_breve }}</b></a>
+  </div>
+
+  {% if vencimentos %}
+  <div class="card em-vencimentos">
+    <div class="card-header"><span class="card-title"><i class="fas fa-calendar-xmark"></i> Vencimentos que pedem ação</span></div>
+    <div class="em-venc-lista">
+      {% for v in vencimentos[:12] %}
+      <a class="em-venc em-venc-{{ v.situacao }}" href="{{ url_for('pessoa_form', pid=v.colaborador_id) if pode_editar else '#' }}">
+        <span class="em-venc-q">{{ v.tipo }}</span>
+        <span class="em-venc-txt"><b>{{ v.nome }}</b><small>{{ v.setor or '—' }} · mat. {{ v.matricula }}</small></span>
+        <span class="em-venc-dias">{% if v.situacao == 'vencida' %}vencido há {{ -v.dias }} dia(s){% else %}vence em {{ v.dias }} dia(s){% endif %}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <form class="em-filtros" method="GET">
+    <input class="form-control" type="search" name="q" value="{{ busca }}" placeholder="Buscar por nome, matrícula ou função" aria-label="Buscar" />
+    <select class="form-select" name="setor" aria-label="Setor">
+      <option value="">Todos os setores</option>
+      {% for s in setores %}<option{{ ' selected' if s == setor }}>{{ s }}</option>{% endfor %}
+    </select>
+    <select class="form-select" name="situacao" aria-label="Situação">
+      <option value="">Qualquer situação</option>
+      <option value="vencida"{{ ' selected' if filtro == 'vencida' }}>Com habilitação vencida</option>
+      <option value="vence_em_breve"{{ ' selected' if filtro == 'vence_em_breve' }}>Vencendo em 30 dias</option>
+      <option value="inativo"{{ ' selected' if filtro == 'inativo' }}>Desligados</option>
+    </select>
+    <button class="btn btn-outline btn-sm"><i class="fas fa-filter"></i> Filtrar</button>
+  </form>
+
+  <div class="card">
+    <div class="em-tabela-wrap">
+      <table class="em-tabela em-pessoas">
+        <thead><tr><th>Pessoa</th><th>Setor · função</th><th>Vínculo</th><th>Habilitações</th>{% if pode_editar %}<th></th>{% endif %}</tr></thead>
+        <tbody>
+        {% for it in itens %}
+          {% set p = it.p %}
+          <tr class="{{ 'inativo' if not p.ativo }}">
+            <td><b>{{ p.nome }}</b><small>mat. {{ p.matricula }}{% if not p.ativo %} · desligado{% endif %}</small></td>
+            <td>{{ p.setor or '—' }}<small>{{ p.funcao or '' }}</small></td>
+            <td>{{ p.vinculo or '—' }}</td>
+            <td><div class="em-tags">
+              {% for q in qualificacoes %}{% if it.q.get(q) %}
+                {% set info = it.q[q] %}
+                <span class="em-tag em-q-{{ info.situacao }}" title="{{ qualificacoes[q] }} — válido até {{ info.valido_ate | data_br }}">
+                  {{ q }} · {{ info.valido_ate | data_br }}</span>
+              {% endif %}{% endfor %}
+              {% if not it.q %}<span class="em-tag">sem habilitações</span>{% endif %}
+            </div></td>
+            {% if pode_editar %}<td><a class="btn btn-outline btn-sm" href="{{ url_for('pessoa_form', pid=p.id) }}"><i class="fas fa-pen"></i> Editar</a></td>{% endif %}
+          </tr>
+        {% else %}
+          <tr><td colspan="5" class="em-vazio">
+            {% if busca or setor or filtro %}Ninguém encontrado com esses filtros.
+            {% else %}Nenhuma pessoa cadastrada. Importe a planilha do RH ou cadastre a primeira pessoa.{% endif %}
+          </td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <p class="em-lgpd"><i class="fas fa-shield-halved"></i> Dados pessoais protegidos pela LGPD: só RH e administradores editam, e cada consulta fica registrada na auditoria.
+     Laudos médicos não são guardados — só a validade do ASO.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('btnImportar')?.addEventListener('click', () => {
+    const f = document.getElementById('formImportar');
+    f.hidden = !f.hidden;
+  });
+</script>
+{% endblock %}
