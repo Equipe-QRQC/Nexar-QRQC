@@ -17,8 +17,15 @@ Modelos incluídos:
 |---|---|---|
 | `robo-abb-irb6700` | Robô industrial ABB IRB 6700 | ABB Library (STEP público) |
 | `torno-cx704` | Torno mecânico de bancada Craftex CX704 | GrabCAD (modelo da comunidade) |
+| `motor-weg-w22` | Motor elétrico trifásico WEG W22 | GrabCAD (modelo da comunidade) |
+| `bomba-ksb-etanorm` | Bomba centrífuga KSB Etanorm 65-40-250 com motor | GrabCAD (modelo da comunidade) |
+| `compressor-parafuso` | Compressor de ar parafuso (unidade compressora) | GrabCAD (modelo da comunidade) |
 
 Os arquivos originais ficam em `cad_origem/`.
+
+**CAD que vem como um sólido só** (a bomba KSB): o STEP não separa as peças, então não há
+nós para mapear. `cad_origem/bomba-ksb-etanorm/dividir_regioes.py` divide a malha em regiões
+pela posição (motor, acoplamento, mancal, selo, voluta, base) antes de otimizar.
 
 ## Pelo próprio sistema (recomendado)
 

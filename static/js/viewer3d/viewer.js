@@ -244,21 +244,26 @@ export class Viewer3D {
     const malhas = [];
     gltf.scene.traverse(o => { if (o.isMesh || o.name) malhas.push(o); });
     const grupos = [];
+    const regras = [];
     for (const [id, def] of Object.entries(modelo.mapa || {})) {
       const grupo = new THREE.Group();
       grupo.userData = { componentId: id, nome: def.nome, explode: def.explode, casca: def.casca, cor: def.cor };
       raiz.add(grupo);
       grupos.push(grupo);
-      for (const nomeNo of def.nos || []) {
-        // O GLTFLoader troca espaços e caracteres reservados nos nomes (sanitizeNodeName)
-        const alvo = THREE.PropertyBinding.sanitizeNodeName(nomeNo.replace(/\*$/, ''));
-        const achados = nomeNo.endsWith('*')
-          ? malhas.filter(o => o.name.startsWith(alvo) && o.parent)
-          : [gltf.scene.getObjectByName(alvo)].filter(Boolean);
-        if (!achados.length) console.warn(`[3D] nó "${nomeNo}" não encontrado no GLB (${id})`);
-        for (const no of achados) {
-          if (!grupos.some(gr => gr === no.parent || gr.getObjectById(no.id))) grupo.attach(no);   // attach preserva a posição no mundo
-        }
+      for (const nomeNo of def.nos || []) regras.push({ id, grupo, nomeNo, prefixo: nomeNo.endsWith('*') });
+    }
+    // O nome mais específico ganha: nomes exatos primeiro, depois prefixos do mais longo ao mais curto
+    // ("MANCAL POSTERIOR*" antes de "MANCAL*"), independente da ordem dos componentes
+    regras.sort((a, b) => (a.prefixo - b.prefixo) || (b.nomeNo.length - a.nomeNo.length));
+    for (const { id, grupo, nomeNo, prefixo } of regras) {
+      // O GLTFLoader troca espaços e caracteres reservados nos nomes (sanitizeNodeName)
+      const alvo = THREE.PropertyBinding.sanitizeNodeName(nomeNo.replace(/\*$/, ''));
+      const achados = prefixo
+        ? malhas.filter(o => o.name.startsWith(alvo) && o.parent)
+        : [gltf.scene.getObjectByName(alvo)].filter(Boolean);
+      if (!achados.length) console.warn(`[3D] nó "${nomeNo}" não encontrado no GLB (${id})`);
+      for (const no of achados) {
+        if (!grupos.some(gr => gr === no.parent || gr.getObjectById(no.id))) grupo.attach(no);   // attach preserva a posição no mundo
       }
     }
 

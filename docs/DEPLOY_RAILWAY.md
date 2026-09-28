@@ -30,5 +30,7 @@ O repositório já traz o necessário: `railway.json` (comando de início), `scr
 - A **importação de CAD** precisa do conversor (`cadquery-ocp`, ~500 MB) e de Node.js; não vai na
   imagem padrão. Os modelos que já estão no repositório funcionam normalmente. Converta CADs novos
   no computador e suba pelo git.
+- Máquinas novas na base de demonstração só entram num banco vazio. Para um banco que já está
+  em uso, cadastre a máquina em **Máquinas → Nova máquina** e escolha o modelo 3D na lista.
 - Para recriar a demonstração do zero: apague `/data/qrqc.db` (ou rode
   `python scripts/seed_demo.py --forcar --sem-ia` pelo shell do Railway).

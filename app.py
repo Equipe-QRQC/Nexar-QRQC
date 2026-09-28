@@ -2664,12 +2664,17 @@ def falhas_por_componente(maquina_id: int, frota: bool = False) -> dict:
     valor_hora = indicadores.custo_hora(conn)
     conn.close()
     palavras = modelos_3d.palavras_do_modelo(cfg)
+    # "Componente que falhou" igual ao nome de uma peça vale só para ela ("Carcaça dos rotores"
+    # não conta para os rotores); texto livre casa pelas palavras de cada peça
+    por_nome = {modelos_3d._normalizar_texto(c["name"]): c["component_id"] for c in comps}
+    real_de = {o["id"]: por_nome.get(modelos_3d._normalizar_texto(o["componente_real"] or "")) for o in ocs}
     resultado = []
     for c in comps:
         cid = c["component_id"]
         termos = palavras.get(cid, []) + [modelos_3d._normalizar_texto(c["name"])]
-        itens = [o for o in ocs if o["componente_apontado"] == cid or (
-            o["componente_real"] and any(t in modelos_3d._normalizar_texto(o["componente_real"]) for t in termos))]
+        itens = [o for o in ocs if o["componente_apontado"] == cid or real_de[o["id"]] == cid or (
+            o["componente_real"] and not real_de[o["id"]]
+            and any(t in modelos_3d._normalizar_texto(o["componente_real"]) for t in termos))]
         resultado.append({
             "id": cid, "nome": c["name"], "tipo": c["type"],
             "falhas": len(itens),
@@ -3931,12 +3936,16 @@ def solucoes_da_peca(maquina_id, cid: str | None, limite: int = 5) -> dict:
         "ORDER BY o.data_resolucao DESC", irmas
     ).fetchall()
     conn.close()
-    nome = next((c["name"] for c in modelos_3d.componentes_da_config(cfg) if c["component_id"] == cid), cid)
+    comps = modelos_3d.componentes_da_config(cfg)
+    nome = next((c["name"] for c in comps if c["component_id"] == cid), cid)
     termos = modelos_3d.palavras_do_modelo(cfg).get(cid, []) + [modelos_3d._normalizar_texto(nome)]
+    por_nome = {modelos_3d._normalizar_texto(c["name"]): c["component_id"] for c in comps}
     itens = []
     for r in linhas:
         alvo = modelos_3d._normalizar_texto(r["componente_real"] or "")
-        if r["componente_apontado"] == cid or (alvo and any(t in alvo for t in termos)):
+        # Nome exato de uma peça vale só para ela; texto livre casa pelas palavras
+        casa_texto = por_nome[alvo] == cid if alvo in por_nome else (alvo and any(t in alvo for t in termos))
+        if r["componente_apontado"] == cid or casa_texto:
             itens.append({"id": r["id"], "descricao": r["descricao"], "solucao": r["solucao_aplicada"],
                           "componente": r["componente_real"], "data": data_br(r["data_resolucao"]),
                           "maquina": r["maquina_nome"], "mesma_maquina": r["maquina_id"] == int(maquina_id)})
