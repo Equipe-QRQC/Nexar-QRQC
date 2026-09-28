@@ -41,6 +41,7 @@
   .fb-status-ic { position:absolute; bottom:-6px; right:-6px; width:20px; height:20px; border-radius:50%; background:#fff; display:flex;
     align-items:center; justify-content:center; font-size:11px; }
   .fb-maq.ok .fb-status-ic { color:#059669; } .fb-maq.atencao .fb-status-ic { color:#D97706; } .fb-maq.parada .fb-status-ic { color:#DC2626; }
+  .fb-nome-curto { display:none; }
   .fb-nome { font-size:12px; font-weight:600; color:var(--text); background:rgba(255,255,255,.95); padding:2px 8px; border-radius:6px;
     white-space:nowrap; box-shadow:0 1px 3px rgba(15,23,42,.12); }
   .fb-maq.sel .fb-pino { outline:3px solid var(--primary); outline-offset:3px; }
@@ -70,6 +71,7 @@
     .fb-zona span { display:none; }
     .fb-pino { width:34px; height:34px; font-size:14px; border-radius:10px; }
     .fb-nome { font-size:10.5px; padding:1px 5px; max-width:96px; overflow:hidden; text-overflow:ellipsis; }
+    .fb-nome-longo { display:none; } .fb-nome-curto { display:inline; }
     .fb-acoes { margin-left:0; }
   }
 </style>
@@ -129,7 +131,8 @@
     return e;
   }
   const ic = (c) => el('i', { class: 'fas ' + c, 'aria-hidden': 'true' });
-  const iconeMaquina = (m) => /rob/i.test(m.nome) ? 'fa-robot' : (/torno/i.test(m.nome) ? 'fa-gears' : 'fa-industry');
+  const ICONES = [[/rob/i, 'fa-robot'], [/torno/i, 'fa-gears'], [/bomba/i, 'fa-faucet-drip'], [/compressor/i, 'fa-wind'], [/motor/i, 'fa-bolt']];
+  const iconeMaquina = (m) => (ICONES.find(([re]) => re.test(m.nome)) || [, 'fa-industry'])[1];
 
   function resumo() {
     const n = { parada: 0, atencao: 0, ok: 0 };
@@ -157,7 +160,8 @@
       const b = el('button', { type: 'button', class: `fb-maq ${m.status}${selecionada === m.id ? ' sel' : ''}`, 'data-id': m.id,
                                style: `left:${m.x}%;top:${m.y}%`,
                                'aria-label': `${m.nome}: ${STATUS[m.status].txt}${m.total_abertas ? ', ' + m.total_abertas + ' ocorrência(s) aberta(s)' : ''}` },
-                    pino, el('span', { class: 'fb-nome' }, m.nome));
+                    pino, el('span', { class: 'fb-nome' }, el('span', { class: 'fb-nome-longo' }, m.nome),
+                             el('span', { class: 'fb-nome-curto' }, m.nome.split(' ').pop())));
       b.addEventListener('click', () => { if (!editando) selecionar(m.id); });
       b.addEventListener('pointerdown', (ev) => arrastar(ev, m, b));
       planta.append(b);

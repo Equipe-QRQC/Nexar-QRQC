@@ -1,8 +1,8 @@
 """
 Popula o banco com uma base de demonstração realista para apresentações.
 
-Cria 5 máquinas com CAD 3D do fabricante (robôs ABB IRB 6700 e tornos CX704)
-e cerca de 20 ocorrências distribuídas nos últimos 60 dias — abertas, em
+Cria 8 máquinas com CAD 3D (robôs ABB IRB 6700, tornos CX704, motor WEG W22,
+bomba KSB Etanorm e compressor de parafuso) e cerca de 30 ocorrências distribuídas nos últimos 60 dias — abertas, em
 andamento e resolvidas com a solução aplicada —, cada uma com a peça apontada
 no 3D e o sintoma, incluindo casos recorrentes.
 
@@ -35,6 +35,9 @@ import app as nexar  # noqa: E402  (inicializa o banco e a IA)
 
 ROBO = {"fonte": "cad", "modelo": "robo-abb-irb6700"}
 TORNO = {"fonte": "cad", "modelo": "torno-cx704"}
+MOTOR = {"fonte": "cad", "modelo": "motor-weg-w22"}
+BOMBA = {"fonte": "cad", "modelo": "bomba-ksb-etanorm"}
+COMPRESSOR = {"fonte": "cad", "modelo": "compressor-parafuso"}
 
 # Só máquinas com CAD 3D: a ocorrência é registrada apontando a peça no modelo.
 MAQUINAS = [
@@ -50,14 +53,26 @@ MAQUINAS = [
      "ano": "2021", "setor": "Expedição",
      "descricao": "Robô de paletização de caixas no fim da linha. Alcance de 3,2 m.",
      "modelo_3d": ROBO},
-    {"nome": "Torno Mecânico TM-04", "mapa": (22, 76), "modelo": "CX704", "fabricante": "Craftex",
+    {"nome": "Torno Mecânico TM-04", "mapa": (12, 76), "modelo": "CX704", "fabricante": "Craftex",
      "ano": "2020", "setor": "Ferramentaria",
      "descricao": "Torno de bancada para reparo de peças e usinagem de buchas na ferramentaria.",
      "modelo_3d": TORNO},
-    {"nome": "Torno Mecânico TM-05", "mapa": (70, 76), "modelo": "CX704", "fabricante": "Craftex",
+    {"nome": "Torno Mecânico TM-05", "mapa": (89, 76), "modelo": "CX704", "fabricante": "Craftex",
      "ano": "2021", "setor": "Manutenção Central",
      "descricao": "Torno de bancada da oficina de manutenção para usinagem de pinos e eixos.",
      "modelo_3d": TORNO},
+    {"nome": "Motor Elétrico MT-01", "mapa": (50, 76), "modelo": "W22 IR3 Premium 7,5 cv 4P", "fabricante": "WEG",
+     "ano": "2019", "setor": "Utilidades",
+     "descricao": "Motor do exaustor da cabine de pintura. Trabalha 24 h em dois turnos e fim de semana.",
+     "modelo_3d": MOTOR},
+    {"nome": "Bomba Centrífuga BC-01", "mapa": (31, 76), "modelo": "Etanorm 65-40-250", "fabricante": "KSB",
+     "ano": "2018", "setor": "Utilidades",
+     "descricao": "Bomba de água gelada do circuito de resfriamento das máquinas de solda. Motor carcaça 180M.",
+     "modelo_3d": BOMBA},
+    {"nome": "Compressor de Ar CA-01", "mapa": (69, 76), "modelo": "Parafuso 30 kW", "fabricante": "—",
+     "ano": "2017", "setor": "Utilidades",
+     "descricao": "Compressor de parafuso que alimenta a rede de ar comprimido da fábrica (7 bar).",
+     "modelo_3d": COMPRESSOR},
 ]
 
 # (máquina, dias atrás, hora, operador, componente no 3D, sintoma, parou?, risco?,
@@ -157,6 +172,47 @@ OCORRENCIAS = [
      "Torno TM-05 não liga",
      "Painel sem o LED de energia; fusível aparentemente íntegro.",
      "Aberta", None, None),
+    # Utilidades: motor MT-01 (5), bomba BC-01 (6), compressor CA-01 (7)
+    (6, 57, "08:10", "Roberto Alves", "selo", "vazamento", False, False, "Médio", "Não",
+     "Vazamento no selo mecânico da bomba de água gelada",
+     "Gotejamento contínuo no selo, cerca de 20 gotas por minuto.",
+     "Resolvida", "Substituído o selo mecânico e conferido o alinhamento do acoplamento.", 6),
+    (7, 49, "06:30", "Carlos Souza", "polia", "ruido", False, False, "Médio", "Não",
+     "Chiado na correia do compressor na partida",
+     "Correia patinando nos primeiros segundos após a partida.",
+     "Resolvida", "Ajustada a tensão da correia e trocada a correia com desgaste nas laterais.", 2),
+    (5, 46, "13:15", "Juliana Rocha", "tampa_traseira", "ruido", False, False, "Médio", "Não",
+     "Ruído de rolamento no motor do exaustor",
+     "Ruído metálico constante no lado da ventilação; vibração de 6,2 mm/s.",
+     "Resolvida", "Substituído o rolamento traseiro (6205-2Z) e relubrificado o dianteiro.", 5),
+    (6, 39, "10:40", "Roberto Alves", "mancal", "aquecimento", False, False, "Médio", "Não",
+     "Mancal da bomba aquecendo",
+     "Caixa de mancal a 78 °C; óleo escurecido no visor.",
+     "Resolvida", "Trocado o óleo da caixa de mancal e desentupido o respiro.", 3),
+    (7, 31, "07:05", "Carlos Souza", "carcaca", "aquecimento", True, False, "Alto", "Não",
+     "Compressor desarmando por temperatura de descarga",
+     "Desarme com 110 °C na descarga após 40 min em carga; radiador de óleo sujo.",
+     "Resolvida", "Limpo o radiador de óleo e trocados o filtro e o óleo da unidade compressora.", 5),
+    (5, 26, "15:30", "Juliana Rocha", "caixa_ligacao", "desarma", True, False, "Alto", "Não",
+     "Motor do exaustor desarmando o disjuntor",
+     "Disjuntor-motor desarma na partida; borne da fase T escurecido.",
+     "Resolvida", "Refeita a conexão da fase T com terminal novo e reapertados os bornes com torque.", 3),
+    (6, 20, "09:20", "Roberto Alves", "selo", "vazamento", False, False, "Médio", "Sim",
+     "Selo da bomba vazando de novo",
+     "Vazamento no selo mecânico 37 dias após a troca; acoplamento com desalinhamento.",
+     "Resolvida", "Realinhado o conjunto motor-bomba a laser e substituído o selo.", 7),
+    (7, 9, "11:50", "Marcos Pereira", "mancais", "vibracao", False, False, "Médio", "Não",
+     "Vibração alta na unidade compressora",
+     "Vibração de 7,1 mm/s no mancal do lado da polia.",
+     "Em andamento", None, None),
+    (6, 3, "14:20", "Roberto Alves", "acoplamento", "ruido", False, True, "Médio", "Não",
+     "Batida no acoplamento da bomba",
+     "Ruído de batida a cada volta; protetor do acoplamento com parafuso solto.",
+     "Aberta", None, None),
+    (5, 1, "08:00", "Carlos Souza", "ventilacao", "quebra", False, False, "Médio", "Não",
+     "Tampa defletora do motor amassada",
+     "Tampa defletora amassada raspando na ventoinha depois de uma batida de empilhadeira.",
+     "Aberta", None, None),
 ]
 
 # Pessoas e habilitações: validade em dias a partir de hoje (negativo = vencida).
@@ -197,6 +253,8 @@ CUSTO_PECAS = {
     "compensador": 3800, "chicote": 2600, "eixo2": 950, "eixo4": 420, "eixo5": 1800, "eixo6": 640,
     "eixo1": 380, "base": 260, "contraponto": 120, "transmissao": 540, "carro_transversal": 90,
     "placa": 680, "porta_ferramenta": 210, "emergencia": 180, "cabecote": 460, "painel": 350, "fuso": 300,
+    "selo": 1900, "polia": 380, "tampa_traseira": 260, "mancal": 150, "carcaca": 450, "caixa_ligacao": 120,
+    "mancais": 2400, "acoplamento": 320, "ventilacao": 180,
 }
 
 

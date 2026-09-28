@@ -104,7 +104,7 @@ Para publicar na nuvem, veja [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
 
 ### Base de demonstração
 
-Para apresentações, popule o banco com 5 máquinas com CAD 3D (robôs ABB e tornos) e 23 ocorrências dos últimos 60 dias
+Para apresentações, popule o banco com 8 máquinas com CAD 3D (robôs ABB, tornos, motor WEG, bomba KSB e compressor) e 33 ocorrências dos últimos 60 dias
 (abertas, em andamento e resolvidas com a solução registrada):
 
 ```bash
