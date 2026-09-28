@@ -100,6 +100,8 @@ Acesse **http://localhost:5000** no navegador.
 
 **Login:** `admin@nexar.com` com a senha definida em `ADMIN_PASSWORD`.
 
+Para publicar na nuvem, veja [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
+
 ### Base de demonstração
 
 Para apresentações, popule o banco com 5 máquinas com CAD 3D (robôs ABB e tornos) e 23 ocorrências dos últimos 60 dias

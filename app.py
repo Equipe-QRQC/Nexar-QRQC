@@ -63,7 +63,7 @@ def _carregar_secret_key() -> str:
     chave = os.getenv("SECRET_KEY", "").strip()
     if chave:
         return chave
-    arquivo = os.path.join(BASE_DIR, ".secret_key")
+    arquivo = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), ".secret_key")  # junto do banco (volume, na nuvem)
     try:
         with open(arquivo, encoding="utf-8") as f:
             chave = f.read().strip()
@@ -82,6 +82,12 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB por requisição
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ATRAS_DE_PROXY"):
+    # Atrás do proxy HTTPS da hospedagem: IP real do usuário (limite de tentativas) e cookie só em HTTPS
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["REMEMBER_COOKIE_SECURE"] = True
 csrf = CSRFProtect(app)
 limiter = Limiter(
     key_func=lambda: str(current_user.id) if current_user.is_authenticated else get_remote_address(),
