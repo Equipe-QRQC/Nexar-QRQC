@@ -43,6 +43,33 @@
 .no-stage-vazio i { font-size: 38px; color: var(--primary); opacity: .45; }
 .no-stage-vazio[hidden], .no-stage-carregando[hidden] { display: none; }
 .no-stage-carregando { background: rgba(238, 242, 246, .85); flex-direction: row; }
+/* Galeria de máquinas no palco (antes de escolher) */
+.no-galeria {
+  position: absolute; inset: 0; z-index: 4; overflow-y: auto; touch-action: pan-y;
+  background: var(--bg-page); padding: 24px;
+}
+.no-galeria[hidden] { display: none; }
+.no-galeria-cab { display: flex; align-items: center; gap: 8px; margin: 0 0 16px; font-size: 14px; font-weight: 500; color: var(--text-muted); }
+.no-galeria-cab i { color: var(--primary); }
+.no-galeria-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+.no-gcard {
+  position: relative; display: flex; flex-direction: column; text-align: left; padding: 0; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card);
+  font: inherit; color: var(--text); cursor: pointer; transition: var(--transition);
+}
+.no-gcard[hidden] { display: none; }
+.no-gcard:hover, .no-gcard:focus-visible { border-color: var(--primary); box-shadow: var(--shadow); transform: translateY(-2px); }
+.no-gcard-img {
+  aspect-ratio: 4 / 3; background: #EEF2F6; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; font-size: 44px; color: var(--primary);
+}
+.no-gcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease; }
+.no-gcard:hover .no-gcard-img img { transform: scale(1.05); }
+.no-gcard-txt { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px 14px; min-width: 0; }
+.no-gcard-txt b { font-size: 14.5px; font-weight: 600; }
+.no-gcard-txt small { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.no-gcard .no-maquina-abertas { position: absolute; top: 10px; right: 10px; box-shadow: var(--shadow-sm); }
+
 .no-dica {
   position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 3;
   background: rgba(15, 23, 42, .85); color: #fff; padding: 8px 14px; border-radius: var(--radius-full);
@@ -88,17 +115,10 @@
 .no-maquina-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .no-maquina-txt b { font-size: 14px; font-weight: 600; }
 .no-maquina-txt small { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Prévia do modelo 3D: na lista vira um cartão com a imagem em cima */
-.no-maquinas:not([hidden]):has(.no-maquina-prev) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.no-maquinas:has(.no-maquina-prev) .no-busca { grid-column: 1 / -1; }
-.no-maquinas:has(.no-maquina-prev) .no-maquina { flex-direction: column; align-items: stretch; gap: 0; padding: 0; overflow: hidden; position: relative; }
-.no-maquinas:has(.no-maquina-prev) .no-maquina-ic { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; font-size: 34px; }
-.no-maquinas:has(.no-maquina-prev) .no-maquina-txt { padding: 10px 12px 12px; }
-.no-maquinas:has(.no-maquina-prev) .no-maquina-abertas { position: absolute; top: 8px; right: 8px; box-shadow: var(--shadow-sm); }
-.no-maquina-prev { background: #EEF2F6; overflow: hidden; }
-.no-maquina-prev img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s ease; }
-.no-maquina:hover .no-maquina-prev img { transform: scale(1.06); }
-.no-maquina-escolhida .no-maquina-prev { width: 64px; height: 48px; background: #fff; }
+/* Miniatura do modelo 3D na lista e no cartão da máquina escolhida */
+.no-maquina-prev { width: 56px; height: 42px; background: #EEF2F6; overflow: hidden; border-radius: 8px; }
+.no-maquina-prev img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.no-maquina-escolhida .no-maquina-prev { background: #fff; }
 .no-maquina-abertas {
   min-width: 24px; height: 24px; padding: 0 7px; border-radius: var(--radius-full);
   background: var(--danger-light); color: #B91C1C; font-size: 12px; font-weight: 700;
@@ -201,6 +221,10 @@
   .no-passos li span { font-size: 11px; }
   .no-passos li.atual { font-size: 12px; padding: 4px 9px 4px 4px; gap: 5px; }
   .no-stage { height: 46vh; min-height: 260px; }
+  .no-galeria { padding: 14px; }
+  .no-galeria-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .no-gcard-txt { padding: 8px 10px 10px; }
+  .no-gcard-txt b { font-size: 13px; }
   .no-etapa { padding: 14px; }
   .no-enviar { padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); }
   .no-sintomas .no-chip { flex-basis: calc(50% - 8px); }

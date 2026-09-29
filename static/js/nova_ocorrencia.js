@@ -68,6 +68,7 @@ async function escolherMaquina(botao) {
                       botao.querySelector('.no-maquina-txt').cloneNode(true));
   esc.hidden = false;
 
+  $('galeria').hidden = true;
   $('stageVazio').hidden = true;
   $('stageCarregando').hidden = false;
   $('palcoBarra').hidden = false;
@@ -102,6 +103,10 @@ async function escolherMaquina(botao) {
 }
 
 function trocarMaquina() {
+  estado.maquina = null;
+  $('galeria').hidden = false;
+  $('palcoBarra').hidden = true;
+  $('dicaToque').hidden = true;
   $('listaMaquinas').hidden = false;
   $('maquinaEscolhida').hidden = true;
   $('trocarMaquina').hidden = true;
@@ -241,11 +246,14 @@ window.addEventListener('pageshow', () => { $('analisando').hidden = true; atual
 
 // ── Início ──────────────────────────────────────────────────────────────────
 document.querySelectorAll('.no-maquina').forEach(b => b.addEventListener('click', () => escolherMaquina(b)));
+// Cartão da galeria escolhe pelo botão correspondente da lista (de onde sai o cartão compacto)
+document.querySelectorAll('.no-gcard').forEach(c => c.addEventListener('click', () =>
+  escolherMaquina(document.querySelector(`.no-maquina[data-id="${c.dataset.id}"]`))));
 $('trocarMaquina').addEventListener('click', trocarMaquina);
 $('trocarPeca').addEventListener('click', () => { limparPeca(); passo(2); });
 $('buscaMaquina')?.addEventListener('input', (e) => {
   const q = e.target.value.trim().toLowerCase();
-  document.querySelectorAll('.no-maquina').forEach(b => {
+  document.querySelectorAll('.no-maquina, .no-gcard').forEach(b => {
     b.hidden = q && !`${b.dataset.nome} ${b.dataset.setor}`.toLowerCase().includes(q);
   });
 });

@@ -48,7 +48,26 @@
       <button type="button" class="v3d-btn" id="btnRaioX" title="Raio-X: ver peças internas"><i class="fas fa-x-ray"></i> Raio-X</button>
     </div>
     <div class="no-stage" id="stage">
-      <div class="no-stage-vazio" id="stageVazio">
+      <!-- Galeria: prévia de cada máquina até o usuário escolher uma -->
+      <div class="no-galeria" id="galeria">
+        <p class="no-galeria-cab"><i class="fas fa-hand-pointer"></i> Escolha a máquina para abrir o modelo 3D</p>
+        <div class="no-galeria-grade">
+          {% for m in maquinas %}
+          <button type="button" class="no-gcard" data-id="{{ m.id }}" data-nome="{{ m.nome }}" data-setor="{{ m.setor or '' }}">
+            <span class="no-gcard-img">
+              {% if m.preview %}<img src="{{ m.preview }}" alt="" loading="lazy" />
+              {% else %}<i class="fas {{ 'fa-robot' if 'rob' in (m.modelo_3d_nome|lower) else 'fa-gears' }}"></i>{% endif %}
+            </span>
+            <span class="no-gcard-txt">
+              <b>{{ m.nome }}</b>
+              <small>{{ m.setor or 'Sem setor' }} · {{ m.modelo_3d_nome }}</small>
+            </span>
+            {% if m.abertas %}<span class="no-maquina-abertas" title="Ocorrências em aberto">{{ m.abertas }} em aberto</span>{% endif %}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="no-stage-vazio" id="stageVazio" hidden>
         <i class="fas fa-hand-pointer"></i>
         <p>Escolha a máquina para abrir o modelo 3D</p>
       </div>
