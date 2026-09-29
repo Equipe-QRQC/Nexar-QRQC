@@ -2,6 +2,7 @@
 {% block title %}Mapa da fábrica — Nexar QRQC{% endblock %}
 
 {% block head %}
+{% include 'partials/three_importmap.html' %}
 <style>
   .fb-topo { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
   .fb-resumo { display:flex; gap:8px; flex-wrap:wrap; }
@@ -65,6 +66,39 @@
   .fb-botoes { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
   .fb-dica { font-size:12px; color:var(--text-muted); margin-top:10px; }
 
+  /* Vista: 3D ou planta 2D */
+  .fb-vista { display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; background:var(--bg-card); }
+  .fb-vista button { border:none; background:none; font:600 12.5px var(--font); color:var(--text-muted); padding:0 12px; height:32px;
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+  .fb-vista button + button { border-left:1px solid var(--border); }
+  .fb-vista button[aria-pressed="true"] { background:var(--primary-light); color:var(--primary-dark); }
+
+  .fb-3d { position:relative; width:100%; aspect-ratio: 16 / 9; min-height:420px; border-radius:var(--radius);
+    border:2px solid #CBD5E1; overflow:hidden; background:#E2E8F0; touch-action:none; }
+  .fb-3d[hidden], .fb-planta[hidden] { display:none; }
+  .fb3-canvas { display:block; width:100%; height:100%; outline:none; }
+  .fb3-etiquetas { position:absolute; inset:0; pointer-events:none; }
+  .fb3-carregando { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:10px;
+    background:rgba(226,232,240,.85); color:var(--text-muted); font-size:14px; z-index:3; }
+  .fb3-carregando[hidden] { display:none; }
+  .fb3-carregando i { color:var(--primary); font-size:18px; }
+  .fb3-btn-geral { position:absolute; right:12px; bottom:12px; z-index:2; }
+  .fb3-tag { pointer-events:auto; display:inline-flex; align-items:center; gap:6px; padding:4px 10px 4px 7px; border-radius:999px;
+    border:1.5px solid transparent; background:rgba(255,255,255,.96); box-shadow:0 2px 8px rgba(15,23,42,.18);
+    font:600 12px var(--font); color:var(--text); white-space:nowrap; cursor:pointer; }
+  .fb3-tag:hover { border-color:var(--primary); }
+  .fb3-tag.parada { border-color:#FCA5A5; }
+  .fb3-tag.sel { border-color:var(--primary); box-shadow:0 0 0 3px rgba(14,165,233,.25), 0 2px 8px rgba(15,23,42,.18); }
+  .fb3-tag b { min-width:18px; height:18px; border-radius:999px; background:#0F172A; color:#fff; font-size:10.5px;
+    display:inline-flex; align-items:center; justify-content:center; padding:0 5px; }
+  .fb3-bola { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .fb3-bola.ok { background:#059669; } .fb3-bola.atencao { background:#D97706; } .fb3-bola.parada { background:#DC2626; }
+  /* Código curto (TM-04) para as etiquetas não se sobreporem; nome completo ao passar o mouse ou selecionar */
+  .fb3-nome-longo { display:none; }
+  .fb3-tag:hover, .fb3-tag.sel { z-index:1000 !important; }   /* o CSS2DRenderer define z-index inline */
+  .fb3-tag:hover .fb3-nome-longo, .fb3-tag.sel .fb3-nome-longo { display:inline; }
+  .fb3-tag:hover .fb3-nome-curto, .fb3-tag.sel .fb3-nome-curto { display:none; }
+
   @media (max-width: 1100px) { .fb-grid { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 767px) {
     .fb-planta { aspect-ratio: 1 / 1; min-height:300px; }
@@ -73,6 +107,8 @@
     .fb-nome { font-size:10.5px; padding:1px 5px; max-width:96px; overflow:hidden; text-overflow:ellipsis; }
     .fb-nome-longo { display:none; } .fb-nome-curto { display:inline; }
     .fb-acoes { margin-left:0; }
+    .fb-3d { aspect-ratio: 5 / 4; min-height:280px; }
+    .fb3-tag { font-size:10.5px; padding:3px 7px 3px 5px; }
   }
 </style>
 {% endblock %}
@@ -87,6 +123,10 @@
     <div class="fb-resumo" id="resumo" aria-live="polite"></div>
     <div class="fb-acoes">
       <span class="fb-atualizado" id="atualizado"></span>
+      <div class="fb-vista" role="group" aria-label="Tipo de vista">
+        <button type="button" data-vista="3d" aria-pressed="false"><i class="fas fa-cube"></i> 3D</button>
+        <button type="button" data-vista="2d" aria-pressed="false"><i class="fas fa-map"></i> Planta</button>
+      </div>
       {% if pode_editar %}
       <button type="button" class="btn btn-outline btn-sm" id="btnEditar"><i class="fas fa-up-down-left-right"></i> Posicionar máquinas</button>
       <button type="button" class="btn btn-ghost btn-sm" id="btnCancelar" hidden>Cancelar</button>
@@ -98,6 +138,11 @@
   <div class="fb-grid">
     <div>
       <div class="fb-planta" id="planta" role="region" aria-label="Planta da fábrica"></div>
+      <div class="fb-3d" id="planta3d" role="region" aria-label="Fábrica em 3D" hidden>
+        <button type="button" class="btn btn-outline btn-sm fb3-btn-geral" id="btnVisaoGeral" title="Ver a fábrica inteira">
+          <i class="fas fa-expand"></i> Visão geral
+        </button>
+      </div>
       <p class="fb-dica" id="dica"><i class="fas fa-hand-pointer"></i> Toque numa máquina para ver a situação. A página atualiza sozinha a cada minuto.</p>
     </div>
     <aside class="fb-painel" id="painel" aria-live="polite"></aside>
@@ -211,6 +256,7 @@
   function selecionar(id) {
     selecionada = id;
     document.querySelectorAll('.fb-maq').forEach(b => b.classList.toggle('sel', +b.dataset.id === id));
+    f3d?.selecionar(id);
     painel();
     if (id && window.matchMedia('(max-width: 1100px)').matches) $('painel').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -238,17 +284,57 @@
     botao.addEventListener('pointercancel', soltar, { once: true });
   }
 
+  function dica() {
+    const [icone, texto] = editando ? ['fa-up-down-left-right', ' Arraste cada máquina para o lugar dela na planta e salve.']
+      : vista === '3d' ? ['fa-hand-pointer', ' Arraste para girar, role (ou faça pinça) para aproximar e toque numa máquina para ver a situação.']
+      : ['fa-hand-pointer', ' Toque numa máquina para ver a situação. A página atualiza sozinha a cada minuto.'];
+    $('dica').replaceChildren(ic(icone), texto);
+  }
+
   function modoEdicao(ativo) {
     editando = ativo;
     $('planta').classList.toggle('editando', ativo);
     $('btnEditar').hidden = ativo;
     $('btnSalvar').hidden = !ativo;
     $('btnCancelar').hidden = !ativo;
-    $('dica').replaceChildren(ic(ativo ? 'fa-up-down-left-right' : 'fa-hand-pointer'),
-      ativo ? ' Arraste cada máquina para o lugar dela na planta e salve.' : ' Toque numa máquina para ver a situação. A página atualiza sozinha a cada minuto.');
+    dica();
   }
 
+  // ── Vista 3D ────────────────────────────────────────────────────────────
+  // O módulo 3D (Three.js + CADs) só é carregado quando a vista 3D é aberta
+  let vista = '2d', f3d = null, f3dCarregando = null;
+  async function mostrarVista(v) {
+    vista = v;
+    try { localStorage.setItem('fabrica.vista', v); } catch (e) { /* armazenamento indisponível */ }
+    $('planta').hidden = v !== '2d';
+    $('planta3d').hidden = v !== '3d';
+    document.querySelectorAll('.fb-vista button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.vista === v)));
+    dica();
+    if (v === '3d' && !f3d) {
+      f3dCarregando ||= import('/static/js/fabrica3d.js').then(async ({ criarFabrica3D }) => {
+        const inst = await criarFabrica3D($('planta3d'), { onSelect: (id) => selecionar(id) });
+        f3d = inst;
+        await inst.atualizar(maquinas, selecionada);
+        if (selecionada) inst.selecionar(selecionada);
+      });
+      try { await f3dCarregando; } catch (e) {
+        console.error(e);
+        f3dCarregando = null;
+        alert('Não foi possível abrir a vista 3D. Mostrando a planta.');
+        return mostrarVista('2d');
+      }
+    }
+    f3d?.ligar(vista === '3d');
+  }
+  document.querySelectorAll('.fb-vista button').forEach(b => b.addEventListener('click', () => {
+    if (!editando) mostrarVista(b.dataset.vista);
+  }));
+  $('btnVisaoGeral').addEventListener('click', () => selecionar(null));
+  // Aba escondida: para de renderizar o 3D
+  document.addEventListener('visibilitychange', () => f3d?.ligar(vista === '3d' && !document.hidden));
+
   $('btnEditar')?.addEventListener('click', () => {
+    if (vista === '3d') mostrarVista('2d');       // posicionar é na planta
     posicoesOriginais = maquinas.map(m => [m.id, m.x, m.y]);
     selecionar(null);
     modoEdicao(true);
@@ -262,7 +348,7 @@
     const posicoes = Object.fromEntries(maquinas.map(m => [m.id, [m.x, m.y]]));
     const r = await fetch('/api/fabrica/posicoes', { method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ posicoes }) });
-    if (r.ok) { modoEdicao(false); desenhar(); }
+    if (r.ok) { modoEdicao(false); desenhar(); f3d?.atualizar(maquinas, selecionada); }
     else alert('Não foi possível salvar as posições.');
   });
 
@@ -273,9 +359,14 @@
     if (!r.ok) return;
     maquinas = await r.json();
     resumo(); desenhar(); painel();
+    f3d?.atualizar(maquinas, selecionada);
   }, 60000);
 
   resumo(); desenhar(); painel();
+  // Abre na última vista usada; na primeira visita, em 3D se houver máquina com CAD
+  let salva = null;
+  try { salva = localStorage.getItem('fabrica.vista'); } catch (e) { /* armazenamento indisponível */ }
+  mostrarVista(salva === '2d' || salva === '3d' ? salva : (maquinas.some(m => m.cad) ? '3d' : '2d'));
 })();
 </script>
 {% endblock %}

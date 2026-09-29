@@ -171,7 +171,7 @@ export class Viewer3D {
       const mod = await import(`./familias/${modelo.familia}.js`);
       raiz = mod.construir(THREE);
     } else if (modelo.fonte === 'glb') {
-      raiz = await this._carregarGLB(modelo);
+      raiz = await Viewer3D.carregarGLB(modelo);
       if (modelo.internos) {
         // Peças internas acrescentadas em código (o CAD de fabricante é só a casca)
         const mod = await import(`./internos/${modelo.internos}.js`);
@@ -228,7 +228,11 @@ export class Viewer3D {
     return [...this.componentes.keys()];
   }
 
-  async _carregarGLB(modelo) {
+  /**
+   * Carrega o GLB do CAD e agrupa os nós em componentes (userData.componentId...).
+   * Estático: a vista 3D da fábrica usa o mesmo carregamento para montar várias máquinas.
+   */
+  static async carregarGLB(modelo) {
     const loader = new GLTFLoader();
     loader.setMeshoptDecoder(MeshoptDecoder);
     const gltf = await loader.loadAsync(modelo.arquivo);
