@@ -154,6 +154,9 @@ export class Viewer3D {
    * @param {Array<{component_id,name}>} catalogo componentes da máquina (nomes exibidos)
    */
   async carregar(modelo, catalogo = []) {
+    // Modelo novo começa montado e sem raio-X (as telas desligam os controles ao trocar)
+    this.raioXAtivo = false;
+    this.explosao = 0;
     if (this.raiz) {
       this.limparDestaques();
       this.limparPonto();
@@ -372,6 +375,7 @@ export class Viewer3D {
       const label = this._criarEtiqueta(c, d.numero ?? i + 1, d.severidade, d.texto);
       this.destaques.set(d.id, { cor, label });
     });
+    if (this.raioXAtivo) this._aplicarRaioX();
   }
 
   limparDestaques() {
@@ -382,6 +386,7 @@ export class Viewer3D {
     }
     this.destaques.clear();
     if (this.selecionado) this._aplicarSelecao(this.selecionado);
+    if (this.raioXAtivo) this._aplicarRaioX();
   }
 
   _criarEtiqueta(c, numero, sev, texto) {
@@ -464,6 +469,7 @@ export class Viewer3D {
     }
     this.selecionado = id;
     if (id) this._aplicarSelecao(id);
+    if (this.raioXAtivo) this._aplicarRaioX();
   }
 
   _aplicarSelecao(id) {
@@ -480,17 +486,32 @@ export class Viewer3D {
   nomeDe(id) { return this.componentes.get(id)?.nome || id; }
 
   // ── Raio-X e vista explodida ────────────────────────────────────────────
+  /**
+   * Raio-X: a máquina fica translúcida e a peça em foco (selecionada ou destacada)
+   * continua sólida, visível através do resto. Carcaças (casca) ficam quase invisíveis
+   * para revelar as peças internas. Funciona em qualquer CAD, com ou sem casca marcada.
+   */
   raioX(ativo) {
     this.raioXAtivo = ativo;
-    for (const c of this.componentes.values()) {
-      if (!c.casca) continue;
+    this._aplicarRaioX();
+  }
+
+  _aplicarRaioX() {
+    for (const [id, c] of this.componentes) {
+      const emFoco = id === this.selecionado || this.destaques.has(id);
+      const opacidade = !this.raioXAtivo || emFoco ? null : (c.casca ? 0.08 : 0.2);
+      const transp = opacidade !== null;
       c.meshes.forEach(m => {
         const o = m.userData._mat;
-        m.material.transparent = ativo ? true : o.transparent;
-        m.material.opacity = ativo ? 0.14 : o.opacity;
-        m.material.depthWrite = !ativo;
-        m.castShadow = !ativo;
-        m.material.needsUpdate = true;
+        if (!o) return;
+        const transparent = transp || o.transparent;
+        if (m.material.transparent !== transparent) {
+          m.material.transparent = transparent;
+          m.material.needsUpdate = true;
+        }
+        m.material.opacity = transp ? opacidade : o.opacity;
+        m.material.depthWrite = !transp;
+        m.castShadow = !transp;
       });
     }
   }
@@ -518,10 +539,14 @@ export class Viewer3D {
         new THREE.MeshStandardMaterial({ color: 0xDC2626, emissive: 0xDC2626, emissiveIntensity: 0.4 }));
       cabeca.position.y = 0.38;
       g.add(haste, cabeca);
-      this.scene.add(g);
       this.pino = g;
     }
+    // Pino preso à peça: acompanha a vista explodida (attach preserva a posição no mundo)
+    this.scene.attach(this.pino);
     this.pino.position.copy(ponto);
+    this.pino.rotation.set(0, 0, 0);
+    this.pino.scale.setScalar(1);
+    this.componentes.get(id)?.obj.attach(this.pino);
     this.pino.visible = true;
     this.pinoComponente = id;
   }
@@ -543,8 +568,12 @@ export class Viewer3D {
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, this.camera);
       if (!this.raiz) return null;
-      const hits = ray.intersectObject(this.raiz, true)
-        .filter(h => h.object.visible && !(this.raioXAtivo && this._ehCasca(h.object)));
+      let hits = ray.intersectObject(this.raiz, true).filter(h => h.object.visible);
+      // No raio-X a carcaça é "atravessada": vale a peça de dentro; sem nada dentro, vale a carcaça
+      if (this.raioXAtivo) {
+        const internas = hits.filter(h => !this._ehCasca(h.object));
+        if (internas.length) hits = internas;
+      }
       for (const h of hits) {
         let o = h.object;
         while (o && !o.userData.componentId) o = o.parent;

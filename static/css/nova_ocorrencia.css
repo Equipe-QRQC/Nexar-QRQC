@@ -237,4 +237,6 @@
   .page-CadastroOcorrencia .topbar-title { white-space: nowrap; }
   .no-palco-barra { padding: 8px 12px; }
   .no-palco-barra .v3d-fonte { display: none; }
+  .no-palco-barra .v3d-explodir { flex: 1 0 100%; }
+  .no-palco-barra .v3d-explodir input { flex: 1; width: auto; }
 }

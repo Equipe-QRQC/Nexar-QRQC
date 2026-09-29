@@ -52,6 +52,8 @@ function iniciarViewer() {
     $('btnRaioX').classList.toggle('ativo', ativo);
     viewer.raioX(ativo);
   });
+  $('sliderExplodir').addEventListener('input', (e) => viewer.explodir(e.target.value / 100));
+  $('sliderExplodir').addEventListener('change', () => viewer.enquadrar());   // reenquadra ao soltar
 }
 
 async function escolherMaquina(botao) {
@@ -83,6 +85,7 @@ async function escolherMaquina(botao) {
     await viewer.carregar(info.modelo, info.componentes);
     estado.componentes = info.componentes;
     $('btnRaioX').classList.remove('ativo');
+    $('sliderExplodir').value = 0;
     viewer.ativarMarcacao(true);
     montarListaPecas();
     $('etapaPeca').hidden = false;

@@ -45,7 +45,11 @@
       <span class="no-palco-titulo"><i class="fas fa-cube"></i> <span id="palcoTitulo"></span></span>
       <span class="v3d-fonte cad">CAD do fabricante</span>
       <button type="button" class="v3d-btn" id="btnEnquadrar" title="Enquadrar a máquina" aria-label="Enquadrar a máquina"><i class="fas fa-expand"></i></button>
-      <button type="button" class="v3d-btn" id="btnRaioX" title="Raio-X: ver peças internas"><i class="fas fa-x-ray"></i> Raio-X</button>
+      <button type="button" class="v3d-btn" id="btnRaioX" title="Raio-X: deixa a máquina translúcida para ver as peças internas"><i class="fas fa-x-ray"></i> Raio-X</button>
+      <label class="v3d-explodir" title="Desmontar: afasta as peças para ver cada uma">
+        <i class="fas fa-object-ungroup"></i>
+        <input type="range" id="sliderExplodir" min="0" max="100" value="0" aria-label="Vista explodida (desmontar peças)" />
+      </label>
     </div>
     <div class="no-stage" id="stage">
       <!-- Galeria: prévia de cada máquina até o usuário escolher uma -->
