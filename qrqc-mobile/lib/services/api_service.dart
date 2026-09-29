@@ -38,7 +38,14 @@ class ApiService {
     final salvo = prefs.getString(_keyBaseUrl);
     // Versões antigas gravavam o padrão http://127.0.0.1:5000, que nunca funciona no celular
     _baseUrl = (salvo == null || salvo == 'http://127.0.0.1:5000') ? servidorPadrao : salvo;
-    _token = await _storage.read(key: _keyToken);
+    try {
+      _token = await _storage.read(key: _keyToken).timeout(
+        const Duration(seconds: 4),
+        onTimeout: () => null,
+      );
+    } catch (_) {
+      _token = null;
+    }
   }
 
   String get baseUrl => _baseUrl;
