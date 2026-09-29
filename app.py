@@ -3568,8 +3568,12 @@ def maquinas_com_cad(conn) -> list[dict]:
     for r in conn.execute("SELECT id, nome, setor, modelo, fabricante, modelo_3d FROM maquinas ORDER BY nome"):
         cfg = modelos_3d.ler_config(r["modelo_3d"])
         if modelos_3d.eh_cad(cfg):
+            # Prévia gerada a partir do CAD (static/models3d/<slug>/preview.webp); CAD importado sem prévia usa o ícone
+            slug = cfg.get("modelo") or ""
+            tem_preview = slug and os.path.isfile(os.path.join(modelos_3d.PASTA_MODELOS, slug, "preview.webp"))
             lista.append({"id": r["id"], "nome": r["nome"], "setor": r["setor"], "modelo": r["modelo"],
-                          "fabricante": r["fabricante"], "modelo_3d_nome": cfg.get("nome") or "Modelo do fabricante"})
+                          "fabricante": r["fabricante"], "modelo_3d_nome": cfg.get("nome") or "Modelo do fabricante",
+                          "preview": f"/static/models3d/{slug}/preview.webp" if tem_preview else None})
     return lista
 
 

@@ -83,7 +83,8 @@ body {
 /* ── Sidebar ─────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   background: var(--sidebar-bg);
   position: fixed;
   top: 0; left: 0;
@@ -122,11 +123,17 @@ body {
 
 .sidebar-nav {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.2) transparent;
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+.sidebar-nav > * { flex-shrink: 0; }
 
 .nav-label {
   color: rgba(255,255,255,.3);

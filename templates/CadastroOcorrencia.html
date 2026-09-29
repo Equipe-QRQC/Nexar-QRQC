@@ -75,7 +75,11 @@
         {% endif %}
         {% for m in maquinas %}
         <button type="button" class="no-maquina" data-id="{{ m.id }}" data-nome="{{ m.nome }}" data-setor="{{ m.setor or '' }}">
+          {% if m.preview %}
+          <span class="no-maquina-ic no-maquina-prev"><img src="{{ m.preview }}" alt="" loading="lazy" /></span>
+          {% else %}
           <span class="no-maquina-ic"><i class="fas {{ 'fa-robot' if 'rob' in (m.modelo_3d_nome|lower) else 'fa-gears' }}"></i></span>
+          {% endif %}
           <span class="no-maquina-txt">
             <b>{{ m.nome }}</b>
             <small>{{ m.setor or 'Sem setor' }} · {{ m.modelo_3d_nome }}</small>
