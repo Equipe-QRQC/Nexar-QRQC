@@ -6,9 +6,15 @@ import 'screens/sensor_screen.dart';
 import 'screens/doc_scan_screen.dart';
 import 'screens/ocorrencias_screen.dart';
 import 'screens/settings_screen.dart';
+import 'services/api_service.dart';
+
+final navegador = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Sessão expirada em qualquer tela → volta ao login com o aviso (antes o app ficava preso)
+  ApiService.onSessaoExpirada = () => navegador.currentState?.pushNamedAndRemoveUntil(
+      '/login', (_) => false, arguments: 'Sua sessão expirou. Entre novamente.');
   runApp(const QrqcApp());
 }
 
@@ -19,6 +25,7 @@ class QrqcApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'QRQC Mobile',
+      navigatorKey: navegador,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: const ColorScheme.dark(

@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import '../widgets/analise_em_andamento.dart';
 import 'result_doc_screen.dart';
 
 class DocScanScreen extends StatefulWidget {
@@ -68,6 +69,29 @@ class _DocScanScreenState extends State<DocScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_analisando,
+      child: Stack(
+        children: [
+          _tela(context),
+          if (_analisando)
+            const Positioned.fill(
+              child: AnaliseEmAndamento(
+                cor: Color(0xFF8B5CF6),
+                segundosEsperados: 15,
+                etapas: [
+                  (0, 'Enviando a foto do documento…'),
+                  (3, 'A Nexa IA está lendo o documento…'),
+                  (8, 'Conferindo campos, cálculos e assinaturas…'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tela(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A1628),
       appBar: AppBar(

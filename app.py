@@ -14,7 +14,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from google import genai
 from google.genai import types as genai_types
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import smtplib
@@ -2282,43 +2282,35 @@ def _sim(valor) -> bool:
     return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
 
 
-@app.route("/registrar_ocorrencia", methods=["POST"])
-@login_required
-def registrar_ocorrencia():
+def _campos_ocorrencia(dados, nome_operador: str) -> tuple[dict | None, str | None]:
     """
-    Registra a ocorrência apontada no 3D, gera o diagnóstico e abre a página da
-    ocorrência. Exige máquina com CAD 3D e a peça tocada no modelo.
+    Valida e monta a ocorrência guiada (máquina com CAD → peça → sintoma → parou? risco?),
+    igual para a web (formulário) e o app (JSON). Retorna (campos, None) ou (None, erro).
     """
-    def erro(msg):
-        logger.warning(f"[ocorrencia] {msg}")
-        flash(msg, "danger")
-        destino = url_for("CadastroOcorrencia", maquina=request.form.get("maquina_id") or None)
-        return redirect(destino)
-
     try:
-        maquina_id = int(request.form.get("maquina_id") or 0)
-    except ValueError:
+        maquina_id = int(dados.get("maquina_id") or 0)
+    except (TypeError, ValueError):
         maquina_id = 0
     if not maquina_tem_cad(maquina_id):
-        return erro("Escolha uma máquina com modelo CAD 3D.")
+        return None, "Escolha uma máquina com modelo CAD 3D."
 
-    componente = (request.form.get("componente_apontado") or "").strip()[:60]
+    componente = str(dados.get("componente_apontado") or "").strip()[:60]
     componente_nome = _nome_componente(maquina_id, componente)
     if not componente_nome:
-        return erro("Toque na peça do modelo 3D onde está o problema.")
+        return None, "Toque na peça do modelo 3D onde está o problema."
 
-    sintoma = (request.form.get("sintoma") or "").strip()[:30]
+    sintoma = str(dados.get("sintoma") or "").strip()[:30]
     sintoma_nome = diagnostico_local.nome_sintoma(sintoma)
     if not sintoma_nome:
-        return erro("Escolha o que está acontecendo com a peça.")
-    texto = (request.form.get("texto") or "").strip()[:2000]
+        return None, "Escolha o que está acontecendo com a peça."
+    texto = str(dados.get("texto") or "").strip()[:2000]
     if sintoma == "outro" and len(texto) < 5:
-        return erro("Descreva o que você viu.")
+        return None, "Descreva o que você viu."
 
-    parada = _sim(request.form.get("maquina_parada"))
-    risco = _sim(request.form.get("risco_pessoas"))
-    codigo_alarme = (request.form.get("codigo_alarme") or "").strip()[:40]
-    impacto = request.form.get("nivel_impacto") or ""
+    parada = _sim(dados.get("maquina_parada"))
+    risco = _sim(dados.get("risco_pessoas"))
+    codigo_alarme = str(dados.get("codigo_alarme") or "").strip()[:40]
+    impacto = dados.get("nivel_impacto") or ""
     if impacto not in ("Alto", "Médio", "Baixo"):
         impacto = "Alto" if (parada or risco) else "Médio"
     tipo = "Segurança" if risco else ("Qualidade" if sintoma == "medida" else "Manutenção")
@@ -2341,10 +2333,10 @@ def registrar_ocorrencia():
     if texto:
         detalhes += ["", texto]
 
-    campos = {
+    return {
         "maquina_id": maquina_id,
         "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "nome_operador": current_user.nome,
+        "nome_operador": nome_operador,
         "setor_area": (maq["setor"] if maq else "") or "",
         "descricao": descricao,
         "tipo_ocorrencia": tipo,
@@ -2354,7 +2346,29 @@ def registrar_ocorrencia():
         "componente_apontado": componente,
         "componente_apontado_nome": componente_nome,
         "sintoma": sintoma, "maquina_parada": parada, "risco_pessoas": risco,
-    }
+    }, None
+
+
+@app.route("/registrar_ocorrencia", methods=["POST"])
+@login_required
+def registrar_ocorrencia():
+    """
+    Registra a ocorrência apontada no 3D, gera o diagnóstico e abre a página da
+    ocorrência. Exige máquina com CAD 3D e a peça tocada no modelo.
+    """
+    def erro(msg):
+        logger.warning(f"[ocorrencia] {msg}")
+        flash(msg, "danger")
+        destino = url_for("CadastroOcorrencia", maquina=request.form.get("maquina_id") or None)
+        return redirect(destino)
+
+    campos, msg = _campos_ocorrencia(request.form, current_user.nome)
+    if msg:
+        return erro(msg)
+    maquina_id = campos["maquina_id"]
+    descricao, tipo, impacto = campos["descricao"], campos["tipo_ocorrencia"], campos["nivel_impacto"]
+    componente, sintoma = campos["componente_apontado"], campos["sintoma"]
+    parada, risco = campos["maquina_parada"], campos["risco_pessoas"]
     diag = diagnosticar_ocorrencia(campos)
     anotacoes_json = json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None
 
@@ -3090,6 +3104,23 @@ def sensor_componente_3d(maquina_id, anomalias: list[dict]) -> str | None:
     return None
 
 
+def _abrir_foto_sensor(caminho: str):
+    """
+    Abre a foto do Sensor na orientação real. Celular grava a foto "deitada" com a tag
+    EXIF de rotação: sem isso a IA analisava a imagem girada e as caixas não batiam com
+    a foto mostrada no app. A foto é regravada já girada — IA, tela e laudo veem a mesma.
+    """
+    img = Image.open(caminho)
+    if img.getexif().get(0x0112, 1) != 1:            # 0x0112 = Orientation
+        img = ImageOps.exif_transpose(img)
+        if img.mode in ("RGBA", "P") and caminho.lower().endswith((".jpg", ".jpeg")):
+            img = img.convert("RGB")
+        img.save(caminho, quality=92)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+    return img
+
+
 def _componente_json(maquina_id, cid):
     nome = _nome_componente(maquina_id, cid) if cid else None
     return {"id": cid, "nome": nome} if nome else None
@@ -3153,9 +3184,7 @@ def sensor_analisar():
 
     # Abre a imagem para a IA
     try:
-        img_obj = Image.open(caminho)
-        if img_obj.mode in ("RGBA", "P"):
-            img_obj = img_obj.convert("RGB")
+        img_obj = _abrir_foto_sensor(caminho)
     except Exception as e:
         logger.warning(f"[sensor] falha ao abrir imagem {caminho}: {e}")
         return jsonify({"erro": "Não foi possível processar a imagem."}), 400
@@ -3210,6 +3239,10 @@ def sensor_analisar():
 @app.route("/api/sensor/<int:percepcao_id>/confirmar", methods=["POST"])
 @login_required
 def sensor_confirmar(percepcao_id: int):
+    return _confirmar_percepcao(percepcao_id, current_user.id)
+
+
+def _confirmar_percepcao(percepcao_id: int, user_id: int):
     """
     Operador confirma ou corrige a percepção. Isso a transforma em dado
     rotulado — a base do dataset proprietário que treina a IA ao longo do tempo.
@@ -3227,13 +3260,17 @@ def sensor_confirmar(percepcao_id: int):
     )
     conn.commit()
     conn.close()
-    logger.info(f"[sensor] percepção {percepcao_id} confirmada por user_id={current_user.id}")
+    logger.info(f"[sensor] percepção {percepcao_id} confirmada por user_id={user_id}")
     return jsonify({"ok": True, "id": percepcao_id})
 
 
 @app.route("/sensor/<int:percepcao_id>/laudo.pdf")
 @login_required
 def sensor_laudo_pdf(percepcao_id: int):
+    return _laudo_sensor_pdf(percepcao_id)
+
+
+def _laudo_sensor_pdf(percepcao_id: int):
     """Gera o laudo de inspeção visual em PDF, com a foto anotada e o diagnóstico."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
@@ -3969,6 +4006,10 @@ def api_componente_historico(mid: int, cid: str):
 @app.route("/api/maquinas/<int:mid>/componentes/<cid>/sintomas")
 @login_required
 def api_componente_sintomas(mid: int, cid: str):
+    return _sintomas_da_peca(mid, cid)
+
+
+def _sintomas_da_peca(mid: int, cid: str):
     """Sintomas possíveis para a peça (pelo tipo dela) + soluções que já funcionaram."""
     conn = get_db()
     m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
@@ -4249,6 +4290,42 @@ def mobile_maquinas():
     return jsonify([{"id": m["id"], "nome": m["nome"], "setor": m["setor"]} for m in lista])
 
 
+@app.route("/api/mobile/maquinas/<int:mid>/componentes")
+@csrf.exempt
+@_mobile_auth
+def mobile_componentes(mid: int):
+    """Peças do CAD da máquina: no app o operador escolhe numa lista (na web, tocando no 3D)."""
+    conn = get_db()
+    m = conn.execute("SELECT modelo_3d FROM maquinas WHERE id = ?", (mid,)).fetchone()
+    conn.close()
+    cfg = modelos_3d.ler_config(m["modelo_3d"]) if m else None
+    if not modelos_3d.eh_cad(cfg):
+        return jsonify({"erro": "Máquina sem modelo CAD 3D."}), 404
+    return jsonify([{"id": c["component_id"], "nome": c["name"], "tipo": c["type"],
+                     "descricao": c["description"]} for c in modelos_3d.componentes_da_config(cfg)])
+
+
+@app.route("/api/mobile/maquinas/<int:mid>/componentes/<cid>/sintomas")
+@csrf.exempt
+@_mobile_auth
+def mobile_componente_sintomas(mid: int, cid: str):
+    return _sintomas_da_peca(mid, cid)
+
+
+@app.route("/api/mobile/sensor/<int:percepcao_id>/confirmar", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+def mobile_sensor_confirmar(percepcao_id: int):
+    return _confirmar_percepcao(percepcao_id, request.mobile_user["user_id"])
+
+
+@app.route("/api/mobile/sensor/<int:percepcao_id>/laudo.pdf")
+@csrf.exempt
+@_mobile_auth
+def mobile_sensor_laudo_pdf(percepcao_id: int):
+    return _laudo_sensor_pdf(percepcao_id)
+
+
 @app.route("/api/mobile/ocorrencias")
 @csrf.exempt
 @_mobile_auth
@@ -4278,48 +4355,37 @@ def mobile_ocorrencias_post():
     diagnóstico da IA em segundo plano — ele aparece na web ao abrir a ocorrência.
     """
     data = request.get_json(silent=True) or {}
-    maquina_id = data.get("maquina_id")
-    descricao = (data.get("descricao") or "").strip()
-    if not maquina_id or not descricao:
-        return jsonify({"erro": "maquina_id e descricao são obrigatórios"}), 400
+    if not data.get("sintoma"):
+        # Versão antiga do app (tipo/impacto livres, sem peça nem "parou?"): gravava dado incompleto
+        return jsonify({"erro": "Atualize o app QRQC para registrar ocorrências."}), 426
+    # Mesma regra da web: peça do CAD, sintoma, parou?, risco? → impacto e tipo automáticos
+    campos, msg = _campos_ocorrencia(data, request.mobile_user["nome"])
+    if msg:
+        return jsonify({"erro": msg}), 422
+    maquina_id = campos["maquina_id"]
 
     conn = get_db()
-    maq = conn.execute("SELECT setor FROM maquinas WHERE id = ?", (maquina_id,)).fetchone()
-    if not maq:
-        conn.close()
-        return jsonify({"erro": "Máquina não encontrada"}), 404
-    if not maquina_tem_cad(maquina_id):
-        conn.close()
-        return jsonify({"erro": "Esta máquina não tem modelo CAD 3D e não pode receber ocorrências."}), 422
-    componente = (data.get("componente_id") or "").strip()[:60] or None
-    componente_nome = _nome_componente(maquina_id, componente)
-    if not componente_nome:
-        componente = None
-    campos = {
-        "maquina_id": maquina_id,
-        "data_ocorrencia": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "setor_area": (data.get("setor_area") or maq["setor"] or "").strip(),
-        "descricao": descricao,
-        "tipo_ocorrencia": data.get("tipo_ocorrencia") or "Manutenção",
-        "nivel_impacto": data.get("nivel_impacto") or "Médio",
-        "problema_recorrente": data.get("problema_recorrente") or "Não informado",
-        "detalhamento_tecnico": (data.get("detalhamento_tecnico") or "").strip(),
-        "componente_apontado": componente,
-        "componente_apontado_nome": componente_nome,
-    }
     cur = conn.execute(
         """INSERT INTO ocorrencias
            (maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
             tipo_ocorrencia, nivel_impacto, problema_recorrente, detalhamento_tecnico,
-            componente_apontado, ia_status, status, data_registro)
-           VALUES (?,?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
-        (maquina_id, campos["data_ocorrencia"], request.mobile_user["nome"],
-         campos["setor_area"], descricao, campos["tipo_ocorrencia"],
+            componente_apontado, sintoma, maquina_parada, risco_pessoas,
+            ia_status, status, data_registro)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pendente','Aberta',datetime('now'))""",
+        (maquina_id, campos["data_ocorrencia"], campos["nome_operador"],
+         campos["setor_area"], campos["descricao"], campos["tipo_ocorrencia"],
          campos["nivel_impacto"], campos["problema_recorrente"], campos["detalhamento_tecnico"],
-         componente),
+         campos["componente_apontado"], campos["sintoma"],
+         int(campos["maquina_parada"]), int(campos["risco_pessoas"])),
     )
-    conn.commit()
     oc_id = cur.lastrowid
+    try:
+        inspecao_id = int(data.get("inspecao_id") or 0)
+    except (TypeError, ValueError):
+        inspecao_id = 0
+    if inspecao_id:                                  # ocorrência aberta a partir do Sensor Visual
+        conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (oc_id, inspecao_id))
+    conn.commit()
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
 
@@ -4627,9 +4693,7 @@ def mobile_sensor_analisar():
     imagem_url = f"/{caminho.replace(os.sep, '/')}"
 
     try:
-        img_obj = Image.open(caminho)
-        if img_obj.mode in ("RGBA", "P"):
-            img_obj = img_obj.convert("RGB")
+        img_obj = _abrir_foto_sensor(caminho)
     except Exception:
         return jsonify({"erro": "Não foi possível processar a imagem."}), 400
 

@@ -66,6 +66,9 @@ class Anomalia {
 }
 
 class ResultadoSensor {
+  final int? id;                 // nº da inspeção: validar, laudo PDF e abrir ocorrência
+  final int? maquinaId;
+  final String? componenteId;    // peça do CAD mais provável, quando a máquina foi informada
   final List<Anomalia> anomalias;
   final int? score;
   final String severidadeMax;
@@ -74,6 +77,9 @@ class ResultadoSensor {
   final String imagemUrl;
 
   const ResultadoSensor({
+    required this.id,
+    required this.maquinaId,
+    required this.componenteId,
     required this.anomalias,
     required this.score,
     required this.severidadeMax,
@@ -83,6 +89,9 @@ class ResultadoSensor {
   });
 
   factory ResultadoSensor.fromJson(Map<String, dynamic> j) => ResultadoSensor(
+        id: j['id'] as int?,
+        maquinaId: j['maquina_id'] as int?,
+        componenteId: (j['componente_3d'] as Map<String, dynamic>?)?['id'] as String?,
         anomalias: (j['anomalias'] as List? ?? [])
             .map((e) => Anomalia.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -92,6 +101,40 @@ class ResultadoSensor {
         modelo: j['modelo'] as String? ?? '',
         imagemUrl: j['imagem_url'] as String? ?? '',
       );
+
+  /// Texto para abrir uma ocorrência a partir desta inspeção.
+  String textoParaOcorrencia() {
+    final linhas = ['Inspeção por foto nº ${id ?? '—'} — Índice de Saúde ${score ?? '—'}/100.'];
+    for (final (i, a) in anomalias.indexed) {
+      linhas.add('${i + 1}. ${a.rotulo} (${a.severidade}) em ${a.componente}: ${a.descricao}'
+          '${a.causaProvavel.isNotEmpty ? ' Possível causa: ${a.causaProvavel}' : ''}');
+    }
+    return linhas.join('\n');
+  }
+}
+
+class Componente {
+  final String id;
+  final String nome;
+  final String descricao;
+
+  const Componente({required this.id, required this.nome, required this.descricao});
+
+  factory Componente.fromJson(Map<String, dynamic> j) => Componente(
+        id: j['id'] as String,
+        nome: j['nome'] as String? ?? '',
+        descricao: j['descricao'] as String? ?? '',
+      );
+}
+
+class Sintoma {
+  final String id;
+  final String nome;
+
+  const Sintoma({required this.id, required this.nome});
+
+  factory Sintoma.fromJson(Map<String, dynamic> j) =>
+      Sintoma(id: j['id'] as String, nome: j['nome'] as String? ?? '');
 }
 
 class ProblemaDocumento {

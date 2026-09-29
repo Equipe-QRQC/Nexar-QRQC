@@ -14,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passCtrl = TextEditingController();
   bool _loading = false;
   bool _obscure = true;
+  bool _mostrarServidor = false;   // o servidor já vem configurado; só quem testa na rede local troca
   String? _error;
 
   @override
@@ -21,6 +22,24 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _urlCtrl.text = ApiService().baseUrl;
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Aviso vindo de fora (ex.: sessão expirada)
+    final aviso = ModalRoute.of(context)?.settings.arguments;
+    if (aviso is String && _error == null) {
+      _error = aviso;
+      // A tela de onde o usuário veio também mostrou o erro numa barra: fica só o aviso daqui
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ScaffoldMessenger.of(context).clearSnackBars();
+      });
+    }
+  }
+
+  String get _hostServidor => Uri.tryParse(_urlCtrl.text.trim())?.host.isNotEmpty == true
+      ? Uri.parse(_urlCtrl.text.trim()).host
+      : _urlCtrl.text.trim();
 
   @override
   void dispose() {
@@ -74,25 +93,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // Servidor
-                  _field(
-                    controller: _urlCtrl,
-                    label: 'Endereço do servidor',
-                    hint: 'http://192.168.1.100:5000',
-                    icon: Icons.dns_outlined,
-                    keyboard: TextInputType.url,
-                    validator: (v) =>
-                        v == null || v.isEmpty ? 'Informe o servidor' : null,
-                  ),
-                  const SizedBox(height: 16),
-
                   // Usuário
                   _field(
                     controller: _userCtrl,
-                    label: 'Usuário',
+                    label: 'E-mail',
                     icon: Icons.person_outline,
+                    keyboard: TextInputType.emailAddress,
                     validator: (v) =>
-                        v == null || v.isEmpty ? 'Informe o usuário' : null,
+                        v == null || v.trim().isEmpty ? 'Informe o e-mail' : null,
                   ),
                   const SizedBox(height: 16),
 
@@ -172,6 +180,26 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                     ),
                   ),
+                  const SizedBox(height: 20),
+
+                  // Servidor: recolhido, só para quem testa em outro endereço
+                  if (_mostrarServidor)
+                    _field(
+                      controller: _urlCtrl,
+                      label: 'Endereço do servidor',
+                      hint: ApiService.servidorPadrao,
+                      icon: Icons.dns_outlined,
+                      keyboard: TextInputType.url,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Informe o servidor' : null,
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: () => setState(() => _mostrarServidor = true),
+                      icon: const Icon(Icons.dns_outlined, size: 16, color: Colors.white54),
+                      label: Text('Servidor: $_hostServidor · Alterar',
+                          style: const TextStyle(color: Colors.white54, fontSize: 13)),
+                    ),
                 ],
               ),
             ),

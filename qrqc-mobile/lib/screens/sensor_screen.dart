@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../models/models.dart';
+import '../widgets/analise_em_andamento.dart';
 import 'result_sensor_screen.dart';
 
 class SensorScreen extends StatefulWidget {
@@ -63,7 +64,7 @@ class _SensorScreenState extends State<SensorScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ResultSensorScreen(resultado: resultado),
+          builder: (_) => ResultSensorScreen(resultado: resultado, foto: _foto!),
         ),
       );
     } catch (e) {
@@ -86,6 +87,31 @@ class _SensorScreenState extends State<SensorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Durante a análise o "voltar" fica bloqueado: sair perderia o resultado
+    return PopScope(
+      canPop: !_analisando,
+      child: Stack(
+        children: [
+          _tela(context),
+          if (_analisando)
+            const Positioned.fill(
+              child: AnaliseEmAndamento(
+                cor: Color(0xFF0EA5E9),
+                segundosEsperados: 20,
+                etapas: [
+                  (0, 'Enviando a foto…'),
+                  (3, 'A Nexa IA está examinando o equipamento…'),
+                  (9, 'Localizando cada anomalia na foto…'),
+                  (16, 'Calculando o Índice de Saúde e montando o laudo…'),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tela(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A1628),
       appBar: AppBar(
