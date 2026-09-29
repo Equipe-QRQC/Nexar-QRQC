@@ -1252,7 +1252,8 @@ def _should_try_next_model(err: Exception) -> bool:
     s_low = s.lower()
     indicadores = [
         "429", "RESOURCE_EXHAUSTED", "quota", "rate limit", "rate_limit_exceeded",
-        "404", "NOT_FOUND", "is not found", "is not supported", "model_not_found",
+        "404", "NOT_FOUND", "is not found", "is not supported", "model_not_found", "does not exist",
+        "unsupported_parameter", "unsupported_value",
         "503", "UNAVAILABLE", "overloaded",
         "DEADLINE_EXCEEDED", "timeout",
     ]
@@ -3162,7 +3163,7 @@ def sensor_analisar():
     resultado = sensor_visual.detectar_anomalias(
         client=_sensor_client,
         img_obj=img_obj,
-        modelos=["gpt-4o", "gpt-4o-mini"],
+        modelos=sensor_visual.MODELOS_PADRAO,
         should_try_next=_should_try_next_model,
         contexto=contexto,
     )
@@ -4635,7 +4636,7 @@ def mobile_sensor_analisar():
     resultado = sensor_visual.detectar_anomalias(
         client=_sensor_client,
         img_obj=img_obj,
-        modelos=["gpt-4o", "gpt-4o-mini"],
+        modelos=sensor_visual.MODELOS_PADRAO,
         should_try_next=_should_try_next_model,
         contexto=contexto,
     )

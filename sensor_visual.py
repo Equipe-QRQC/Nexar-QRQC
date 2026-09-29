@@ -1,14 +1,14 @@
 """
 Sensor Visual — motor de percepção industrial aumentada.
 
-Transforma a câmera de um celular + a IA multimodal (Gemini) num "sensor
+Transforma a câmera de um celular + a IA multimodal (OpenAI) num "sensor
 virtual": o operador tira uma foto do equipamento e a IA detecta anomalias
 visuais (trinca, vazamento, corrosão, desalinhamento…), classifica a
 severidade e calcula um Índice de Saúde do ponto inspecionado — sem qualquer
 hardware de sensoriamento instalado.
 
 Este módulo contém apenas a lógica pura (taxonomia, schemas, detecção e
-pontuação). A integração com Flask, o banco e o cliente Gemini fica em app.py,
+pontuação). A integração com Flask, o banco e o cliente OpenAI fica em app.py,
 que injeta o `client` já inicializado. Assim o módulo é testável isoladamente.
 """
 
@@ -17,11 +17,12 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import re
 from io import BytesIO
 from typing import Literal
 
-from PIL import ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger("nexar.sensor_visual")
@@ -103,16 +104,26 @@ class DeteccaoAnomalias(BaseModel):
     anomalias: list[AnomaliaDetectada]
 
 
+# Modelos de visão, do preferido ao reserva (cota/indisponibilidade → próximo).
+# Comparados numa foto real: gpt-5.5 e gpt-5.4 põem as caixas sobre o defeito; gpt-4.1 e
+# gpt-4o erram a posição (caixa do volante fora dele, base "no chão"). gpt-5.5 ~15 s.
+MODELOS_PADRAO = ["gpt-5.5", "gpt-5.4", "gpt-4.1"]
+
+# Antes o prompt pedia um inspetor "conservador" que devolvesse [] na dúvida: o modelo
+# via a ferrugem (confirmado numa pergunta aberta) e mesmo assim devolvia lista vazia.
 _SYSTEM_SENSOR = (
-    "Você é um inspetor sênior de manutenção industrial com visão computacional. "
-    "Analisa FOTOS REAIS de equipamentos (não diagramas) e localiza anomalias físicas "
-    "visíveis com bounding boxes precisos no formato [ymin, xmin, ymax, xmax] em escala 0-1000. "
-    "É rigoroso e conservador: só reporta o que realmente aparece na imagem e nunca "
-    "inventa coordenadas. Se a foto não mostra defeito, retorna anomalias: []."
+    "Você é um inspetor sênior de manutenção industrial fazendo a inspeção visual de rotina "
+    "de um equipamento a partir de uma FOTO REAL. Seu trabalho é encontrar e localizar TODA "
+    "condição anormal visível que um técnico de manutenção anotaria no relatório: de defeitos "
+    "críticos (trinca, vazamento, peça quebrada) a sinais de degradação e má conservação "
+    "(ferrugem, corrosão, tinta descascada, sujeira, graxa ou óleo acumulado, desgaste). "
+    "Você não inventa: cada anomalia precisa estar visível na foto, com a caixa sobre ela."
 )
 
 _JSON_SCHEMA_HINT = (
-    '{"anomalias": [{"box_2d": [ymin,xmin,ymax,xmax], '
+    '{"equipamento": "o que é o equipamento", '
+    '"condicao_geral": "estado geral de conservação em 1-2 frases", '
+    '"anomalias": [{"caixa": {"x_min": 0, "y_min": 0, "x_max": 0, "y_max": 0}, '
     '"classe": "string", "rotulo": "string", '
     '"severidade": "critico|atencao|info", "confianca": 0.0, '
     '"componente": "string", "descricao": "string", '
@@ -169,25 +180,40 @@ def _prompt_deteccao(contexto: str) -> str:
     classes = ", ".join(f"'{k}'" for k in TAXONOMIA_DEFEITOS)
     ctx = f"\nCONTEXTO INFORMADO PELO OPERADOR: {contexto.strip()}\n" if contexto and contexto.strip() else ""
     return (
-        "Inspecione a FOTO REAL de um equipamento industrial em anexo.\n"
+        "Inspecione a FOTO REAL do equipamento em anexo.\n"
         f"{ctx}\n"
-        "TAREFA: localize anomalias físicas VISÍVEIS e devolva bounding boxes precisos.\n\n"
-        "REGRAS:\n"
-        "1. Reporte apenas defeitos realmente visíveis na foto. Se não houver defeito, "
-        "retorne anomalias: [].\n"
-        f"2. Classifique cada anomalia usando uma destas classes: {classes}. "
-        "Se nenhuma encaixar bem, use a mais próxima.\n"
-        "3. box_2d = [ymin, xmin, ymax, xmax] em 0-1000, cobrindo EXATAMENTE a região do "
-        "defeito — nunca o fundo.\n"
-        "4. confianca: seja honesto (0.0 a 1.0). Detalhe borrado ou ambíguo → confiança baixa.\n"
-        "5. Máximo de 6 anomalias, priorizando as mais severas.\n"
-        "6. Para cada anomalia preencha 1 frase técnica em cada campo:\n"
-        "   - descricao: O QUE foi observado\n"
-        "   - causa_provavel: O PORQUÊ — a causa raiz mais provável do defeito "
-        "(ex: 'lubrificação deficiente', 'desalinhamento do eixo', 'vedação ressecada')\n"
-        "   - recomendacao: A AÇÃO corretiva recomendada\n"
-        "7. NÃO repita a mesma anomalia. Se o mesmo defeito aparece em vários pontos "
-        "próximos ou no mesmo componente, consolide em UMA única entrada.\n\n"
+        "A foto tem uma GRADE DE REFERÊNCIA desenhada por cima, com as coordenadas de 0 a 1000 "
+        "escritas nas bordas (x na horizontal, da esquerda para a direita; y na vertical, de cima "
+        "para baixo). A grade NÃO faz parte do equipamento: use-a só para medir as caixas.\n\n"
+        "COMO INSPECIONAR:\n"
+        "1. Primeiro identifique o equipamento (campo 'equipamento') e descreva o estado geral de "
+        "conservação (campo 'condicao_geral').\n"
+        "2. Depois varra o equipamento parte por parte: estrutura/carcaça, superfícies metálicas e "
+        "pintura, fixações e parafusos, partes móveis (eixos, polias, volantes, correias, "
+        "engrenagens), vedações e conexões, parte elétrica (cabos, painéis) e a base/piso em volta.\n"
+        "3. Reporte em 'anomalias' toda condição anormal visível que um técnico anotaria: ferrugem, "
+        "oxidação, corrosão, tinta descascada, sujeira/graxa/poeira acumulada, óleo acumulado ou "
+        "manchas de óleo, desgaste, peça quebrada, solta ou faltante, cabo exposto, vazamento, trinca, "
+        "deformação. Equipamento velho e mal conservado NÃO está normal: reporte a degradação visível.\n"
+        "4. Só devolva anomalias: [] se o equipamento estiver visivelmente limpo, íntegro e bem "
+        "conservado.\n"
+        "5. NÃO INVENTE. Cada anomalia precisa de evidência visual clara (cor de ferrugem, tinta "
+        "faltando, material acumulado, fluido, peça rompida...). NÃO são defeitos: sombra, reflexo, "
+        "brilho, a cor ou textura natural do material, marcas de fabricação e detalhes de projeto "
+        "(aletas, rasgos de ventilação, parafusos, etiquetas íntegras). Reporte só o que está NO "
+        "equipamento — nunca no fundo, na parede ou na bancada (exceto fluido/resíduo que saiu dele). "
+        "Na dúvida sobre SE algo é defeito, não reporte; na dúvida sobre a GRAVIDADE, suba.\n\n"
+        "REGRAS DE CADA ANOMALIA:\n"
+        f"- classe: uma destas: {classes}. Se nenhuma encaixar bem, use a mais próxima.\n"
+        "- caixa: x_min, y_min, x_max, y_max em 0-1000 (leia na grade), envolvendo JUSTO a região "
+        "afetada, não o equipamento inteiro nem o fundo. Defeito espalhado (ex.: ferrugem na "
+        "carcaça toda): uma caixa na região mais afetada. Regiões distintas: entradas distintas.\n"
+        "- confianca: honesta, de 0.0 a 1.0. Detalhe borrado ou ambíguo → confiança baixa.\n"
+        "- componente: a parte afetada, com o nome técnico (ex.: 'volante', 'base', 'mancal').\n"
+        "- descricao: O QUE foi observado (1 frase). causa_provavel: o PORQUÊ, a causa raiz mais "
+        "provável (1 frase técnica). recomendacao: a AÇÃO corretiva (1 frase acionável).\n"
+        "- Máximo de 8 anomalias, as mais relevantes primeiro. NÃO repita: o mesmo defeito no mesmo "
+        "componente vira UMA entrada.\n\n"
         "CRITÉRIOS DE SEVERIDADE (seja RIGOROSO — na dúvida, suba a severidade):\n"
         "- critico: vazamento ATIVO (óleo/fluido escorrendo ou gotejando), trinca/fissura, "
         "superaquecimento, deformação/empeno, peça faltante, falha em solda. Risco de parada, "
@@ -228,9 +254,9 @@ def detectar_anomalias(
             "modelo": None, "status": "offline",
         }
 
-    # Converte imagem para JPEG base64
+    # A IA recebe a foto com a grade de coordenadas (a foto salva continua limpa)
     buf = BytesIO()
-    img_obj.convert("RGB").save(buf, format="JPEG", quality=90)
+    _com_grade(img_obj).save(buf, format="JPEG", quality=90)
     b64 = base64.b64encode(buf.getvalue()).decode()
 
     user_prompt = _prompt_deteccao(contexto) + f"\n\nRetorne APENAS JSON válido neste formato:\n{_JSON_SCHEMA_HINT}"
@@ -251,24 +277,16 @@ def detectar_anomalias(
                     ]},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
-                max_tokens=1500,
+                timeout=50,     # API travada → erro "timeout" → próximo modelo (padrão seria 10 min)
+                **_parametros_modelo(modelo),
             )
             content = (response.choices[0].message.content or "").strip()
-            parsed: DeteccaoAnomalias | None = None
-            try:
-                raw = json.loads(content)
-                if isinstance(raw, list):
-                    raw = {"anomalias": raw}
-                parsed = DeteccaoAnomalias(**raw)
-            except Exception:
-                parsed = _parse_json_fallback(content)
-
-            if parsed is None:
-                logger.warning(f"[sensor/{modelo}] resposta sem JSON parseável")
+            itens = _ler_anomalias(content)
+            if itens is None:
+                logger.warning(f"[sensor/{modelo}] resposta sem JSON parseável: {content[:200]!r}")
                 continue
 
-            anomalias = _validar_anomalias(parsed.anomalias)
+            anomalias = _validar_anomalias(itens)
             score = calcular_indice_saude(anomalias)
             sev = severidade_predominante(anomalias)
             status = "ok" if anomalias else "sem_anomalia"
@@ -294,6 +312,119 @@ def detectar_anomalias(
         "resumo": "Não foi possível analisar a foto agora. Tente novamente em alguns minutos.",
         "modelo": None, "status": "erro",
     }
+
+
+def _parametros_modelo(modelo: str) -> dict:
+    """Modelos de raciocínio (gpt-5.x, o-series) não aceitam temperature/max_tokens."""
+    if modelo.startswith(("gpt-5", "o3", "o4")):
+        # O limite inclui os tokens de raciocínio: folga para não cortar o JSON
+        return {"reasoning_effort": "low", "max_completion_tokens": 8000}
+    return {"temperature": 0.2, "max_completion_tokens": 2500}
+
+
+def _com_grade(img):
+    """Cópia da foto com grade de referência 0-1000 (linhas a cada 100, números nas bordas)."""
+    base = img.convert("RGB")
+    W, H = base.size
+    camada = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(camada)
+    esp = max(1, round(min(W, H) / 500))
+    fonte = _carregar_fonte(max(10, round(min(W, H) * 0.028)))
+    for v in range(100, 1000, 100):
+        x, y = v / 1000 * W, v / 1000 * H
+        # Linha dupla (escura + clara) aparece sobre fundo claro e escuro
+        d.line([(x, 0), (x, H)], fill=(0, 0, 0, 90), width=esp + 1)
+        d.line([(x, 0), (x, H)], fill=(255, 255, 255, 110), width=esp)
+        d.line([(0, y), (W, y)], fill=(0, 0, 0, 90), width=esp + 1)
+        d.line([(0, y), (W, y)], fill=(255, 255, 255, 110), width=esp)
+    for v in range(100, 1000, 100):
+        x, y = v / 1000 * W, v / 1000 * H
+        for (px, py) in ((x + 3, 2), (2, y + 2)):          # x no topo, y na esquerda
+            t = str(v)
+            l, t0, r, b = d.textbbox((px, py), t, font=fonte)
+            d.rectangle([l - 2, t0 - 1, r + 2, b + 1], fill=(15, 23, 42, 170))
+            d.text((px, py), t, fill=(255, 255, 255, 255), font=fonte)
+    return Image.alpha_composite(base.convert("RGBA"), camada).convert("RGB")
+
+
+def _num(v, padrao=0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _caixa_do_item(item: dict) -> list[int] | None:
+    """
+    Caixa do item em [ymin, xmin, ymax, xmax] 0-1000. Aceita {"caixa": {x_min, y_min,
+    x_max, y_max}} ou "box_2d" [ymin, xmin, ymax, xmax]; valores em 0-1 são escalados,
+    cantos trocados são ordenados e tudo é limitado à foto.
+    """
+    c = item.get("caixa")
+    if isinstance(c, dict):
+        vals = [_num(c.get(k), None) for k in ("y_min", "x_min", "y_max", "x_max")]
+    elif isinstance(item.get("box_2d"), (list, tuple)) and len(item["box_2d"]) == 4:
+        vals = [_num(v, None) for v in item["box_2d"]]
+    else:
+        return None
+    if any(v is None for v in vals):
+        return None
+    if max(vals) <= 1.0:                     # veio normalizado em 0-1
+        vals = [v * 1000 for v in vals]
+    y1, x1, y2, x2 = (min(1000.0, max(0.0, v)) for v in vals)
+    y1, y2 = sorted((y1, y2))
+    x1, x2 = sorted((x1, x2))
+    if y2 - y1 < 5 or x2 - x1 < 5:           # caixa degenerada
+        return None
+    return [round(y1), round(x1), round(y2), round(x2)]
+
+
+def _ler_anomalias(conteudo: str) -> list[AnomaliaDetectada] | None:
+    """
+    Lê a resposta da IA. Um item malformado é descartado sozinho — antes derrubava a
+    análise inteira. Retorna None só quando não há JSON utilizável.
+    """
+    raw = None
+    for texto in (conteudo, (re.search(r"```(?:json)?\s*([\s\S]*?)```", conteudo or "") or [None, None])[1]):
+        if not texto:
+            continue
+        try:
+            raw = json.loads(texto)
+            break
+        except ValueError:
+            continue
+    if isinstance(raw, list):
+        raw = {"anomalias": raw}
+    if not isinstance(raw, dict) or not isinstance(raw.get("anomalias", []), list):
+        return None
+    itens = []
+    for item in raw.get("anomalias") or []:
+        if not isinstance(item, dict):
+            continue
+        caixa = _caixa_do_item(item)
+        if not caixa:
+            logger.warning(f"[sensor] anomalia sem caixa válida descartada: {str(item)[:160]}")
+            continue
+        conf = _num(item.get("confianca"), 0.5)
+        if conf > 1:                         # veio em porcentagem
+            conf /= 100
+        sev = str(item.get("severidade") or "").strip().lower()
+        sev = {"crítico": "critico", "atenção": "atencao"}.get(sev, sev)
+        try:
+            itens.append(AnomaliaDetectada(
+                box_2d=caixa,
+                classe=str(item.get("classe") or "contaminacao"),
+                rotulo=str(item.get("rotulo") or ""),
+                severidade=sev if sev in SEVERIDADES else "atencao",
+                confianca=min(1.0, max(0.0, conf)),
+                componente=str(item.get("componente") or "—"),
+                descricao=str(item.get("descricao") or ""),
+                causa_provavel=str(item.get("causa_provavel") or ""),
+                recomendacao=str(item.get("recomendacao") or ""),
+            ))
+        except Exception as e:  # noqa: BLE001 — item isolado, segue com os demais
+            logger.warning(f"[sensor] anomalia descartada ({e}): {str(item)[:160]}")
+    return itens
 
 
 def _validar_anomalias(itens: list[AnomaliaDetectada]) -> list[dict]:
@@ -376,26 +507,24 @@ def _classe_mais_proxima(classe: str) -> str:
     return "contaminacao"  # bucket neutro de baixa severidade
 
 
-def _parse_json_fallback(texto: str) -> DeteccaoAnomalias | None:
-    """Alguns modelos lite embrulham o JSON em ```json ... ```; recupera isso."""
-    if not texto:
-        return None
+def _fonte_vera() -> str:
+    """Vera (com acentos) que vem com o reportlab, dependência do projeto para o laudo PDF."""
     try:
-        bloco = re.search(r"```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```", texto)
-        json_str = bloco.group(1) if bloco else texto.strip()
-        raw = json.loads(json_str)
-        if isinstance(raw, list):
-            raw = {"anomalias": raw}
-        return DeteccaoAnomalias(**raw)
-    except Exception:
-        return None
+        import reportlab
+        return os.path.join(os.path.dirname(reportlab.__file__), "fonts", "VeraBd.ttf")
+    except ImportError:
+        return ""
 
 
 def _carregar_fonte(tamanho: int):
-    """Carrega uma fonte TrueType para rótulos; cai no default se indisponível."""
+    """
+    Fonte TrueType para os rótulos. A fonte padrão do Pillow não tem "ã", "ç"...:
+    sem DejaVu (Mac, imagens mínimas de Linux) os rótulos do laudo saíam com quadradinhos.
+    """
     for caminho in (
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        _fonte_vera(),
     ):
         try:
             return ImageFont.truetype(caminho, tamanho)
@@ -416,6 +545,8 @@ def desenhar_anomalias(img, anomalias: list[dict]):
     espessura = max(2, round(min(W, H) * 0.005))
     fonte = _carregar_fonte(max(12, round(min(W, H) * 0.026)))
 
+    # Primeiro todas as caixas, depois as etiquetas: caixa nenhuma pinta sobre a etiqueta de outra
+    itens = []
     for i, a in enumerate(anomalias, 1):
         box = a.get("box_2d")
         if not box or len(box) != 4:
@@ -425,7 +556,6 @@ def desenhar_anomalias(img, anomalias: list[dict]):
         x2, y2 = xmax / 1000 * W, ymax / 1000 * H
         cor = _COR_SEVERIDADE.get(a.get("severidade"), _COR_SEVERIDADE["info"])
         draw.rectangle([x1, y1, x2, y2], outline=cor, width=espessura)
-
         rotulo = f"{i}  {a.get('rotulo', '')}".strip()
         try:
             l, t, r, b = draw.textbbox((0, 0), rotulo, font=fonte)
@@ -433,13 +563,35 @@ def desenhar_anomalias(img, anomalias: list[dict]):
         except Exception:
             tw, th = len(rotulo) * 7, 12
         pad = max(3, round(th * 0.35))
-        ty = y1 - th - 2 * pad
-        if ty < 0:  # sem espaço acima → coloca a tag dentro da caixa
-            ty = y1
-        draw.rectangle([x1, ty, x1 + tw + 2 * pad, ty + th + 2 * pad], fill=cor)
-        draw.text((x1 + pad, ty + pad), rotulo, fill=(255, 255, 255), font=fonte)
+        itens.append((rotulo, cor, pad, (x1, y1), (tw + 2 * pad, th + 2 * pad)))
+
+    posicoes = _posicoes_etiquetas([(canto, tam) for _, _, _, canto, tam in itens], W, H)
+    for (rotulo, cor, pad, _, _), (tx, ty, tx2, ty2) in zip(itens, posicoes):
+        draw.rectangle([tx, ty, tx2, ty2], fill=cor)
+        draw.text((tx + pad, ty + pad), rotulo, fill=(255, 255, 255), font=fonte)
 
     return img
+
+
+def _posicoes_etiquetas(etiquetas: list[tuple], W: float, H: float) -> list[tuple]:
+    """
+    Retângulo de cada etiqueta [(canto_da_caixa, (larg, alt))] → [(x1, y1, x2, y2)]: acima da
+    caixa (dentro dela se não houver espaço), sem sair da foto e sem cobrir uma etiqueta já
+    posicionada — em caso de choque, desce para logo abaixo da que atrapalha.
+    """
+    ocupadas: list[tuple] = []
+    for (x1, y1), (w, h) in etiquetas:
+        tx = max(0, min(x1, W - w))
+        ty = y1 - h if y1 - h >= 0 else y1
+        for _ in range(len(ocupadas) + 1):
+            choque = next((o for o in ocupadas
+                           if tx < o[2] and tx + w > o[0] and ty < o[3] and ty + h > o[1]), None)
+            if not choque:
+                break
+            ty = choque[3] + 1
+        ty = max(0, min(ty, H - h))
+        ocupadas.append((tx, ty, tx + w, ty + h))
+    return ocupadas
 
 
 def _resumo(anomalias: list[dict], score: int) -> str:

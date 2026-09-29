@@ -166,6 +166,27 @@ def test_desenhar_anomalias():
     assert list(out.getdata()) != list(img.getdata())
 
 
+def test_etiquetas_nao_se_sobrepoem():
+    # Caso real do laudo: duas caixas começando quase no mesmo ponto escondiam uma etiqueta
+    rets = sv._posicoes_etiquetas([((245, 40), (240, 22)), ((275, 40), (230, 22)),
+                                   ((250, 45), (200, 22))], 1000, 450)
+    for i, a in enumerate(rets):
+        for b in rets[i + 1:]:
+            assert not (a[0] < b[2] and a[2] > b[0] and a[1] < b[3] and a[3] > b[1]), (a, b)
+    assert all(0 <= r[0] and r[2] <= 1000 and 0 <= r[1] and r[3] <= 450 for r in rets)
+
+
+def _tem_glifo(fonte, c):
+    # Caractere ausente vira o "quadradinho" (.notdef): igual ao de um código de uso privado
+    return bytes(fonte.getmask(c)) != bytes(fonte.getmask(""))
+
+
+def test_fonte_tem_acentos():
+    # Rótulos do laudo saíam "corros□o" com a fonte padrão do Pillow
+    f = sv._carregar_fonte(20)
+    assert all(_tem_glifo(f, c) for c in "ãçéõÃÇ")
+
+
 def test_desenhar_anomalias_sem_box():
     from PIL import Image
     img = Image.new("RGB", (200, 200), (50, 50, 50))
@@ -173,20 +194,64 @@ def test_desenhar_anomalias_sem_box():
     assert out.size == (200, 200)          # não quebra
 
 
-def test_parse_json_fallback_com_cercas():
+def test_ler_anomalias_com_cercas():
     txt = '```json\n{"anomalias": [{"box_2d":[10,10,90,90],"classe":"corrosao","rotulo":"Corrosão",' \
           '"severidade":"atencao","confianca":0.7,"componente":"flange","descricao":"d","recomendacao":"r"}]}\n```'
-    parsed = sv._parse_json_fallback(txt)
-    assert parsed is not None
-    assert len(parsed.anomalias) == 1
-    assert parsed.anomalias[0].classe == "corrosao"
+    itens = sv._ler_anomalias(txt)
+    assert itens is not None
+    assert len(itens) == 1
+    assert itens[0].classe == "corrosao"
 
 
-def test_parse_json_fallback_lista_direta():
+def test_ler_anomalias_lista_direta():
     txt = '[{"box_2d":[10,10,90,90],"classe":"folga","rotulo":"Folga",' \
           '"severidade":"atencao","confianca":0.6,"componente":"parafuso","descricao":"d","recomendacao":"r"}]'
-    parsed = sv._parse_json_fallback(txt)
-    assert parsed is not None and len(parsed.anomalias) == 1
+    itens = sv._ler_anomalias(txt)
+    assert itens is not None and len(itens) == 1
+
+
+def test_ler_anomalias_formato_caixa():
+    # Formato do prompt atual: caixa com chaves explícitas → box_2d [ymin, xmin, ymax, xmax]
+    txt = '{"equipamento":"x","condicao_geral":"y","anomalias":[{"caixa":{"x_min":200,"y_min":100,' \
+          '"x_max":600,"y_max":500},"classe":"oxidacao","rotulo":"Ferrugem","severidade":"atencao",' \
+          '"confianca":0.8,"componente":"base","descricao":"d","causa_provavel":"c","recomendacao":"r"}]}'
+    itens = sv._ler_anomalias(txt)
+    assert itens[0].box_2d == [100, 200, 500, 600]
+
+
+def test_ler_anomalias_item_ruim_nao_derruba_os_outros():
+    # Antes um item malformado invalidava a resposta inteira e o sensor dava "erro"
+    txt = '{"anomalias":[{"classe":"trinca"},' \
+          '{"caixa":{"x_min":0.1,"y_min":0.2,"x_max":0.3,"y_max":0.4},"classe":"corrosao",' \
+          '"severidade":"atenção","confianca":85,"componente":"eixo","descricao":"d","recomendacao":"r"}]}'
+    itens = sv._ler_anomalias(txt)
+    assert len(itens) == 1                               # o sem caixa foi descartado sozinho
+    assert itens[0].box_2d == [200, 100, 400, 300]       # 0-1 escalado para 0-1000
+    assert itens[0].confianca == 0.85                    # porcentagem vira 0-1
+    assert itens[0].severidade == "atencao"              # acento normalizado
+
+
+def test_ler_anomalias_cantos_trocados():
+    itens = sv._ler_anomalias('{"anomalias":[{"caixa":{"x_min":600,"y_min":500,"x_max":200,"y_max":100},'
+                              '"classe":"trinca","severidade":"critico","confianca":0.9}]}')
+    assert itens[0].box_2d == [100, 200, 500, 600]
+
+
+def test_ler_anomalias_sem_json():
+    assert sv._ler_anomalias("não encontrei nada") is None
+
+
+def test_grade_nao_altera_tamanho():
+    from PIL import Image
+    img = Image.new("RGB", (640, 480), (120, 120, 120))
+    g = sv._com_grade(img)
+    assert g.size == img.size and g is not img
+    assert list(img.getdata()) == [(120, 120, 120)] * (640 * 480)   # original intacta
+
+
+def test_parametros_modelo():
+    assert "temperature" not in sv._parametros_modelo("gpt-5.4-mini")   # raciocínio não aceita
+    assert sv._parametros_modelo("gpt-4o")["temperature"] == 0.2
 
 
 def test_detectar_offline_sem_client():
