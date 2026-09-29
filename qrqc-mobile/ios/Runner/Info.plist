@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>O app usa a câmera para fotografar máquinas e documentos para análise.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O app acessa suas fotos para enviar imagens de máquinas e documentos para análise.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>O app precisa acessar a rede local para se conectar ao servidor Nexar QRQC.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
