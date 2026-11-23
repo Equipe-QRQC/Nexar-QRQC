@@ -27,9 +27,12 @@ O repositório já traz o necessário: `railway.json` (comando de início), `scr
 ## Observações
 
 - Rode com **1 réplica**: o banco é SQLite no volume.
-- A **importação de CAD** precisa do conversor (`cadquery-ocp`, ~500 MB) e de Node.js; não vai na
-  imagem padrão. Os modelos que já estão no repositório funcionam normalmente. Converta CADs novos
-  no computador e suba pelo git.
+- A **importação de CAD** precisa do conversor (`requirements-cad.txt`, ~1,1 GB), das bibliotecas
+  gráficas `libgl1` e `libx11-6` e, para otimizar, do Node.js; nada disso vai na imagem padrão.
+  Os modelos que já estão no repositório funcionam normalmente. O caminho recomendado é converter
+  CADs novos no computador (ver [CAD_3D.md](CAD_3D.md)) e subir pelo git. Para importar pelo
+  sistema no Railway, instale esses pacotes no build do serviço (comando de build e pacotes de
+  sistema nas configurações do Railway) e confira o primeiro deploy: a imagem cresce bastante.
 - Máquinas novas na base de demonstração só entram num banco vazio. Para um banco que já está
   em uso, cadastre a máquina em **Máquinas → Nova máquina** e escolha o modelo 3D na lista.
 - Para recriar a demonstração do zero: apague `/data/qrqc.db` (ou rode

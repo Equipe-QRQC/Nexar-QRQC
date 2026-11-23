@@ -1,0 +1,8 @@
+# Opcional: importação de CAD 3D (STEP → GLB) pelo próprio sistema.
+# Fica fora do requirements.txt porque pesa ~1,1 GB (traz o VTK) e precisa de bibliotecas
+# gráficas do sistema (libGL, libX11). Sem ele o sistema funciona normalmente; só a tela
+# "Importar CAD 3D" avisa que o conversor não está instalado. Ver docs/CAD_3D.md.
+#
+#   pip install -r requirements-cad.txt
+#   npm install -g @gltf-transform/cli@4     # opcional: deixa o modelo ~7x menor
+cadquery-ocp>=7.7

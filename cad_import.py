@@ -179,7 +179,10 @@ def converter_em_segundo_plano(job_id: int, steps: list[str], destino_glb: str, 
             if r.returncode != 0 or not os.path.exists(bruto):
                 erro = (r.stderr or r.stdout or "").strip().splitlines()[-1:] or ["erro desconhecido"]
                 if "No module named 'OCP'" in (r.stderr or ""):
-                    erro = ["O conversor de CAD não está instalado no servidor (pip install cadquery-ocp)."]
+                    erro = ["O conversor de CAD não está instalado no servidor (pip install -r requirements-cad.txt)."]
+                elif re.search(r"lib(GL|GLX|X11)[^:]*\.so", r.stderr or ""):
+                    erro = ["Faltam bibliotecas gráficas no servidor para o conversor de CAD "
+                            "(no Debian/Ubuntu: apt-get install libgl1 libx11-6)."]
                 raise RuntimeError(erro[0][:300])
             otimizado = False
             cmd_otimizar = comando_otimizador()
