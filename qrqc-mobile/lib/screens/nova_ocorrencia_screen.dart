@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 
@@ -53,6 +56,8 @@ class NovaOcorrenciaScreen extends StatefulWidget {
 class _NovaOcorrenciaScreenState extends State<NovaOcorrenciaScreen> {
   final _api = ApiService();
   final _textoCtrl = TextEditingController();
+  final _picker = ImagePicker();
+  File? _foto; // foto do problema (opcional)
   final _alarmeCtrl = TextEditingController();
 
   List<Maquina> _maquinas = [];
@@ -168,6 +173,14 @@ class _NovaOcorrenciaScreenState extends State<NovaOcorrenciaScreen> {
         'codigo_alarme': _alarmeCtrl.text.trim(),
         if (widget.inspecaoId != null) 'inspecao_id': widget.inspecaoId,
       });
+      if (_foto != null) {
+        // A ocorrência já está salva: se a foto falhar, o registro continua valendo
+        try {
+          await _api.enviarFotoOcorrencia(id, _foto!);
+        } catch (e) {
+          _avisar('Ocorrência registrada, mas a foto não foi enviada: $e');
+        }
+      }
       if (!mounted) return;
       Navigator.pop(context, id);
     } catch (e) {
@@ -176,6 +189,58 @@ class _NovaOcorrenciaScreenState extends State<NovaOcorrenciaScreen> {
       if (mounted) setState(() => _salvando = false);
     }
   }
+
+  Future<void> _escolherFoto(ImageSource origem) async {
+    try {
+      final xfile = await _picker.pickImage(source: origem, maxWidth: 1920, maxHeight: 1920, imageQuality: 85);
+      if (xfile != null && mounted) setState(() => _foto = File(xfile.path));
+    } catch (_) {
+      _avisar('Não foi possível abrir a câmera ou a galeria.');
+    }
+  }
+
+  Widget _campoFoto() => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Foto do problema (opcional)',
+            style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
+        const SizedBox(height: 8),
+        if (_foto != null)
+          Stack(children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(_foto!, height: 160, width: double.infinity, fit: BoxFit.cover),
+            ),
+            Positioned(
+              top: 6,
+              right: 6,
+              child: IconButton.filled(
+                tooltip: 'Remover foto',
+                style: IconButton.styleFrom(backgroundColor: Colors.black54),
+                icon: const Icon(Icons.close, color: Colors.white, size: 18),
+                onPressed: () => setState(() => _foto = null),
+              ),
+            ),
+          ])
+        else
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _escolherFoto(ImageSource.camera),
+                icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                label: const Text('Câmera'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => _escolherFoto(ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: const Text('Galeria'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+              ),
+            ),
+          ]),
+      ]);
 
   void _avisar(String msg) {
     if (!mounted) return;
@@ -376,6 +441,8 @@ class _NovaOcorrenciaScreenState extends State<NovaOcorrenciaScreen> {
           style: const TextStyle(color: Colors.white, fontSize: 14),
           decoration: _deco('Ex.: óleo escorrendo pela haste ao fim do ciclo'),
         ),
+        _campoFoto(),
+        const SizedBox(height: 8),
         Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
