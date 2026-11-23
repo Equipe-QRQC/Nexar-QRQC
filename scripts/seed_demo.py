@@ -269,7 +269,13 @@ def criar_pessoas_e_usuarios(conn) -> None:
              int(ativo))).lastrowid
         for q, dias in quals.items():
             nexar.empresa.salvar_qualificacao(conn, cid, q, hoje + timedelta(days=dias))
-    senha = os.getenv("ADMIN_PASSWORD", "").strip() or "nexar2026"
+    senha = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not senha:
+        # Base nova: o init_db já gerou a senha do admin e a pôs em ADMIN_PASSWORD (cai no
+        # caso acima). Aqui o admin já existia: a senha dele não muda, só a dos usuários novos.
+        import secrets
+        senha = secrets.token_urlsafe(9)
+        print(f"⚠ ADMIN_PASSWORD não definida — senha aleatória dos usuários de demonstração: {senha}")
     for nome, email, perfil in USUARIOS:
         if not conn.execute("SELECT 1 FROM usuarios WHERE email = ?", (email,)).fetchone():
             conn.execute("INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",

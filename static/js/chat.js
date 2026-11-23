@@ -49,12 +49,19 @@ async function sendChat() {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
       body: JSON.stringify({ mensagem, historico: chatHistorico.slice(-8) }),
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     removeTyping();
-    appendMsg(data.resposta, 'bot');
-    chatHistorico.push({ role: 'assistant', content: data.resposta });
+    // Erros (IA fora, limite de mensagens, sessão expirada) vêm em "erro" ou com status != 200
+    const texto = data.resposta || data.erro || 'Erro ao conectar com o assistente.';
+    appendMsg(texto, 'bot');
+    if (res.ok) {
+      chatHistorico.push({ role: 'assistant', content: texto });
+    } else {
+      chatHistorico.pop();   // a pergunta sem resposta não vai no histórico da próxima
+    }
   } catch (e) {
     removeTyping();
+    chatHistorico.pop();
     appendMsg('Erro ao conectar com o assistente.', 'bot');
   }
 }

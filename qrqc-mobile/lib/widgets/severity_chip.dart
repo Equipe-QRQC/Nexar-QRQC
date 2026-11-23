@@ -20,8 +20,8 @@ class SeverityChip extends StatelessWidget {
         vertical: small ? 2 : 3,
       ),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        border: Border.all(color: color.withOpacity(0.6)),
+        color: color.withValues(alpha: 0.15),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -63,7 +63,7 @@ class HealthGauge extends StatelessWidget {
         ),
         Text(
           'Índice de Saúde / 100',
-          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
         ),
         const SizedBox(height: 8),
         ClipRRect(

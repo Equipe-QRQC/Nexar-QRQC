@@ -117,10 +117,10 @@ class _DocScanScreenState extends State<DocScanScreen> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withOpacity(0.08),
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: const Color(0xFF8B5CF6).withOpacity(0.2)),
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.2)),
                 ),
                 child: const Row(
                   children: [
@@ -151,7 +151,7 @@ class _DocScanScreenState extends State<DocScanScreen> {
                     border: Border.all(
                       color: _foto == null
                           ? Colors.white12
-                          : const Color(0xFF8B5CF6).withOpacity(0.4),
+                          : const Color(0xFF8B5CF6).withValues(alpha: 0.4),
                     ),
                   ),
                   child: _foto == null
@@ -265,7 +265,7 @@ class _DocScanScreenState extends State<DocScanScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF8B5CF6),
                     disabledBackgroundColor:
-                        const Color(0xFF8B5CF6).withOpacity(0.3),
+                        const Color(0xFF8B5CF6).withValues(alpha: 0.3),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),

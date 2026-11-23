@@ -501,6 +501,8 @@ def _deduplicar(anomalias: list[dict], iou_min: float = 0.5) -> list[dict]:
 def _classe_mais_proxima(classe: str) -> str:
     """Mapeia uma classe fora da taxonomia para a chave conhecida mais parecida."""
     c = (classe or "").lower().strip()
+    if len(c) < 4:              # vazio ou curto demais: "a" casaria com "trinca" e viraria crítico
+        return "contaminacao"
     for chave in TAXONOMIA_DEFEITOS:
         if chave in c or c in chave:
             return chave

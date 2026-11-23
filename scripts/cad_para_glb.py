@@ -18,8 +18,11 @@ Requer: pip install cadquery-ocp
 from __future__ import annotations
 
 import json
+import os
+import re
 import struct
 import sys
+import tempfile
 import time
 
 from OCP.BRepBndLib import BRepBndLib
@@ -39,6 +42,47 @@ from OCP.OCP.collections import Sequence_TDF_Label as TDF_LabelSequence
 from OCP.TDocStd import TDocStd_Document
 from OCP.TopoDS import TopoDS_Shape
 from OCP.XCAFDoc import XCAFDoc_ColorType, XCAFDoc_DocumentTool
+
+
+_NAO_ASCII = re.compile(rb"[\x80-\xff]")
+
+
+def _texto_step(linha: bytes) -> bytes:
+    """Troca caracteres fora do ASCII pela forma \\X2\\hhhh\\X0\\ da norma STEP (ISO 10303-21).
+
+    Muitos CADs (SolidWorks em português, por ex.) gravam "É" como byte Latin-1 cru, fora da
+    norma; o leitor do OpenCascade lê como UTF-8 e o nome vira lixo ("ELȔRICA"). Cada linha é
+    lida como UTF-8 se for válida, senão como Windows-1252.
+    """
+    try:
+        texto = linha.decode("utf-8")
+    except UnicodeDecodeError:
+        texto = linha.decode("cp1252", errors="replace")
+    return "".join(c if ord(c) < 128 else
+                   ("\\X2\\%04X\\X0\\" % ord(c) if ord(c) <= 0xFFFF else "?")
+                   for c in texto).encode("ascii")
+
+
+def _step_normalizado(entrada: str) -> str:
+    """Devolve o próprio arquivo se for só ASCII; senão uma cópia temporária com os acentos escapados."""
+    with open(entrada, "rb") as f:
+        if not any(_NAO_ASCII.search(linha) for linha in f):
+            return entrada
+    fd, copia = tempfile.mkstemp(suffix=".step")
+    with open(entrada, "rb") as f, os.fdopen(fd, "wb") as out:
+        for linha in f:
+            out.write(_texto_step(linha) if _NAO_ASCII.search(linha) else linha)
+    return copia
+
+
+def _ler(leitor, arquivo: str) -> None:
+    copia = _step_normalizado(arquivo)
+    try:
+        if leitor.ReadFile(copia) != IFSelect_RetDone:
+            raise RuntimeError(f"Não foi possível ler {arquivo}")
+    finally:
+        if copia != arquivo:
+            os.remove(copia)
 
 
 def _novo_documento() -> TDocStd_Document:
@@ -101,8 +145,7 @@ def montagem(entrada: str, saida: str) -> None:
     leitor.SetNameMode(True)
     leitor.SetColorMode(True)
     leitor.SetLayerMode(False)
-    if leitor.ReadFile(entrada) != IFSelect_RetDone:
-        raise RuntimeError(f"Não foi possível ler {entrada}")
+    _ler(leitor, entrada)
     leitor.Transfer(doc)
     st = XCAFDoc_DocumentTool.ShapeTool_s(doc.Main())
     livres = TDF_LabelSequence()
@@ -127,8 +170,7 @@ def pecas(saida: str, itens: list[str]) -> None:
         nome, resto = item.split("=", 1)
         arquivo, _, cor = resto.partition(":")
         leitor = STEPControl_Reader()
-        if leitor.ReadFile(arquivo) != IFSelect_RetDone:
-            raise RuntimeError(f"Não foi possível ler {arquivo}")
+        _ler(leitor, arquivo)
         leitor.TransferRoots(Message_ProgressRange())
         shape = leitor.OneShape()
         label = st.AddShape(shape, False)

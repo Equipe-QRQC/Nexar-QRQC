@@ -15,3 +15,6 @@ static/uploads/documentos/*
 !static/uploads/documentos/.gitkeep
 
 cad_importados/
+qrqc.db-*
+static/uploads/suporte/
+static/uploads/maquinas/*

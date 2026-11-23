@@ -40,15 +40,24 @@ Em **Máquinas → Importar CAD 3D** (perfis Manutenção e Administrador):
    gire se o modelo aparecer deitado e salve.
 4. O modelo aparece no cadastro de máquinas.
 
-Requisitos no servidor: `pip install cadquery-ocp` (conversor) e, opcional, Node.js com `npx`
-para reduzir o arquivo (sem ele o modelo funciona, só fica maior).
+Requisitos no servidor (ficam fora do `requirements.txt` porque pesam ~1,1 GB):
+
+```bash
+pip install -r requirements-cad.txt          # conversor (cadquery-ocp)
+npm install -g @gltf-transform/cli@4         # opcional: deixa o modelo ~7x menor
+```
+
+- No Linux, o conversor também precisa das bibliotecas gráficas do sistema
+  (Debian/Ubuntu: `apt-get install libgl1 libx11-6`).
+- Sem o otimizador (Node.js), o modelo funciona, só fica maior; a tela de importação avisa.
+- Sem o conversor, a importação mostra "conversor não instalado" e o resto do sistema segue normal.
 
 ## Passo a passo manual (linha de comando)
 
 ### 1. Converter STEP → GLB
 
 ```bash
-pip install cadquery-ocp
+pip install -r requirements-cad.txt
 python scripts/cad_para_glb.py montagem "Maquina.step" /tmp/maquina.glb
 ```
 

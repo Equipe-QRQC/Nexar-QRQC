@@ -145,7 +145,7 @@ class _SensorScreenState extends State<SensorScreen> {
                     border: Border.all(
                       color: _foto == null
                           ? Colors.white12
-                          : const Color(0xFF0EA5E9).withOpacity(0.4),
+                          : const Color(0xFF0EA5E9).withValues(alpha: 0.4),
                     ),
                   ),
                   child: _foto == null
@@ -200,7 +200,7 @@ class _SensorScreenState extends State<SensorScreen> {
                         fontWeight: FontWeight.w500)),
                 const SizedBox(height: 6),
                 DropdownButtonFormField<Maquina>(
-                  value: _maquinaSel,
+                  initialValue: _maquinaSel,
                   dropdownColor: const Color(0xFF0F1F35),
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: _inputDeco('Selecionar máquina'),
@@ -241,7 +241,7 @@ class _SensorScreenState extends State<SensorScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0EA5E9),
                     disabledBackgroundColor:
-                        const Color(0xFF0EA5E9).withOpacity(0.3),
+                        const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10)),
                   ),

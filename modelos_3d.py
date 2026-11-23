@@ -215,6 +215,8 @@ def ler_config(valor: str | None) -> dict | None:
         cfg = json.loads(valor)
     except (TypeError, ValueError):
         return None
+    if not isinstance(cfg, dict):
+        return None
     if cfg.get("fonte") == "familia" and cfg.get("familia") in FAMILIAS:
         return cfg
     if cfg.get("fonte") == "cad":

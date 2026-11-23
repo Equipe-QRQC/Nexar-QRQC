@@ -236,7 +236,8 @@ def conferir(conn, tipo: dict | None, extraido: dict, maquina_id_informada=None,
 
     vistos = set()
     for p in extraido.get("pessoas") or []:
-        nome, mat = (p.get("nome") or "").strip(), (p.get("matricula") or "").strip()
+        # A IA pode devolver a matrícula como número (10234) ou null
+        nome, mat = str(p.get("nome") or "").strip(), str(p.get("matricula") or "").strip()
         if not nome and not mat:
             continue
         r, como = encontrar_pessoa(conn, nome, mat)
@@ -266,7 +267,7 @@ def conferir(conn, tipo: dict | None, extraido: dict, maquina_id_informada=None,
                                  "titulo": f"{r['nome']}: colaborador desligado",
                                  "descricao": "Pessoa inativa no cadastro não pode constar como executante."})
         # Habilitações são exigidas de quem executa; emitente e responsável só precisam estar ativos
-        papel = normalizar(p.get("papel") or "")
+        papel = normalizar(str(p.get("papel") or ""))
         exigidas_pessoa = [] if papel in ("emitente", "responsavel", "aprovador") else exigidas
         info["exigido"] = bool(exigidas_pessoa)
         for q in exigidas_pessoa:
@@ -296,7 +297,7 @@ def conferir(conn, tipo: dict | None, extraido: dict, maquina_id_informada=None,
     if maquina_id_informada:
         m = conn.execute("SELECT id, nome, modelo FROM maquinas WHERE id = ?", (maquina_id_informada,)).fetchone()
     else:
-        m = encontrar_maquina(conn, extraido.get("equipamento"))
+        m = encontrar_maquina(conn, str(extraido.get("equipamento") or "") or None)
     if m:
         abertas = conn.execute("SELECT COUNT(*) AS n FROM ocorrencias WHERE maquina_id = ? "
                                "AND status IN ('Aberta', 'Em andamento')", (m["id"],)).fetchone()["n"]
@@ -306,7 +307,7 @@ def conferir(conn, tipo: dict | None, extraido: dict, maquina_id_informada=None,
                                  "titulo": f"{m['nome']}: {abertas} ocorrência(s) em aberto",
                                  "descricao": "Confira se o serviço deste documento trata alguma delas."})
     elif (tipo or {}).get("exige_maquina"):
-        lido = extraido.get("equipamento")
+        lido = str(extraido.get("equipamento") or "")
         conferencias.append({"categoria": "equipamento", "severidade": "medio",
                              "titulo": f"Equipamento {'“' + lido + '” ' if lido else ''}não identificado no cadastro",
                              "descricao": "Use a etiqueta da máquina (ex.: RS-01) para rastrear o serviço."})
@@ -433,7 +434,8 @@ def aplicar_colaboradores(conn, lista: list, completo: bool = False) -> dict:
             "vinculo": (str(p["vinculo"]).strip()[:40] if p.get("vinculo") is not None else None),
             "gestor": (str(p["gestor"]).strip()[:120] if p.get("gestor") is not None else None),
             "admissao": adm.isoformat() if adm else None,
-            "ativo": (1 if p.get("ativo", True) not in (False, 0, "0", "false", "nao", "não") else 0),
+            "ativo": (0 if normalizar(str(p.get("ativo", True))) in ("false", "0", "nao", "n", "inativo", "desligado")
+                      else 1),
         }
         existe = conn.execute("SELECT id FROM colaboradores WHERE matricula = ?", (mat,)).fetchone()
         if existe:

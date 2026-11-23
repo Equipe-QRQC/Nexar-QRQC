@@ -10,7 +10,13 @@ class ResultDocScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final problemas = resultado.problemas;
-    final semProblema = problemas.isEmpty;
+    final conferencias = resultado.conferencias
+        .where((c) => c.severidade != 'info' || resultado.aprovado)
+        .toList();
+    // "Sem problemas" só quando o documento foi aprovado na conferência com o cadastro:
+    // uma PT bem preenchida com executante sem NR-10 válida continua BLOQUEADA
+    final semProblema =
+        problemas.isEmpty && conferencias.isEmpty && resultado.aprovado;
     final score = resultado.score;
 
     return Scaffold(
@@ -34,6 +40,8 @@ class ResultDocScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _StatusDoc(resultado.status),
+              const SizedBox(height: 14),
               // Placar + resumo
               Container(
                 padding: const EdgeInsets.all(20),
@@ -63,9 +71,22 @@ class ResultDocScreen extends StatelessWidget {
               ),
               const SizedBox(height: 20),
 
+              if (conferencias.isNotEmpty) ...[
+                const Text(
+                  'Conferência com o cadastro da empresa',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...conferencias.map((c) => _ConferenciaCard(c)),
+                const SizedBox(height: 10),
+              ],
               if (semProblema)
                 _emptyState()
-              else ...[
+              else if (problemas.isNotEmpty) ...[
                 Text(
                   '${problemas.length} problema(s) encontrado(s)',
                   style: const TextStyle(
@@ -88,10 +109,10 @@ class ResultDocScreen extends StatelessWidget {
   Widget _emptyState() => Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF22C55E).withOpacity(0.08),
+          color: const Color(0xFF22C55E).withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: const Color(0xFF22C55E).withOpacity(0.25)),
+              color: const Color(0xFF22C55E).withValues(alpha: 0.25)),
         ),
         child: const Column(
           children: [
@@ -116,6 +137,126 @@ class ResultDocScreen extends StatelessWidget {
       );
 }
 
+class _StatusDoc extends StatelessWidget {
+  final String status;
+  const _StatusDoc(this.status);
+
+  @override
+  Widget build(BuildContext context) {
+    final (icone, cor, titulo, texto) = switch (status) {
+      'bloqueado' => (
+          Icons.block,
+          const Color(0xFFEF4444),
+          'BLOQUEADO',
+          'Não libere o serviço: há pendência de habilitação ou de cadastro.',
+        ),
+      'aprovado' => (
+          Icons.verified_outlined,
+          const Color(0xFF22C55E),
+          'APROVADO',
+          'Documento conferido com o cadastro da empresa.',
+        ),
+      _ => (
+          Icons.warning_amber_rounded,
+          const Color(0xFFF59E0B),
+          'COM PENDÊNCIAS',
+          'Corrija os itens abaixo antes de liberar.',
+        ),
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cor.withValues(alpha: 0.5), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Icon(icone, color: cor, size: 34),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  titulo,
+                  style: TextStyle(
+                      color: cor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 2),
+                Text(texto,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12.5)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConferenciaCard extends StatelessWidget {
+  final ConferenciaDocumento c;
+  const _ConferenciaCard(this.c);
+
+  @override
+  Widget build(BuildContext context) {
+    final cor = switch (c.severidade) {
+      'alto' => const Color(0xFFEF4444),
+      'medio' => const Color(0xFFF59E0B),
+      'baixo' => const Color(0xFF3B82F6),
+      _ => Colors.white38,
+    };
+    final icone = switch (c.categoria) {
+      'habilitacao' => Icons.badge_outlined,
+      'validade' => Icons.event_outlined,
+      'equipamento' => Icons.precision_manufacturing_outlined,
+      _ => Icons.person_search_outlined,
+    };
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F1F35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: cor, width: 3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icone, color: cor, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  c.titulo,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                ),
+                if (c.descricao.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(c.descricao,
+                      style:
+                          const TextStyle(color: Colors.white60, fontSize: 12)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ScoreDoc extends StatelessWidget {
   final int score;
   const _ScoreDoc(this.score);
@@ -132,22 +273,24 @@ class _ScoreDoc extends StatelessWidget {
       children: [
         Icon(Icons.document_scanner_outlined, color: color, size: 32),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '$score / 100',
-              style: TextStyle(
-                  color: color,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800),
-            ),
-            Text(
-              'Qualidade do documento',
-              style: TextStyle(
-                  color: Colors.white.withOpacity(0.4), fontSize: 12),
-            ),
-          ],
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$score / 100',
+                style: TextStyle(
+                    color: color,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800),
+              ),
+              Text(
+                'Qualidade do documento',
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -178,7 +321,7 @@ class _ProblemaCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1F35),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +332,7 @@ class _ProblemaCard extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 16),
