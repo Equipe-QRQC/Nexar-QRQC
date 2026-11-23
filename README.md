@@ -155,6 +155,18 @@ vencida, uma OS com pendências e uma PT aprovada).
 Máquinas podem usar o CAD do fabricante (STEP convertido em GLB) no visualizador 3D.
 O passo a passo para acrescentar uma máquina está em [docs/CAD_3D.md](docs/CAD_3D.md).
 
+## Testes
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest
+```
+
+Os testes rodam num banco de demonstração temporário (nunca no `qrqc.db`) e com a IA simulada,
+sem chave nem internet. Cobrem as páginas nos 4 perfis, permissões, segurança, ocorrências,
+histórico, importação de CAD e as funções de IA. O app: `cd qrqc-mobile && flutter test`.
+O GitHub Actions (`.github/workflows/testes.yml`) roda os dois a cada pull request.
+
 ## Estrutura
 
 ```
