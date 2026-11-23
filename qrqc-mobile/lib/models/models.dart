@@ -154,36 +154,76 @@ class ProblemaDocumento {
 
   factory ProblemaDocumento.fromJson(Map<String, dynamic> j) =>
       ProblemaDocumento(
-        tipo: j['tipo'] as String? ?? '',
-        campo: j['campo'] as String? ?? '',
-        descricao: j['descricao'] as String? ?? '',
-        sugestao: j['sugestao'] as String? ?? '',
-        severidade: j['severidade'] as String? ?? 'medio',
+        tipo: j['tipo']?.toString() ?? '',
+        campo: j['campo']?.toString() ?? '',
+        descricao: j['descricao']?.toString() ?? '',
+        sugestao: j['sugestao']?.toString() ?? '',
+        severidade: j['severidade']?.toString() ?? 'medio',
+      );
+}
+
+/// Item da conferência com o cadastro da empresa (pessoa sem NR-10 válida, colaborador
+/// desligado, equipamento não identificado...). Vem do servidor, não da IA.
+class ConferenciaDocumento {
+  final String categoria;
+  final String severidade; // alto | medio | baixo | info
+  final String titulo;
+  final String descricao;
+
+  const ConferenciaDocumento({
+    required this.categoria,
+    required this.severidade,
+    required this.titulo,
+    required this.descricao,
+  });
+
+  factory ConferenciaDocumento.fromJson(Map<String, dynamic> j) =>
+      ConferenciaDocumento(
+        categoria: j['categoria']?.toString() ?? '',
+        severidade: j['severidade']?.toString() ?? 'medio',
+        titulo: j['titulo']?.toString() ?? '',
+        descricao: j['descricao']?.toString() ?? '',
       );
 }
 
 class ResultadoDocumento {
+  /// aprovado | pendencias | bloqueado — decisão final, que considera o cadastro da empresa
+  final String status;
   final List<ProblemaDocumento> problemas;
+  final List<ConferenciaDocumento> conferencias;
   final int score;
   final String resumo;
   final String modelo;
 
   const ResultadoDocumento({
+    required this.status,
     required this.problemas,
+    required this.conferencias,
     required this.score,
     required this.resumo,
     required this.modelo,
   });
 
-  factory ResultadoDocumento.fromJson(Map<String, dynamic> j) =>
-      ResultadoDocumento(
-        problemas: (j['problemas'] as List? ?? [])
-            .map((e) => ProblemaDocumento.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        score: j['score'] as int? ?? 100,
-        resumo: j['resumo'] as String? ?? '',
-        modelo: j['modelo'] as String? ?? '',
-      );
+  bool get aprovado => status == 'aprovado';
+
+  factory ResultadoDocumento.fromJson(Map<String, dynamic> j) {
+    final conferencia = j['conferencia'];
+    final itens = conferencia is Map ? conferencia['conferencias'] : null;
+    return ResultadoDocumento(
+      status: j['status']?.toString() ?? 'pendencias',
+      problemas: (j['problemas'] as List? ?? [])
+          .whereType<Map<String, dynamic>>()
+          .map(ProblemaDocumento.fromJson)
+          .toList(),
+      conferencias: (itens is List ? itens : const [])
+          .whereType<Map<String, dynamic>>()
+          .map(ConferenciaDocumento.fromJson)
+          .toList(),
+      score: (j['score'] as num?)?.round() ?? 100,
+      resumo: j['resumo']?.toString() ?? '',
+      modelo: j['modelo']?.toString() ?? '',
+    );
+  }
 }
 
 class Maquina {
