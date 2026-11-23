@@ -88,10 +88,10 @@ class ResultDocScreen extends StatelessWidget {
   Widget _emptyState() => Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF22C55E).withOpacity(0.08),
+          color: const Color(0xFF22C55E).withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: const Color(0xFF22C55E).withOpacity(0.25)),
+              color: const Color(0xFF22C55E).withValues(alpha: 0.25)),
         ),
         child: const Column(
           children: [
@@ -145,7 +145,7 @@ class _ScoreDoc extends StatelessWidget {
             Text(
               'Qualidade do documento',
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.4), fontSize: 12),
+                  color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
             ),
           ],
         ),
@@ -178,7 +178,7 @@ class _ProblemaCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1F35),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.25)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +189,7 @@ class _ProblemaCard extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.12),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 16),

@@ -792,8 +792,10 @@ def init_db():
     admin = c.execute("SELECT id FROM usuarios WHERE email = ?", (admin_email,)).fetchone()
     if not admin:
         if not admin_senha:
-            admin_senha = "nexar2026"
-            logger.warning("ADMIN_PASSWORD não definida — admin criado com a senha padrão. Troque antes de usar.")
+            # Nunca uma senha fixa no código: gera uma aleatória e mostra só desta vez, no log
+            admin_senha = secrets.token_urlsafe(9)
+            logger.warning(f"ADMIN_PASSWORD não definida — admin {admin_email} criado com a senha "
+                           f"aleatória: {admin_senha}  (anote agora ou defina ADMIN_PASSWORD e reinicie)")
         c.execute(
             "INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",
             ("Administrador", admin_email, generate_password_hash(admin_senha), "admin"),
@@ -803,7 +805,25 @@ def init_db():
         c.execute("UPDATE usuarios SET senha_hash = ? WHERE id = ?",
                   (generate_password_hash(admin_senha), admin["id"]))
     conn.commit()
+    _avisar_senha_padrao(c)
     conn.close()
+
+
+# Senha que versões antigas usavam quando ADMIN_PASSWORD não estava definida
+_SENHA_PADRAO_ANTIGA = "nexar2026"
+_EMAILS_DEMO = ("admin@nexar.com", "rh@nexar.com", "manutencao@nexar.com", "operador@nexar.com")
+
+
+def _avisar_senha_padrao(c) -> None:
+    """Avisa no log se o admin ou os usuários de demonstração ainda entram com a senha antiga do código."""
+    emails = {os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower(), *_EMAILS_DEMO}
+    marcas = ",".join("?" * len(emails))
+    expostos = [u["email"] for u in c.execute(
+        f"SELECT email, senha_hash FROM usuarios WHERE ativo = 1 AND LOWER(email) IN ({marcas})", tuple(emails))
+        if check_password_hash(u["senha_hash"], _SENHA_PADRAO_ANTIGA)]
+    if expostos:
+        logger.warning("SEGURANÇA: estes usuários ainda entram com a senha padrão antiga "
+                       f"'{_SENHA_PADRAO_ANTIGA}': {', '.join(expostos)}. Troque em Configurações → Usuários.")
 
 
 init_db()
@@ -2625,17 +2645,21 @@ def api_mapa_fabrica():
 @app.route("/api/fabrica/posicoes", methods=["POST"])
 @perfil_requerido("manutencao")
 def api_mapa_posicoes():
-    dados = request.get_json(silent=True) or {}
+    dados = request.get_json(silent=True)
+    posicoes = dados.get("posicoes") if isinstance(dados, dict) else None
+    if not isinstance(posicoes, dict):
+        return jsonify({"ok": False, "erro": "Formato inválido: envie {\"posicoes\": {\"<id>\": [x, y]}}."}), 400
     conn = get_db()
     n = 0
-    for mid, pos in (dados.get("posicoes") or {}).items():
+    for mid, pos in posicoes.items():
         try:
             x, y = float(pos[0]), float(pos[1])
+            mid = int(mid)
         except (TypeError, ValueError, IndexError, KeyError):
             continue
         if 0 <= x <= 100 and 0 <= y <= 100:
             n += conn.execute("UPDATE maquinas SET mapa_x = ?, mapa_y = ? WHERE id = ?",
-                              (round(x, 2), round(y, 2), int(mid))).rowcount
+                              (round(x, 2), round(y, 2), mid)).rowcount
     conn.commit()
     conn.close()
     registrar_auditoria("mapa_fabrica_alterado", "maquina", None, f"{n} posição(ões)")
@@ -4050,7 +4074,7 @@ def api_ai_analisar(oc_id: int):
 
     if "error" in resultado:
         logger.warning(f"[qrqc3d] erro na análise: {resultado['error']}")
-        return jsonify(resultado), 200
+        return jsonify(resultado), 503
 
     # Persiste diagnóstico
     conn = get_db()

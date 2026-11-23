@@ -145,7 +145,7 @@ por causa do limite de requisições); sem chave, fica o roteiro padrão de insp
 - **Integração com o RH:** o sistema de RH envia pessoas e habilitações por uma API com chave
   (ver [docs/INTEGRACAO_RH.md](docs/INTEGRACAO_RH.md)).
 
-**Usuários da base de demonstração** (senha igual à do administrador, `nexar2026` por padrão):
+**Usuários da base de demonstração** (senha igual à do administrador, definida em `ADMIN_PASSWORD`; sem ela, o sistema gera uma senha aleatória e mostra no log):
 `admin@nexar.com`, `rh@nexar.com`, `manutencao@nexar.com`, `operador@nexar.com`.
 Fotos de documentos para testar estão em `docs/exemplos/` (uma PT bloqueada por NR-10
 vencida, uma OS com pendências e uma PT aprovada).

@@ -9,6 +9,7 @@ ficam de fora: eles acompanham o componente mais próximo no visualizador.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -20,6 +21,7 @@ import unicodedata
 import zipfile
 
 RAIZ = os.path.dirname(os.path.abspath(__file__))
+log = logging.getLogger("nexar.cad")
 PASTA_ORIGEM = os.path.join(RAIZ, "cad_importados")          # fora de static: não é servido
 PASTA_MODELOS = os.path.join(RAIZ, "static", "models3d")
 EXTENSOES = (".step", ".stp")
@@ -150,6 +152,18 @@ def sugerir_componentes(glb: str, pre_selecionados: int = 20) -> list[dict]:
 
 
 # ── Conversão em segundo plano ───────────────────────────────────────────────
+def comando_otimizador() -> list[str] | None:
+    """Comando do glTF-Transform: o instalado no servidor (mais rápido, não depende da rede)
+    ou, se não houver, baixado pelo npx. None se o servidor não tiver Node.js."""
+    instalado = shutil.which("gltf-transform") or shutil.which("gltf-transform.cmd")
+    if instalado:
+        return [instalado]
+    npx = shutil.which("npx") or shutil.which("npx.cmd")
+    if npx:
+        return [npx, "-y", "-p", "@gltf-transform/cli@4", "gltf-transform"]
+    return None
+
+
 def converter_em_segundo_plano(job_id: int, steps: list[str], destino_glb: str, atualizar) -> None:
     """atualizar(job_id, status, mensagem, sugestoes=None) grava o andamento no banco."""
     def rodar():
@@ -167,18 +181,25 @@ def converter_em_segundo_plano(job_id: int, steps: list[str], destino_glb: str, 
                 if "No module named 'OCP'" in (r.stderr or ""):
                     erro = ["O conversor de CAD não está instalado no servidor (pip install cadquery-ocp)."]
                 raise RuntimeError(erro[0][:300])
-            npx = shutil.which("npx") or shutil.which("npx.cmd")
-            if npx:
+            otimizado = False
+            cmd_otimizar = comando_otimizador()
+            if cmd_otimizar:
                 atualizar(job_id, "otimizando", "Reduzindo e comprimindo o modelo para abrir rápido no celular…")
-                r = subprocess.run([npx, "-y", "@gltf-transform/cli@4", "optimize", bruto, destino_glb,
+                r = subprocess.run(cmd_otimizar + ["optimize", bruto, destino_glb,
                                     "--compress", "meshopt", "--join", "true", "--join-named", "false",
                                     "--flatten", "false", "--simplify-ratio", "0.15", "--texture-compress", "false"],
                                    capture_output=True, text=True, timeout=3600)
-            if not npx or r.returncode != 0 or not os.path.exists(destino_glb):
+                otimizado = r.returncode == 0 and os.path.exists(destino_glb)
+                if not otimizado:
+                    log.warning("[cad] otimização falhou (%s): %s", r.returncode,
+                                ((r.stderr or r.stdout or "").strip().splitlines() or ["?"])[-1][:300])
+            if not otimizado:
                 shutil.copyfile(bruto, destino_glb)   # sem otimização: funciona, só fica maior
             tam_mb = os.path.getsize(destino_glb) / 1e6
             sug = sugerir_componentes(destino_glb)
-            atualizar(job_id, "mapear", f"Modelo convertido ({tam_mb:.1f} MB). Confira os componentes sugeridos.", sug)
+            aviso = "" if otimizado else (" Atenção: o modelo não foi otimizado (instale o Node.js e o "
+                                          "@gltf-transform/cli no servidor) e pode demorar a abrir no celular.")
+            atualizar(job_id, "mapear", f"Modelo convertido ({tam_mb:.1f} MB). Confira os componentes sugeridos.{aviso}", sug)
         except subprocess.TimeoutExpired:
             atualizar(job_id, "erro", "A conversão passou de 1 hora e foi interrompida.")
         except Exception as e:

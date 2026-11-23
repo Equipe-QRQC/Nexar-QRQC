@@ -269,7 +269,15 @@ def criar_pessoas_e_usuarios(conn) -> None:
              int(ativo))).lastrowid
         for q, dias in quals.items():
             nexar.empresa.salvar_qualificacao(conn, cid, q, hoje + timedelta(days=dias))
-    senha = os.getenv("ADMIN_PASSWORD", "").strip() or "nexar2026"
+    senha = os.getenv("ADMIN_PASSWORD", "").strip()
+    if not senha:
+        import secrets
+        senha = secrets.token_urlsafe(9)
+        # Base nova: o admin também recebe esta senha, para uma só valer para todos
+        admin_email = os.getenv("ADMIN_EMAIL", "admin@nexar.com").strip().lower()
+        conn.execute("UPDATE usuarios SET senha_hash = ? WHERE LOWER(email) = ?",
+                     (generate_password_hash(senha), admin_email))
+        print(f"⚠ ADMIN_PASSWORD não definida — senha aleatória do admin e dos usuários de demonstração: {senha}")
     for nome, email, perfil in USUARIOS:
         if not conn.execute("SELECT 1 FROM usuarios WHERE email = ?", (email,)).fetchone():
             conn.execute("INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",

@@ -129,10 +129,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withOpacity(0.1),
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: const Color(0xFFEF4444).withOpacity(0.4)),
+                            color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF0EA5E9),
                         disabledBackgroundColor:
-                            const Color(0xFF0EA5E9).withOpacity(0.4),
+                            const Color(0xFF0EA5E9).withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
