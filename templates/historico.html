@@ -21,20 +21,25 @@
   <!-- Filtros -->
   <div class="card" style="margin-bottom:16px;">
     <form class="card-body" id="filtrosForm" method="get" action="{{ url_for('historico') }}" style="padding:16px;">
-      <div class="filter-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
-        <div>
+      <div class="filter-grid" id="filtrosExtras" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
+        <div id="filtroBusca">
           <label class="form-label" style="font-size:12px;">{{ t.pesquisar }}</label>
           <div style="position:relative;">
             <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-light); font-size:13px;"></i>
             <input id="searchInput" name="search" type="search" class="form-control" placeholder="{{ t.pesquisar }}"
                    value="{{ filtros.search }}" style="padding-left:36px;" oninput="buscarDepois()" />
           </div>
+          {% set n_filtros = [filtros.data, filtros.tipo, filtros.impacto, filtros.status] | select | list | length %}
+          <button type="button" id="btnFiltros" class="btn btn-outline btn-sm" aria-expanded="false" aria-controls="filtrosExtras"
+                  onclick="alternarFiltros()">
+            <i class="fas fa-sliders"></i> Filtros{% if n_filtros %} ({{ n_filtros }}){% endif %}
+          </button>
         </div>
-        <div>
+        <div class="filtro-extra">
           <label class="form-label" style="font-size:12px;">{{ t.data }}</label>
           <input id="dateInput" name="data" type="date" class="form-control" value="{{ filtros.data }}" onchange="filtrar()" />
         </div>
-        <div>
+        <div class="filtro-extra">
           <label class="form-label" style="font-size:12px;">{{ t.tipo }}</label>
           <select id="tipoSelect" name="tipo" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
@@ -44,7 +49,7 @@
             <option value="Manutenção">{{ t.manutencao }}</option>
           </select>
         </div>
-        <div>
+        <div class="filtro-extra">
           <label class="form-label" style="font-size:12px;">{{ t.impacto }}</label>
           <select id="impactoSelect" name="impacto" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
@@ -53,7 +58,7 @@
             <option value="Baixo">{{ t.baixo }}</option>
           </select>
         </div>
-        <div>
+        <div class="filtro-extra">
           <label class="form-label" style="font-size:12px;">{{ t.status }}</label>
           <select id="statusSelect" name="status" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
@@ -418,6 +423,17 @@
     flex-shrink: 0;
   }
 
+  /* Filtros no celular: só a busca fica aberta; "Filtros (n)" mostra os demais */
+  #btnFiltros { display: none; }
+  @media (max-width: 767px) {
+    /* busca e botão "Filtros" na mesma linha; o rótulo repete o texto do campo */
+    #filtroBusca { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; grid-column: 1 / -1; }
+    #filtroBusca > label { display: none; }
+    #btnFiltros { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; white-space: nowrap; }
+    #filtrosExtras .filtro-extra { display: none; }
+    #filtrosExtras.aberto .filtro-extra { display: block; }
+  }
+
   /* Paginação */
   .page-btn {
     display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
@@ -479,6 +495,10 @@
   function filtrar() {
     sessionStorage.setItem('historicoFoco', document.activeElement?.id || '');
     filtrosForm.submit();
+  }
+  function alternarFiltros() {
+    const aberto = document.getElementById('filtrosExtras').classList.toggle('aberto');
+    document.getElementById('btnFiltros').setAttribute('aria-expanded', String(aberto));
   }
   let esperaBusca;
   function buscarDepois() {          // espera parar de digitar
