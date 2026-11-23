@@ -114,7 +114,7 @@ def proteger_uploads():
         ok = conn.execute(
             "SELECT 1 FROM mobile_tokens mt JOIN usuarios u ON u.id = mt.user_id WHERE mt.token = ? "
             "AND u.ativo = 1 AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))",
-            (auth[7:],),
+            (_hash_token(auth[7:].strip()),),
         ).fetchone()
         conn.close()
         if ok:
@@ -4365,7 +4365,7 @@ def _mobile_auth(f):
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return jsonify({"erro": "Token não fornecido"}), 401
-        token = auth[7:]
+        token = _hash_token(auth[7:].strip())   # o banco guarda só o hash do token
         conn = get_db()
         row = conn.execute(
             """SELECT mt.user_id, u.email, u.nome, u.perfil
@@ -4394,6 +4394,17 @@ def _ensure_mobile_tables():
             expires_at TEXT
         )
     """)
+    # Tokens gravados em texto puro (versões antigas) viram hash: quem tiver uma cópia do
+    # banco não consegue usar os tokens. As sessões do app continuam valendo.
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(mobile_tokens)")]
+    if "token_hash" not in cols:
+        conn.execute("ALTER TABLE mobile_tokens ADD COLUMN token_hash INTEGER DEFAULT 0")
+    antigos = conn.execute("SELECT id, token FROM mobile_tokens WHERE COALESCE(token_hash, 0) = 0").fetchall()
+    for r in antigos:
+        conn.execute("UPDATE mobile_tokens SET token = ?, token_hash = 1 WHERE id = ?", (_hash_token(r["token"]), r["id"]))
+    if antigos:
+        logger.info(f"[mobile] {len(antigos)} token(s) antigo(s) convertido(s) para hash")
+    conn.execute("DELETE FROM mobile_tokens WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')")
     conn.commit()
     conn.close()
 
@@ -4429,9 +4440,9 @@ def mobile_login():
 
     token = secrets.token_hex(32)
     conn.execute(
-        """INSERT INTO mobile_tokens (user_id, token, expires_at)
-           VALUES (?, ?, datetime('now', '+30 days'))""",
-        (user["id"], token),
+        """INSERT INTO mobile_tokens (user_id, token, token_hash, expires_at)
+           VALUES (?, ?, 1, datetime('now', '+30 days'))""",
+        (user["id"], _hash_token(token)),     # o app recebe o token; o banco guarda só o hash
     )
     conn.commit()
     conn.close()
@@ -4564,9 +4575,9 @@ def mobile_ocorrencias_post():
 @_mobile_auth
 def mobile_logout():
     """Revoga o token do aparelho."""
-    token = request.headers.get("Authorization", "")[7:]
+    token = request.headers.get("Authorization", "")[7:].strip()
     conn = get_db()
-    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (token,))
+    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (_hash_token(token),))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
