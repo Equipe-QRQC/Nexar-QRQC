@@ -769,6 +769,8 @@ def init_db():
         # Indicadores: esforço e custo registrados na resolução
         "horas_trabalho":      "ALTER TABLE ocorrencias ADD COLUMN horas_trabalho REAL",
         "custo_pecas":         "ALTER TABLE ocorrencias ADD COLUMN custo_pecas REAL",
+        # Foto do problema (app ou inspeção do Sensor Visual)
+        "foto_url":            "ALTER TABLE ocorrencias ADD COLUMN foto_url TEXT",
     }
     for col, sql in migracoes.items():
         if col not in cols:
@@ -2424,6 +2426,13 @@ def api_diagnostico_status(oc_id: int):
     return jsonify({"ia_status": r["ia_status"]})
 
 
+def _vincular_inspecao(conn, oc_id: int, inspecao_id: int) -> None:
+    """Ocorrência aberta a partir do Sensor Visual: liga as duas e usa a foto da inspeção."""
+    conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (oc_id, inspecao_id))
+    conn.execute("UPDATE ocorrencias SET foto_url = (SELECT imagem_url FROM percepcoes WHERE id = ?) "
+                 "WHERE id = ? AND foto_url IS NULL", (inspecao_id, oc_id))
+
+
 def _sim(valor) -> bool:
     return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
 
@@ -2534,7 +2543,7 @@ def registrar_ocorrencia():
         ocorrencia_id = cursor.lastrowid
         inspecao_id = request.form.get("inspecao_id", type=int)
         if inspecao_id:
-            conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (ocorrencia_id, inspecao_id))
+            _vincular_inspecao(conn, ocorrencia_id, inspecao_id)
         conn.commit()
         conn.close()
         logger.info(f"[ocorrencia] criada id={ocorrencia_id} — diagnóstico em segundo plano")
@@ -4561,13 +4570,50 @@ def mobile_ocorrencias_post():
     except (TypeError, ValueError):
         inspecao_id = 0
     if inspecao_id:                                  # ocorrência aberta a partir do Sensor Visual
-        conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (oc_id, inspecao_id))
+        _vincular_inspecao(conn, oc_id, inspecao_id)
     conn.commit()
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
 
     diagnosticar_em_segundo_plano(oc_id, campos)
     return jsonify({"ok": True, "id": oc_id})
+
+
+OCORRENCIA_FOTO_FOLDER = os.path.join("static", "uploads", "ocorrencias")
+os.makedirs(_abs(OCORRENCIA_FOTO_FOLDER), exist_ok=True)
+
+
+@app.route("/api/mobile/ocorrencias/<int:oc_id>/foto", methods=["POST"])
+@csrf.exempt
+@_mobile_auth
+@limiter.limit("20 per minute")
+def mobile_ocorrencia_foto(oc_id: int):
+    """Foto do problema, enviada pelo app logo depois de registrar a ocorrência (opcional)."""
+    conn = get_db()
+    existe = conn.execute("SELECT 1 FROM ocorrencias WHERE id = ?", (oc_id,)).fetchone()
+    conn.close()
+    if not existe:
+        return jsonify({"erro": "Ocorrência não encontrada."}), 404
+    arquivo = request.files.get("foto")
+    if not arquivo or not arquivo.filename:
+        return jsonify({"erro": "Nenhuma foto enviada."}), 400
+    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
+    if ext not in _SENSOR_EXT or not content_is_valid(arquivo.stream, ext):
+        return jsonify({"erro": "Envie uma foto em JPG ou PNG."}), 400
+    caminho = os.path.join(OCORRENCIA_FOTO_FOLDER, f"{oc_id}_{secrets.token_hex(6)}.{ext}")
+    arquivo.save(_abs(caminho))
+    try:
+        _abrir_foto_sensor(_abs(caminho))          # confere se abre e endireita pela orientação do celular
+    except Exception:
+        os.remove(_abs(caminho))
+        return jsonify({"erro": "Não foi possível processar a foto."}), 400
+    foto_url = "/" + caminho.replace(os.sep, "/")
+    conn = get_db()
+    conn.execute("UPDATE ocorrencias SET foto_url = ? WHERE id = ?", (foto_url, oc_id))
+    conn.commit()
+    conn.close()
+    logger.info(f"[mobile] foto anexada à ocorrência {oc_id} por user_id={request.mobile_user['user_id']}")
+    return jsonify({"ok": True, "foto_url": foto_url})
 
 
 @app.route("/api/mobile/logout", methods=["POST"])

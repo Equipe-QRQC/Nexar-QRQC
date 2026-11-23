@@ -189,6 +189,11 @@ class ApiService {
     return (_json(resp) as Map<String, dynamic>)['id'] as int;
   }
 
+  /// Foto do problema, enviada depois de registrar a ocorrência (opcional).
+  Future<void> enviarFotoOcorrencia(int ocorrenciaId, File foto) async {
+    await _enviarFoto('/api/mobile/ocorrencias/$ocorrenciaId/foto', foto, const {});
+  }
+
   // ── Sensor Visual e documentos ─────────────────────────────────────────
   Future<http.Response> _enviarFoto(String caminho, File foto, Map<String, String> campos) {
     // A IA leva de 15 a 30 s; o limite cobre a troca para o modelo reserva
