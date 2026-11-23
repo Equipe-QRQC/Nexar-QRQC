@@ -1,6 +1,6 @@
 # Nexar QRQC
 
-Sistema de registro e resolução de ocorrências industriais com inteligência artificial. O operador registra um problema, a IA (**Gemini 2.0 Flash** com visão) gera um diagnóstico técnico passo a passo. A solicitação de suporte é enviada via WhatsApp pelo Twilio.
+Sistema de registro e resolução de ocorrências industriais com inteligência artificial. O operador registra um problema, a IA (**Gemini Flash** com visão) gera um diagnóstico técnico passo a passo. A solicitação de suporte é enviada via WhatsApp pelo Twilio.
 
 ## Funcionalidades
 
@@ -181,16 +181,16 @@ Nexar-QRQC/
 
 ## Mudando de provedor de IA
 
-O sistema foi migrado de OpenAI/GPT-4o para **Gemini 2.0 Flash** porque:
+O diagnóstico usa o **Gemini Flash** porque:
 - ✅ Free tier real e generoso (sem cartão de crédito)
 - ✅ Suporte nativo a visão (analisa diagramas)
 - ✅ Excelente em português
 - ✅ Resposta rápida (~1-2 segundos)
 
-Se precisar usar outro modelo Gemini, basta alterar a variável `GEMINI_MODEL` no `.env`:
-- `gemini-2.0-flash` — padrão, gratuito, rápido (recomendado)
-- `gemini-1.5-pro` — mais capaz, ainda no free tier (50 req/dia)
-- `gemini-1.5-flash` — alternativa estável
+Os modelos são tentados em cadeia: `gemini-3.5-flash` → `gemini-3.5-flash-lite` → `gemini-3.8-flash`
+→ `gemini-3.1-flash-lite` (se um estiver descontinuado, sem cota ou sobrecarregado, vai para o próximo). Para
+pôr outro modelo na frente da cadeia, defina `GEMINI_MODEL` no `.env` (ex.: `GEMINI_MODEL=gemini-3.8-flash`).
+O Google aposenta modelos com frequência: veja os disponíveis em https://ai.google.dev/gemini-api/docs/models.
 
 ---
 

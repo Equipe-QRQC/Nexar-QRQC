@@ -163,32 +163,28 @@ def rate_limit_handler(e):
     return jsonify({"erro": "Muitas tentativas. Aguarde um momento e tente novamente."}), 429
 
 # ── Gemini (Google GenAI SDK) ─────────────────────────────────────────────────
-# Modelo: gemini-2.0-flash (free tier: 15 req/min, 1500 req/dia)
 # Obter chave: https://aistudio.google.com/apikey
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
 
 # Cadeia de modelos: tenta na ordem. Se 429/quota/404 em um, cai no próximo.
-# Pode forçar um único modelo definindo GEMINI_MODEL no .env.
-# Obs: modelos 1.5-flash e 1.5-flash-8b foram descontinuados em set/2025.
+# O Google aposenta modelos com frequência: em nov/2026 os 2.0 e 2.5 já davam 404 para
+# chaves novas e o diagnóstico caía sempre no roteiro sem IA. Os apelidos "-latest" não
+# servem de reserva (a biblioteca recebe 404). Testados com chave real em 23/11/2026:
+# 3.5-flash e 3.5-flash-lite respondem; 3.8-flash e 3.1-flash-lite existem, mas davam 503
+# (alta demanda) e ficam como última reserva.
+# GEMINI_MODEL no .env entra na frente da cadeia (sem perder a reserva).
 _DEFAULT_CHAIN = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.1-flash-lite",
 ]
 _user_model = os.getenv("GEMINI_MODEL", "").strip()
-GEMINI_MODELS = [_user_model] if _user_model else _DEFAULT_CHAIN
+GEMINI_MODELS = list(dict.fromkeys(([_user_model] if _user_model else []) + _DEFAULT_CHAIN))
 GEMINI_MODEL  = GEMINI_MODELS[0]  # exibido na UI
 
-# Cadeia ESPECÍFICA para detecção de bounding boxes (visão espacial precisa).
-# gemini-2.5-pro é melhor para coordenadas, mas tem free tier menor (50 req/dia)
-# Se Pro estourar quota, cai pro Flash que ainda funciona razoavelmente.
-_BBOX_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-2.5-flash-lite",
-    "gemini-2.0-flash-lite",
-]
+# Cadeia para a detecção de bounding boxes (visão espacial): mesma ordem, Flash antes do Lite.
+_BBOX_MODELS = list(_DEFAULT_CHAIN)
 
 SYSTEM_INSTRUCTION = (
     "Você é um engenheiro sênior de manutenção industrial e qualidade (QRQC) "
@@ -248,7 +244,9 @@ GEN_CONFIG_BBOX = genai_types.GenerateContentConfig(
     ),
     temperature=0.1,  # baixa temperatura → mais determinístico para coordenadas
     top_p=0.9,
-    max_output_tokens=800,
+    # Os modelos 3.x "pensam" antes de responder e esses tokens entram no limite:
+    # com 800 o JSON das caixas vinha cortado no meio e nenhuma marcação aparecia
+    max_output_tokens=4096,
     response_mime_type="application/json",
     response_schema=DeteccaoComponentes,
 )
@@ -1256,7 +1254,7 @@ def _detectar_componentes(
                 # Verifica se o componente primário foi incluído (quando informado)
                 if componente_primario:
                     nomes_marcados = " ".join(a["titulo"].upper() for a in anotacoes)
-                    if componente_primario.upper() not in nomes_marcados:
+                    if not _componente_marcado(componente_primario, nomes_marcados):
                         logger.warning(
                             f"[bbox/{modelo}] componente primário '{componente_primario}' "
                             f"NÃO encontrado nas anotações ({nomes_marcados}) — tentando próximo modelo"
@@ -1286,6 +1284,16 @@ def _detectar_componentes(
         )
         return melhor_resultado
     return []
+
+
+def _componente_marcado(primario: str, nomes_marcados: str) -> bool:
+    """O componente primário está entre as marcações? Sem acento e aceitando singular/plural
+    ("VEDACAO" x "Vedações", "ROLAMENTO" x "ROLAMENTOS"): antes descartava a resposta certa."""
+    import unicodedata
+    def norm(t: str) -> str:
+        return unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode().upper()
+    p, nomes = norm(primario), norm(nomes_marcados)
+    return p in nomes or p[:max(4, len(p) - 2)] in nomes
 
 
 def _should_try_next_model(err: Exception) -> bool:
