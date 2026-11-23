@@ -1535,23 +1535,63 @@ def analise():
     )
 
 
+HISTORICO_POR_PAGINA = 20
+_FILTROS_HISTORICO = ("search", "data", "tipo", "impacto", "status")
+
+
+def _filtro_historico(conn, args) -> tuple[str, list, dict]:
+    """
+    WHERE do histórico a partir da URL (?search=&data=&tipo=&impacto=&status=), usado pela
+    tela e pela exportação Excel — a planilha sai com exatamente o que está filtrado na tela.
+    A busca ignora acentos e maiúsculas ("valvula" acha "Válvula").
+    """
+    filtros = {k: (args.get(k) or "").strip()[:120] for k in _FILTROS_HISTORICO}
+    conn.create_function("norm", 1, lambda t: empresa.normalizar(t or ""), deterministic=True)
+    where, params = ["1=1"], []
+    if filtros["search"]:
+        termo = empresa.normalizar(filtros["search"])
+        if termo:
+            where.append("norm(CAST(o.id AS TEXT) || ' ' || COALESCE(m.nome,'') || ' ' || COALESCE(o.nome_operador,'') || ' ' || "
+                         "COALESCE(o.descricao,'') || ' ' || COALESCE(o.tipo_ocorrencia,'') || ' ' || "
+                         "COALESCE(o.nivel_impacto,'') || ' ' || COALESCE(o.status,'Aberta')) LIKE ?")
+            params.append(f"%{termo}%")
+    if filtros["data"]:
+        where.append("substr(o.data_ocorrencia, 1, 10) = ?")
+        params.append(filtros["data"])
+    for campo, coluna in (("tipo", "o.tipo_ocorrencia"), ("impacto", "o.nivel_impacto")):
+        if filtros[campo]:
+            where.append(f"{coluna} = ?")
+            params.append(filtros[campo])
+    if filtros["status"]:
+        where.append("COALESCE(o.status, 'Aberta') = ?")
+        params.append(filtros["status"])
+    return " AND ".join(where), params, filtros
+
+
 @app.route("/historico")
 @login_required
 def historico():
+    pagina = max(1, request.args.get("pagina", 1, type=int) or 1)
     try:
         conn = get_db()
+        where, params, filtros = _filtro_historico(conn, request.args)
+        base = "FROM ocorrencias o LEFT JOIN maquinas m ON o.maquina_id = m.id " \
+               "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id WHERE " + where
+        total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+        total_geral = conn.execute("SELECT COUNT(*) FROM ocorrencias").fetchone()[0] if total == 0 else total
+        paginas = max(1, -(-total // HISTORICO_POR_PAGINA))
+        pagina = min(pagina, paginas)
         ocorrencias = conn.execute(
-            "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome "
-            "FROM ocorrencias o "
-            "LEFT JOIN maquinas m ON o.maquina_id = m.id "
-            "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
-            "ORDER BY o.data_registro DESC"
-        ).fetchall()
+            "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome " + base +
+            " ORDER BY o.data_registro DESC, o.id DESC LIMIT ? OFFSET ?",
+            params + [HISTORICO_POR_PAGINA, (pagina - 1) * HISTORICO_POR_PAGINA]).fetchall()
         conn.close()
-        return render_template("historico.html", ocorrencias=ocorrencias)
     except Exception as e:
         logger.exception(f"Erro ao listar histórico: {e}")
-        return render_template("historico.html", ocorrencias=[])
+        ocorrencias, filtros, total, total_geral, pagina, paginas = [], {}, 0, 0, 1, 1
+    return render_template("historico.html", ocorrencias=ocorrencias, filtros=filtros, total=total,
+                           total_geral=total_geral, pagina=pagina, paginas=paginas,
+                           por_pagina=HISTORICO_POR_PAGINA)
 
 
 def _texto_excel(valor):
@@ -1570,39 +1610,20 @@ def historico_export():
     from io import BytesIO
     import datetime
 
-    # Filtros via query params (mesma lógica do JS)
-    busca   = request.args.get("search", "").lower()
-    data_f  = request.args.get("data",   "")
-    tipo_f  = request.args.get("tipo",   "")
-    imp_f   = request.args.get("impacto","")
-    status_f= request.args.get("status", "")
-
+    # Mesmo filtro da tela do histórico
     conn = get_db()
-    rows = conn.execute("""
+    where, params, filtros = _filtro_historico(conn, request.args)
+    filtradas = conn.execute(f"""
         SELECT o.id, COALESCE(m.nome,'—') AS maquina_nome, o.nome_operador,
                o.tipo_ocorrencia, o.nivel_impacto, o.descricao,
                o.data_ocorrencia, o.status
         FROM ocorrencias o
         LEFT JOIN maquinas m ON m.id = o.maquina_id
-        ORDER BY o.data_registro DESC
-    """).fetchall()
+        WHERE {where}
+        ORDER BY o.data_registro DESC, o.id DESC
+    """, params).fetchall()
     conn.close()
-
-    def row_matches(r):
-        text = " ".join(str(r[k] or "") for k in
-                        ["maquina_nome","nome_operador","descricao",
-                         "tipo_ocorrencia","nivel_impacto","status"]).lower()
-        data_r  = (r["data_ocorrencia"] or "")[:10]
-        st      = r["status"] or "Aberta"
-        return (
-            (not busca    or busca    in text) and
-            (not data_f   or data_f   == data_r) and
-            (not tipo_f   or tipo_f   == r["tipo_ocorrencia"]) and
-            (not imp_f    or imp_f    == r["nivel_impacto"]) and
-            (not status_f or status_f == st)
-        )
-
-    filtradas = [r for r in rows if row_matches(r)]
+    data_f, tipo_f, imp_f, status_f = filtros["data"], filtros["tipo"], filtros["impacto"], filtros["status"]
 
     # ── Cores ────────────────────────────────────────────────────────────────
     C_NEXAR  = "1E3A8A"  # azul escuro Nexar
