@@ -1,0 +1,43 @@
+# Roda os testes a cada push na main e em todo pull request.
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Sistema web (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+      - name: Instalar dependências
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Testes
+        run: pytest -v
+
+  flutter:
+    name: App (flutter test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: qrqc-mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Análise do código
+        # Avisos de estilo ("info") não quebram o build; erros e warnings, sim
+        run: flutter analyze --no-fatal-infos
+      - name: Testes
+        run: flutter test
