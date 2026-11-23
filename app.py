@@ -2335,6 +2335,74 @@ Use linguagem técnica em português. Foque em ações práticas imediatas. Seja
             "ia_status": ia_status, "diagrama_url": diagrama_url}
 
 
+def _gravar_diagnostico(oc_id: int, diag: dict) -> None:
+    conn = get_db()
+    conn.execute(
+        "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
+        (diag["resposta_ia"], diag["ia_status"],
+         json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
+         diag["diagrama_url"], oc_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def diagnosticar_em_segundo_plano(oc_id: int, campos: dict) -> None:
+    """Gera o diagnóstico da ocorrência numa thread (web e app) e grava quando ficar pronto."""
+    import threading
+
+    def _rodar():
+        try:
+            _gravar_diagnostico(oc_id, diagnosticar_ocorrencia(campos))
+        except Exception:
+            logger.exception(f"[ocorrencia] falha no diagnóstico em segundo plano oc={oc_id}")
+            _concluir_sem_ia(oc_id)
+
+    threading.Thread(target=_rodar, daemon=True, name=f"diag-{oc_id}").start()
+
+
+def _concluir_sem_ia(oc_id: int) -> None:
+    """Fecha um diagnóstico que ficou "pendente" com o roteiro local (peça, sintoma e histórico)."""
+    conn = get_db()
+    oc = conn.execute("SELECT maquina_id, componente_apontado, sintoma, maquina_parada, risco_pessoas "
+                      "FROM ocorrencias WHERE id = ? AND ia_status = 'pendente'", (oc_id,)).fetchone()
+    conn.close()
+    if not oc:
+        return
+    nome = _nome_componente(oc["maquina_id"], oc["componente_apontado"])
+    if nome:
+        texto = diagnostico_local.montar_diagnostico(
+            nome, oc["sintoma"], solucoes_da_peca(oc["maquina_id"], oc["componente_apontado"])["itens"],
+            parada=bool(oc["maquina_parada"]), risco=bool(oc["risco_pessoas"]))
+        status = "local"
+    else:
+        texto, status = _fallback_response(""), "fallback"
+    _gravar_diagnostico(oc_id, {"resposta_ia": texto, "ia_status": status, "anotacoes": [], "diagrama_url": None})
+
+
+def _concluir_pendentes_do_reinicio() -> None:
+    """Diagnósticos em andamento morrem com o servidor: no início, nenhum fica "gerando" para sempre."""
+    conn = get_db()
+    ids = [r["id"] for r in conn.execute("SELECT id FROM ocorrencias WHERE ia_status = 'pendente'")]
+    conn.close()
+    for oc_id in ids:
+        _concluir_sem_ia(oc_id)
+    if ids:
+        logger.info(f"[ocorrencia] {len(ids)} diagnóstico(s) interrompido(s) pelo reinício concluídos sem IA")
+
+
+@app.route("/api/ocorrencias/<int:oc_id>/diagnostico-status")
+@login_required
+def api_diagnostico_status(oc_id: int):
+    """Consulta leve usada pela página da ocorrência enquanto o diagnóstico é gerado."""
+    conn = get_db()
+    r = conn.execute("SELECT ia_status FROM ocorrencias WHERE id = ?", (oc_id,)).fetchone()
+    conn.close()
+    if not r:
+        return jsonify({"erro": "Ocorrência não encontrada."}), 404
+    return jsonify({"ia_status": r["ia_status"]})
+
+
 def _sim(valor) -> bool:
     return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
 
@@ -2426,21 +2494,20 @@ def registrar_ocorrencia():
     descricao, tipo, impacto = campos["descricao"], campos["tipo_ocorrencia"], campos["nivel_impacto"]
     componente, sintoma = campos["componente_apontado"], campos["sintoma"]
     parada, risco = campos["maquina_parada"], campos["risco_pessoas"]
-    diag = diagnosticar_ocorrencia(campos)
-    anotacoes_json = json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None
 
     try:
         conn = get_db()
+        # O diagnóstico da IA leva de 20 s a 1 min: a ocorrência é gravada na hora como
+        # "pendente" e a página dela se atualiza sozinha quando o diagnóstico fica pronto
         cursor = conn.execute(
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url,
+                detalhamento_tecnico, ia_status,
                 componente_apontado, sintoma, maquina_parada, risco_pessoas, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,'pendente',?,?,?,?,'Aberta')""",
             (maquina_id, campos["data_ocorrencia"], campos["nome_operador"], campos["setor_area"],
              descricao, tipo, impacto, campos["problema_recorrente"], campos["detalhamento_tecnico"],
-             diag["resposta_ia"], diag["ia_status"], anotacoes_json, diag["diagrama_url"],
              componente, sintoma, int(parada), int(risco)),
         )
         ocorrencia_id = cursor.lastrowid
@@ -2449,10 +2516,11 @@ def registrar_ocorrencia():
             conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (ocorrencia_id, inspecao_id))
         conn.commit()
         conn.close()
-        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={diag['ia_status']}")
+        logger.info(f"[ocorrencia] criada id={ocorrencia_id} — diagnóstico em segundo plano")
     except Exception:
         logger.exception("Falha ao persistir a ocorrência")
         return erro("Não foi possível salvar a ocorrência. Tente novamente.")
+    diagnosticar_em_segundo_plano(ocorrencia_id, campos)
 
     # Post/Redirect/Get: recarregar a página não duplica a ocorrência.
     return redirect(url_for("ver_ocorrencia", oc_id=ocorrencia_id))
@@ -4311,6 +4379,7 @@ def _ensure_mobile_tables():
 
 with app.app_context():
     _ensure_mobile_tables()
+    _concluir_pendentes_do_reinicio()
 
 
 @app.route("/api/mobile/login", methods=["POST"])
@@ -4465,23 +4534,7 @@ def mobile_ocorrencias_post():
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
 
-    def _diagnosticar_em_segundo_plano():
-        try:
-            diag = diagnosticar_ocorrencia(campos)
-            c = get_db()
-            c.execute(
-                "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
-                (diag["resposta_ia"], diag["ia_status"],
-                 json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
-                 diag["diagrama_url"], oc_id),
-            )
-            c.commit()
-            c.close()
-        except Exception:
-            logger.exception(f"[mobile] falha no diagnóstico em segundo plano oc={oc_id}")
-
-    import threading
-    threading.Thread(target=_diagnosticar_em_segundo_plano, daemon=True).start()
+    diagnosticar_em_segundo_plano(oc_id, campos)
     return jsonify({"ok": True, "id": oc_id})
 
 
