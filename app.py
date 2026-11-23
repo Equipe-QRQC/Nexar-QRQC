@@ -819,6 +819,9 @@ def init_db():
             admin_senha = secrets.token_urlsafe(9)
             logger.warning(f"ADMIN_PASSWORD não definida — admin {admin_email} criado com a senha "
                            f"aleatória: {admin_senha}  (anote agora ou defina ADMIN_PASSWORD e reinicie)")
+            # Vale para o resto deste processo: o seed_demo.py importa este módulo e usa a mesma
+            # senha nos usuários de demonstração (antes gerava outra e a do log não funcionava)
+            os.environ["ADMIN_PASSWORD"] = admin_senha
         c.execute(
             "INSERT INTO usuarios (nome, email, senha_hash, perfil) VALUES (?,?,?,?)",
             ("Administrador", admin_email, generate_password_hash(admin_senha), "admin"),
