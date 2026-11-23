@@ -300,6 +300,25 @@
     dica();
   }
 
+  // Aparelho sem placa de vídeo de verdade (WebGL por software), com poucos núcleos ou pouca
+  // memória: o 3D completo congela a página. Resultado guardado: o teste cria um contexto WebGL.
+  let _fraco = null;
+  function aparelhoFraco() {
+    if (_fraco !== null) return _fraco;
+    let renderizador = '';
+    try {
+      const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
+      if (!gl) return (_fraco = true);
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      renderizador = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch (e) { return (_fraco = true); }
+    _fraco = /swiftshader|llvmpipe|softpipe|software|basic render/i.test(renderizador)
+          || (navigator.hardwareConcurrency || 8) <= 2
+          || (navigator.deviceMemory || 8) <= 2;
+    return _fraco;
+  }
+
   // ── Vista 3D ────────────────────────────────────────────────────────────
   // O módulo 3D (Three.js + CADs) só é carregado quando a vista 3D é aberta
   let vista = '2d', f3d = null, f3dCarregando = null;
@@ -312,7 +331,7 @@
     dica();
     if (v === '3d' && !f3d) {
       f3dCarregando ||= import('/static/js/fabrica3d.js').then(async ({ criarFabrica3D }) => {
-        const inst = await criarFabrica3D($('planta3d'), { onSelect: (id) => selecionar(id) });
+        const inst = await criarFabrica3D($('planta3d'), { onSelect: (id) => selecionar(id), leve: aparelhoFraco() });
         f3d = inst;
         await inst.atualizar(maquinas, selecionada);
         if (selecionada) inst.selecionar(selecionada);
@@ -364,10 +383,12 @@
   }, 60000);
 
   resumo(); desenhar(); painel();
-  // Abre na última vista usada; na primeira visita, em 3D se houver máquina com CAD
+  // Abre na última vista usada; na primeira visita, em 3D se houver máquina com CAD e o
+  // aparelho der conta (sem placa de vídeo, o 3D travava a página: abre na planta 2D)
   let salva = null;
   try { salva = localStorage.getItem('fabrica.vista'); } catch (e) { /* armazenamento indisponível */ }
-  mostrarVista(salva === '2d' || salva === '3d' ? salva : (maquinas.some(m => m.cad) ? '3d' : '2d'));
+  mostrarVista(salva === '2d' || salva === '3d' ? salva
+               : (maquinas.some(m => m.cad) && !aparelhoFraco() ? '3d' : '2d'));
 })();
 </script>
 {% endblock %}
