@@ -59,15 +59,17 @@ function textoNoChao(texto, altura) {
   return m;
 }
 
-export async function criarFabrica3D(container, { onSelect } = {}) {
+export async function criarFabrica3D(container, { onSelect, leve = false } = {}) {
+  // leve: aparelho sem placa de vídeo boa (renderização por software, tablet simples).
+  // Sombra 4096² + antialias + tela 2x travavam a página por vários segundos nesses aparelhos.
   // ── Cena ──────────────────────────────────────────────────────────────
   const w0 = container.clientWidth || 900, h0 = container.clientHeight || 500;
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const renderer = new THREE.WebGLRenderer({ antialias: !leve });
+  renderer.setPixelRatio(leve ? 1 : Math.min(window.devicePixelRatio, 2));
   renderer.setSize(w0, h0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !leve;          // sombras são o maior custo sem placa de vídeo
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.className = 'fb3-canvas';
   container.append(renderer.domElement);
@@ -96,7 +98,7 @@ export async function criarFabrica3D(container, { onSelect } = {}) {
   const sol = new THREE.DirectionalLight(0xffffff, 2.2);
   sol.position.set(12, 30, 18);
   sol.castShadow = true;
-  sol.shadow.mapSize.set(4096, 4096);
+  sol.shadow.mapSize.set(leve ? 1024 : 4096, leve ? 1024 : 4096);
   Object.assign(sol.shadow.camera, { left: -26, right: 26, top: 18, bottom: -18, near: 1, far: 90 });
   sol.shadow.bias = -0.0004;
   scene.add(sol, new THREE.HemisphereLight(0xffffff, 0xb8c2cc, 0.6));
@@ -313,9 +315,20 @@ export async function criarFabrica3D(container, { onSelect } = {}) {
 
   // ── Loop (só com a vista aberta) ──────────────────────────────────────
   const relogio = new THREE.Timer();
+  // Modo leve: no máximo 15 quadros/s (o anel pulsante continua visível) — redesenhar a 60/s
+  // ocupava a página inteira e os cliques levavam segundos para responder
+  const INTERVALO_LEVE = 1 / 15;
+  let acumulado = 0;
   function quadro() {
     relogio.update();
-    const dt = relogio.getDelta(), t = relogio.getElapsed();
+    let dt = relogio.getDelta();
+    const t = relogio.getElapsed();
+    if (leve) {
+      acumulado += dt;
+      if (acumulado < INTERVALO_LEVE) return;
+      dt = acumulado;            // tempo desde o último quadro desenhado (o voo da câmera não fica lento)
+      acumulado = 0;
+    }
     if (voo) {
       voo.t = Math.min(1, voo.t + dt / 0.9);
       const e = voo.t < 0.5 ? 4 * voo.t ** 3 : 1 - (-2 * voo.t + 2) ** 3 / 2;
