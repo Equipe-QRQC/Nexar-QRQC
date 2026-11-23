@@ -50,9 +50,27 @@
   {% if ia_status == 'pendente' %}
   <div style="background:var(--primary-light); color:var(--primary-dark); padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
     <i class="fas fa-circle-notch fa-spin"></i>
-    <span style="font-size:13px;">A Nexar IA está gerando o diagnóstico desta ocorrência. A página será atualizada automaticamente.</span>
+    <span id="iaPendenteMsg" style="font-size:13px;">A Nexar IA está gerando o diagnóstico desta ocorrência (até 1 minuto). A página será atualizada automaticamente.</span>
   </div>
-  <script>setTimeout(() => location.reload(), 8000);</script>
+  <script>
+    // Consulta leve a cada 4 s; recarrega só quando o diagnóstico ficar pronto
+    (function () {
+      let tentativas = 0;
+      const t = setInterval(async () => {
+        tentativas++;
+        try {
+          const r = await fetch('/api/ocorrencias/{{ dados.id }}/diagnostico-status');
+          const d = await r.json();
+          if (d.ia_status && d.ia_status !== 'pendente') { clearInterval(t); location.reload(); }
+        } catch (e) { /* rede instável: tenta de novo */ }
+        if (tentativas >= 60) {   // 4 minutos
+          clearInterval(t);
+          document.getElementById('iaPendenteMsg').textContent =
+            'O diagnóstico está demorando mais que o normal. Recarregue a página em alguns instantes.';
+        }
+      }, 4000);
+    })();
+  </script>
   {% elif ia_status in ('erro', 'fallback') %}
   <div style="background:var(--warning-light); color:#9A6700; padding:12px 16px; border-radius:var(--radius-sm); margin-bottom:16px; display:flex; gap:10px; align-items:center;">
     <i class="fas fa-circle-info"></i>
@@ -189,6 +207,11 @@
             <button class="btn btn-ghost btn-sm" onclick="copiarIA(this)" type="button">
               <i class="fas fa-copy"></i> Copiar diagnóstico
             </button>
+          </div>
+          {% elif ia_status == 'pendente' %}
+          <div style="text-align:center; padding:36px 16px; color:var(--text-muted);">
+            <i class="fas fa-circle-notch fa-spin" style="font-size:28px; display:block; margin-bottom:12px;"></i>
+            <p style="font-size:13px;">Gerando o diagnóstico…</p>
           </div>
           {% else %}
           <div style="text-align:center; padding:36px 16px; color:var(--text-muted);">

@@ -114,7 +114,7 @@ def proteger_uploads():
         ok = conn.execute(
             "SELECT 1 FROM mobile_tokens mt JOIN usuarios u ON u.id = mt.user_id WHERE mt.token = ? "
             "AND u.ativo = 1 AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))",
-            (auth[7:],),
+            (_hash_token(auth[7:].strip()),),
         ).fetchone()
         conn.close()
         if ok:
@@ -1535,23 +1535,63 @@ def analise():
     )
 
 
+HISTORICO_POR_PAGINA = 20
+_FILTROS_HISTORICO = ("search", "data", "tipo", "impacto", "status")
+
+
+def _filtro_historico(conn, args) -> tuple[str, list, dict]:
+    """
+    WHERE do histórico a partir da URL (?search=&data=&tipo=&impacto=&status=), usado pela
+    tela e pela exportação Excel — a planilha sai com exatamente o que está filtrado na tela.
+    A busca ignora acentos e maiúsculas ("valvula" acha "Válvula").
+    """
+    filtros = {k: (args.get(k) or "").strip()[:120] for k in _FILTROS_HISTORICO}
+    conn.create_function("norm", 1, lambda t: empresa.normalizar(t or ""), deterministic=True)
+    where, params = ["1=1"], []
+    if filtros["search"]:
+        termo = empresa.normalizar(filtros["search"])
+        if termo:
+            where.append("norm(CAST(o.id AS TEXT) || ' ' || COALESCE(m.nome,'') || ' ' || COALESCE(o.nome_operador,'') || ' ' || "
+                         "COALESCE(o.descricao,'') || ' ' || COALESCE(o.tipo_ocorrencia,'') || ' ' || "
+                         "COALESCE(o.nivel_impacto,'') || ' ' || COALESCE(o.status,'Aberta')) LIKE ?")
+            params.append(f"%{termo}%")
+    if filtros["data"]:
+        where.append("substr(o.data_ocorrencia, 1, 10) = ?")
+        params.append(filtros["data"])
+    for campo, coluna in (("tipo", "o.tipo_ocorrencia"), ("impacto", "o.nivel_impacto")):
+        if filtros[campo]:
+            where.append(f"{coluna} = ?")
+            params.append(filtros[campo])
+    if filtros["status"]:
+        where.append("COALESCE(o.status, 'Aberta') = ?")
+        params.append(filtros["status"])
+    return " AND ".join(where), params, filtros
+
+
 @app.route("/historico")
 @login_required
 def historico():
+    pagina = max(1, request.args.get("pagina", 1, type=int) or 1)
     try:
         conn = get_db()
+        where, params, filtros = _filtro_historico(conn, request.args)
+        base = "FROM ocorrencias o LEFT JOIN maquinas m ON o.maquina_id = m.id " \
+               "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id WHERE " + where
+        total = conn.execute("SELECT COUNT(*) " + base, params).fetchone()[0]
+        total_geral = conn.execute("SELECT COUNT(*) FROM ocorrencias").fetchone()[0] if total == 0 else total
+        paginas = max(1, -(-total // HISTORICO_POR_PAGINA))
+        pagina = min(pagina, paginas)
         ocorrencias = conn.execute(
-            "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome "
-            "FROM ocorrencias o "
-            "LEFT JOIN maquinas m ON o.maquina_id = m.id "
-            "LEFT JOIN usuarios u ON o.resolvido_por_id = u.id "
-            "ORDER BY o.data_registro DESC"
-        ).fetchall()
+            "SELECT o.*, m.nome AS maquina_nome, u.nome AS resolvido_por_nome " + base +
+            " ORDER BY o.data_registro DESC, o.id DESC LIMIT ? OFFSET ?",
+            params + [HISTORICO_POR_PAGINA, (pagina - 1) * HISTORICO_POR_PAGINA]).fetchall()
         conn.close()
-        return render_template("historico.html", ocorrencias=ocorrencias)
     except Exception as e:
         logger.exception(f"Erro ao listar histórico: {e}")
-        return render_template("historico.html", ocorrencias=[])
+        ocorrencias, filtros, total, total_geral, pagina, paginas = [], {}, 0, 0, 1, 1
+    return render_template("historico.html", ocorrencias=ocorrencias, filtros=filtros, total=total,
+                           total_geral=total_geral, pagina=pagina, paginas=paginas,
+                           por_pagina=HISTORICO_POR_PAGINA)
 
 
 def _texto_excel(valor):
@@ -1570,39 +1610,20 @@ def historico_export():
     from io import BytesIO
     import datetime
 
-    # Filtros via query params (mesma lógica do JS)
-    busca   = request.args.get("search", "").lower()
-    data_f  = request.args.get("data",   "")
-    tipo_f  = request.args.get("tipo",   "")
-    imp_f   = request.args.get("impacto","")
-    status_f= request.args.get("status", "")
-
+    # Mesmo filtro da tela do histórico
     conn = get_db()
-    rows = conn.execute("""
+    where, params, filtros = _filtro_historico(conn, request.args)
+    filtradas = conn.execute(f"""
         SELECT o.id, COALESCE(m.nome,'—') AS maquina_nome, o.nome_operador,
                o.tipo_ocorrencia, o.nivel_impacto, o.descricao,
                o.data_ocorrencia, o.status
         FROM ocorrencias o
         LEFT JOIN maquinas m ON m.id = o.maquina_id
-        ORDER BY o.data_registro DESC
-    """).fetchall()
+        WHERE {where}
+        ORDER BY o.data_registro DESC, o.id DESC
+    """, params).fetchall()
     conn.close()
-
-    def row_matches(r):
-        text = " ".join(str(r[k] or "") for k in
-                        ["maquina_nome","nome_operador","descricao",
-                         "tipo_ocorrencia","nivel_impacto","status"]).lower()
-        data_r  = (r["data_ocorrencia"] or "")[:10]
-        st      = r["status"] or "Aberta"
-        return (
-            (not busca    or busca    in text) and
-            (not data_f   or data_f   == data_r) and
-            (not tipo_f   or tipo_f   == r["tipo_ocorrencia"]) and
-            (not imp_f    or imp_f    == r["nivel_impacto"]) and
-            (not status_f or status_f == st)
-        )
-
-    filtradas = [r for r in rows if row_matches(r)]
+    data_f, tipo_f, imp_f, status_f = filtros["data"], filtros["tipo"], filtros["impacto"], filtros["status"]
 
     # ── Cores ────────────────────────────────────────────────────────────────
     C_NEXAR  = "1E3A8A"  # azul escuro Nexar
@@ -2335,6 +2356,74 @@ Use linguagem técnica em português. Foque em ações práticas imediatas. Seja
             "ia_status": ia_status, "diagrama_url": diagrama_url}
 
 
+def _gravar_diagnostico(oc_id: int, diag: dict) -> None:
+    conn = get_db()
+    conn.execute(
+        "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
+        (diag["resposta_ia"], diag["ia_status"],
+         json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
+         diag["diagrama_url"], oc_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def diagnosticar_em_segundo_plano(oc_id: int, campos: dict) -> None:
+    """Gera o diagnóstico da ocorrência numa thread (web e app) e grava quando ficar pronto."""
+    import threading
+
+    def _rodar():
+        try:
+            _gravar_diagnostico(oc_id, diagnosticar_ocorrencia(campos))
+        except Exception:
+            logger.exception(f"[ocorrencia] falha no diagnóstico em segundo plano oc={oc_id}")
+            _concluir_sem_ia(oc_id)
+
+    threading.Thread(target=_rodar, daemon=True, name=f"diag-{oc_id}").start()
+
+
+def _concluir_sem_ia(oc_id: int) -> None:
+    """Fecha um diagnóstico que ficou "pendente" com o roteiro local (peça, sintoma e histórico)."""
+    conn = get_db()
+    oc = conn.execute("SELECT maquina_id, componente_apontado, sintoma, maquina_parada, risco_pessoas "
+                      "FROM ocorrencias WHERE id = ? AND ia_status = 'pendente'", (oc_id,)).fetchone()
+    conn.close()
+    if not oc:
+        return
+    nome = _nome_componente(oc["maquina_id"], oc["componente_apontado"])
+    if nome:
+        texto = diagnostico_local.montar_diagnostico(
+            nome, oc["sintoma"], solucoes_da_peca(oc["maquina_id"], oc["componente_apontado"])["itens"],
+            parada=bool(oc["maquina_parada"]), risco=bool(oc["risco_pessoas"]))
+        status = "local"
+    else:
+        texto, status = _fallback_response(""), "fallback"
+    _gravar_diagnostico(oc_id, {"resposta_ia": texto, "ia_status": status, "anotacoes": [], "diagrama_url": None})
+
+
+def _concluir_pendentes_do_reinicio() -> None:
+    """Diagnósticos em andamento morrem com o servidor: no início, nenhum fica "gerando" para sempre."""
+    conn = get_db()
+    ids = [r["id"] for r in conn.execute("SELECT id FROM ocorrencias WHERE ia_status = 'pendente'")]
+    conn.close()
+    for oc_id in ids:
+        _concluir_sem_ia(oc_id)
+    if ids:
+        logger.info(f"[ocorrencia] {len(ids)} diagnóstico(s) interrompido(s) pelo reinício concluídos sem IA")
+
+
+@app.route("/api/ocorrencias/<int:oc_id>/diagnostico-status")
+@login_required
+def api_diagnostico_status(oc_id: int):
+    """Consulta leve usada pela página da ocorrência enquanto o diagnóstico é gerado."""
+    conn = get_db()
+    r = conn.execute("SELECT ia_status FROM ocorrencias WHERE id = ?", (oc_id,)).fetchone()
+    conn.close()
+    if not r:
+        return jsonify({"erro": "Ocorrência não encontrada."}), 404
+    return jsonify({"ia_status": r["ia_status"]})
+
+
 def _sim(valor) -> bool:
     return str(valor or "").strip().lower() in ("1", "sim", "true", "on")
 
@@ -2426,21 +2515,20 @@ def registrar_ocorrencia():
     descricao, tipo, impacto = campos["descricao"], campos["tipo_ocorrencia"], campos["nivel_impacto"]
     componente, sintoma = campos["componente_apontado"], campos["sintoma"]
     parada, risco = campos["maquina_parada"], campos["risco_pessoas"]
-    diag = diagnosticar_ocorrencia(campos)
-    anotacoes_json = json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None
 
     try:
         conn = get_db()
+        # O diagnóstico da IA leva de 20 s a 1 min: a ocorrência é gravada na hora como
+        # "pendente" e a página dela se atualiza sozinha quando o diagnóstico fica pronto
         cursor = conn.execute(
             """INSERT INTO ocorrencias (
                 maquina_id, data_ocorrencia, nome_operador, setor_area, descricao,
                 tipo_ocorrencia, nivel_impacto, problema_recorrente,
-                detalhamento_tecnico, resposta_ia, ia_status, anotacoes_ia, diagrama_url,
+                detalhamento_tecnico, ia_status,
                 componente_apontado, sintoma, maquina_parada, risco_pessoas, status
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Aberta')""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,'pendente',?,?,?,?,'Aberta')""",
             (maquina_id, campos["data_ocorrencia"], campos["nome_operador"], campos["setor_area"],
              descricao, tipo, impacto, campos["problema_recorrente"], campos["detalhamento_tecnico"],
-             diag["resposta_ia"], diag["ia_status"], anotacoes_json, diag["diagrama_url"],
              componente, sintoma, int(parada), int(risco)),
         )
         ocorrencia_id = cursor.lastrowid
@@ -2449,10 +2537,11 @@ def registrar_ocorrencia():
             conn.execute("UPDATE percepcoes SET ocorrencia_id = ? WHERE id = ?", (ocorrencia_id, inspecao_id))
         conn.commit()
         conn.close()
-        logger.info(f"[ocorrencia] criada id={ocorrencia_id} ia_status={diag['ia_status']}")
+        logger.info(f"[ocorrencia] criada id={ocorrencia_id} — diagnóstico em segundo plano")
     except Exception:
         logger.exception("Falha ao persistir a ocorrência")
         return erro("Não foi possível salvar a ocorrência. Tente novamente.")
+    diagnosticar_em_segundo_plano(ocorrencia_id, campos)
 
     # Post/Redirect/Get: recarregar a página não duplica a ocorrência.
     return redirect(url_for("ver_ocorrencia", oc_id=ocorrencia_id))
@@ -4276,7 +4365,7 @@ def _mobile_auth(f):
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             return jsonify({"erro": "Token não fornecido"}), 401
-        token = auth[7:]
+        token = _hash_token(auth[7:].strip())   # o banco guarda só o hash do token
         conn = get_db()
         row = conn.execute(
             """SELECT mt.user_id, u.email, u.nome, u.perfil
@@ -4305,12 +4394,24 @@ def _ensure_mobile_tables():
             expires_at TEXT
         )
     """)
+    # Tokens gravados em texto puro (versões antigas) viram hash: quem tiver uma cópia do
+    # banco não consegue usar os tokens. As sessões do app continuam valendo.
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(mobile_tokens)")]
+    if "token_hash" not in cols:
+        conn.execute("ALTER TABLE mobile_tokens ADD COLUMN token_hash INTEGER DEFAULT 0")
+    antigos = conn.execute("SELECT id, token FROM mobile_tokens WHERE COALESCE(token_hash, 0) = 0").fetchall()
+    for r in antigos:
+        conn.execute("UPDATE mobile_tokens SET token = ?, token_hash = 1 WHERE id = ?", (_hash_token(r["token"]), r["id"]))
+    if antigos:
+        logger.info(f"[mobile] {len(antigos)} token(s) antigo(s) convertido(s) para hash")
+    conn.execute("DELETE FROM mobile_tokens WHERE expires_at IS NOT NULL AND expires_at <= datetime('now')")
     conn.commit()
     conn.close()
 
 
 with app.app_context():
     _ensure_mobile_tables()
+    _concluir_pendentes_do_reinicio()
 
 
 @app.route("/api/mobile/login", methods=["POST"])
@@ -4339,9 +4440,9 @@ def mobile_login():
 
     token = secrets.token_hex(32)
     conn.execute(
-        """INSERT INTO mobile_tokens (user_id, token, expires_at)
-           VALUES (?, ?, datetime('now', '+30 days'))""",
-        (user["id"], token),
+        """INSERT INTO mobile_tokens (user_id, token, token_hash, expires_at)
+           VALUES (?, ?, 1, datetime('now', '+30 days'))""",
+        (user["id"], _hash_token(token)),     # o app recebe o token; o banco guarda só o hash
     )
     conn.commit()
     conn.close()
@@ -4465,23 +4566,7 @@ def mobile_ocorrencias_post():
     conn.close()
     logger.info(f"[mobile] ocorrência criada id={oc_id}")
 
-    def _diagnosticar_em_segundo_plano():
-        try:
-            diag = diagnosticar_ocorrencia(campos)
-            c = get_db()
-            c.execute(
-                "UPDATE ocorrencias SET resposta_ia=?, ia_status=?, anotacoes_ia=?, diagrama_url=? WHERE id=?",
-                (diag["resposta_ia"], diag["ia_status"],
-                 json.dumps(diag["anotacoes"], ensure_ascii=False) if diag["anotacoes"] else None,
-                 diag["diagrama_url"], oc_id),
-            )
-            c.commit()
-            c.close()
-        except Exception:
-            logger.exception(f"[mobile] falha no diagnóstico em segundo plano oc={oc_id}")
-
-    import threading
-    threading.Thread(target=_diagnosticar_em_segundo_plano, daemon=True).start()
+    diagnosticar_em_segundo_plano(oc_id, campos)
     return jsonify({"ok": True, "id": oc_id})
 
 
@@ -4490,9 +4575,9 @@ def mobile_ocorrencias_post():
 @_mobile_auth
 def mobile_logout():
     """Revoga o token do aparelho."""
-    token = request.headers.get("Authorization", "")[7:]
+    token = request.headers.get("Authorization", "")[7:].strip()
     conn = get_db()
-    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (token,))
+    conn.execute("DELETE FROM mobile_tokens WHERE token = ?", (_hash_token(token),))
     conn.commit()
     conn.close()
     return jsonify({"ok": True})

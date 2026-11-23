@@ -8,7 +8,7 @@
   </div>
   <div class="topbar-actions">
     <span style="font-size:13px; color:var(--text-muted);" id="contadorRegistros">
-      {{ ocorrencias|length }} registro(s)
+      {{ total }} registro(s)
     </span>
     <button onclick="exportarExcel()" class="btn btn-outline btn-sm">
       <i class="fas fa-file-excel"></i> {{ t.exportar_excel }}
@@ -20,23 +20,23 @@
 
   <!-- Filtros -->
   <div class="card" style="margin-bottom:16px;">
-    <div class="card-body" style="padding:16px;">
+    <form class="card-body" id="filtrosForm" method="get" action="{{ url_for('historico') }}" style="padding:16px;">
       <div class="filter-grid" style="grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));">
         <div>
           <label class="form-label" style="font-size:12px;">{{ t.pesquisar }}</label>
           <div style="position:relative;">
             <i class="fas fa-search" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-light); font-size:13px;"></i>
-            <input id="searchInput" type="text" class="form-control" placeholder="{{ t.pesquisar }}"
-                   style="padding-left:36px;" oninput="filtrar()" />
+            <input id="searchInput" name="search" type="search" class="form-control" placeholder="{{ t.pesquisar }}"
+                   value="{{ filtros.search }}" style="padding-left:36px;" oninput="buscarDepois()" />
           </div>
         </div>
         <div>
           <label class="form-label" style="font-size:12px;">{{ t.data }}</label>
-          <input id="dateInput" type="date" class="form-control" onchange="filtrar()" />
+          <input id="dateInput" name="data" type="date" class="form-control" value="{{ filtros.data }}" onchange="filtrar()" />
         </div>
         <div>
           <label class="form-label" style="font-size:12px;">{{ t.tipo }}</label>
-          <select id="tipoSelect" class="form-select" onchange="filtrar()">
+          <select id="tipoSelect" name="tipo" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
             <option value="Qualidade">{{ t.qualidade }}</option>
             <option value="Segurança">{{ t.seguranca }}</option>
@@ -46,7 +46,7 @@
         </div>
         <div>
           <label class="form-label" style="font-size:12px;">{{ t.impacto }}</label>
-          <select id="impactoSelect" class="form-select" onchange="filtrar()">
+          <select id="impactoSelect" name="impacto" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
             <option value="Alto">{{ t.alto }}</option>
             <option value="Médio">{{ t.medio }}</option>
@@ -55,15 +55,21 @@
         </div>
         <div>
           <label class="form-label" style="font-size:12px;">{{ t.status }}</label>
-          <select id="statusSelect" class="form-select" onchange="filtrar()">
+          <select id="statusSelect" name="status" class="form-select" onchange="filtrar()">
             <option value="">{{ t.todos }}</option>
             <option value="Aberta">{{ t.aberta }}</option>
+            <option value="Em andamento">{{ t.em_andamento }}</option>
             <option value="Resolvida">{{ t.resolvida }}</option>
             <option value="Fechada">{{ t.fechada }}</option>
           </select>
         </div>
       </div>
-    </div>
+      {% if filtros.search or filtros.data or filtros.tipo or filtros.impacto or filtros.status %}
+      <div style="margin-top:10px; font-size:12px;">
+        <a href="{{ url_for('historico') }}"><i class="fas fa-xmark"></i> Limpar filtros</a>
+      </div>
+      {% endif %}
+    </form>
   </div>
 
   <!-- Tabela -->
@@ -155,34 +161,55 @@
             </td>
           </tr>
           {% else %}
+          {% if total_geral %}
+          <tr id="linhaSemResultado">
+            <td colspan="9" style="text-align:center; padding:40px; color:var(--text-muted);">
+              <i class="fas fa-filter-circle-xmark" style="font-size:28px; opacity:.35; display:block; margin-bottom:10px;"></i>
+              Nenhuma ocorrência encontrada para os filtros selecionados.
+            </td>
+          </tr>
+          {% else %}
           <tr id="linhaVazia">
             <td colspan="9" style="text-align:center; padding:48px; color:var(--text-muted);">
               <i class="fas fa-inbox" style="font-size:32px; opacity:.3; display:block; margin-bottom:12px;"></i>
               {{ t.sem_registros }}
             </td>
           </tr>
-          {% endfor %}
-          {% if ocorrencias %}
-          <tr id="linhaSemResultado" style="display:none;">
-            <td colspan="9" style="text-align:center; padding:40px; color:var(--text-muted);">
-              <i class="fas fa-filter-circle-xmark" style="font-size:28px; opacity:.35; display:block; margin-bottom:10px;"></i>
-              Nenhuma ocorrência encontrada para os filtros selecionados.
-            </td>
-          </tr>
           {% endif %}
+          {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <!-- Paginação -->
+    <!-- Paginação (no servidor: cada página traz só as suas ocorrências) -->
+    {% if total %}
+    {% set de = (pagina - 1) * por_pagina + 1 %}
+    {% set ate = [pagina * por_pagina, total] | min %}
     <div id="paginacaoWrap" style="
-      display:flex; align-items:center; justify-content:space-between;
+      display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;
       padding:12px 16px; border-top:1px solid var(--border);
       font-size:13px; color:var(--text-muted);
     ">
-      <span id="paginacaoInfo"></span>
-      <div id="paginacaoBtns" style="display:flex; gap:4px;"></div>
+      <span id="paginacaoInfo">{{ de }}–{{ ate }} de {{ total }}</span>
+      {% if paginas > 1 %}
+      <nav id="paginacaoBtns" style="display:flex; gap:4px;" aria-label="Páginas do histórico">
+        {% macro link_pagina(rotulo, pg, ativo=false, desativado=false) -%}
+          {%- if desativado -%}
+          <span class="page-btn" aria-disabled="true" style="opacity:.4; pointer-events:none;">{{ rotulo }}</span>
+          {%- else -%}
+          <a class="page-btn{{ ' active' if ativo }}" href="{{ url_for('historico', pagina=pg, **filtros) }}"
+             {{ 'aria-current="page"' if ativo }}>{{ rotulo }}</a>
+          {%- endif -%}
+        {%- endmacro %}
+        {% set pg_min = [1, ([paginas - 4, pagina - 2] | min)] | max %}
+        {% set pg_max = [paginas, pg_min + 4] | min %}
+        {{ link_pagina('←', pagina - 1, desativado=(pagina == 1)) }}
+        {% for p in range(pg_min, pg_max + 1) %}{{ link_pagina(p, p, ativo=(p == pagina)) }}{% endfor %}
+        {{ link_pagina('→', pagina + 1, desativado=(pagina == paginas)) }}
+      </nav>
+      {% endif %}
     </div>
+    {% endif %}
   </div>
 
 </div>
@@ -393,6 +420,7 @@
 
   /* Paginação */
   .page-btn {
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
     min-width: 32px; height: 32px; padding: 0 8px;
     border: 1px solid var(--border); background: var(--bg-card);
     border-radius: var(--radius-sm); font-size: 13px; cursor: pointer;
@@ -429,8 +457,6 @@
     sem_registros:    "{{ t.sem_registros }}",
   };
 
-  const POR_PAGINA = 10;
-  let paginaAtual = 1;
   // Escapa texto antes de inserir via innerHTML (evita XSS com dados do usuário/IA)
   function esc(v) {
     return String(v ?? '').replace(/[&<>"']/g, c => (
@@ -446,77 +472,30 @@
     return partes.reverse().join('/') + (h ? ' ' + h.slice(0, 5) : '');
   }
 
-
   const todasLinhas = Array.from(document.querySelectorAll('#tableBody tr[data-id]'));
-  let linhasFiltradas = todasLinhas.slice();
 
-  // ── Filtro ────────────────────────────────────────────────────────────────
+  // ── Filtros (aplicados no servidor; o formulário volta para a página 1) ─────
+  const filtrosForm = document.getElementById('filtrosForm');
   function filtrar() {
-    const busca   = document.getElementById('searchInput').value.toLowerCase();
-    const data    = document.getElementById('dateInput').value;
-    const tipo    = document.getElementById('tipoSelect').value;
-    const impacto = document.getElementById('impactoSelect').value;
-    const status  = document.getElementById('statusSelect').value;
-
-    linhasFiltradas = todasLinhas.filter(row => {
-      const texto = row.textContent.toLowerCase();
-      return (!busca   || texto.includes(busca))
-          && (!data    || row.dataset.data    === data)
-          && (!tipo    || row.dataset.tipo    === tipo)
-          && (!impacto || row.dataset.impacto === impacto)
-          && (!status  || row.dataset.status  === status);
-    });
-
-    paginaAtual = 1;
-    renderPagina();
+    sessionStorage.setItem('historicoFoco', document.activeElement?.id || '');
+    filtrosForm.submit();
   }
-
-  // ── Paginação ─────────────────────────────────────────────────────────────
-  function renderPagina() {
-    const lista = linhasFiltradas;
-    const total = lista.length;
-    const totalPags = Math.max(1, Math.ceil(total / POR_PAGINA));
-    paginaAtual = Math.min(paginaAtual, totalPags);
-    const inicio = (paginaAtual - 1) * POR_PAGINA;
-    const fim    = inicio + POR_PAGINA;
-
-    todasLinhas.forEach(r => r.style.display = 'none');
-    lista.slice(inicio, fim).forEach(r => r.style.display = '');
-
-    const semResultado = document.getElementById('linhaSemResultado');
-    if (semResultado) semResultado.style.display = total === 0 ? '' : 'none';
-
-    document.getElementById('contadorRegistros').textContent = total + ' registro(s)';
-
-    const de  = total === 0 ? 0 : inicio + 1;
-    const ate = Math.min(fim, total);
-    document.getElementById('paginacaoInfo').textContent =
-      total === 0 ? '' : `${de}–${ate} de ${total}`;
-
-    const wrap = document.getElementById('paginacaoBtns');
-    wrap.innerHTML = '';
-    if (totalPags <= 1) {
-      document.getElementById('paginacaoWrap').style.display = total ? 'flex' : 'none';
-      return;
-    }
-    document.getElementById('paginacaoWrap').style.display = 'flex';
-
-    const addBtn = (label, pg, disabled, active) => {
-      const b = document.createElement('button');
-      b.className = 'page-btn' + (active ? ' active' : '');
-      b.innerHTML = label;
-      b.disabled  = disabled;
-      b.onclick   = () => { paginaAtual = pg; renderPagina(); };
-      wrap.appendChild(b);
-    };
-
-    addBtn('&larr;', paginaAtual - 1, paginaAtual === 1, false);
-    let pgMin = Math.max(1, paginaAtual - 2);
-    let pgMax = Math.min(totalPags, pgMin + 4);
-    pgMin = Math.max(1, pgMax - 4);
-    for (let p = pgMin; p <= pgMax; p++) addBtn(p, p, false, p === paginaAtual);
-    addBtn('&rarr;', paginaAtual + 1, paginaAtual === totalPags, false);
+  let esperaBusca;
+  function buscarDepois() {          // espera parar de digitar
+    clearTimeout(esperaBusca);
+    esperaBusca = setTimeout(filtrar, 600);
   }
+  // Depois de filtrar pela busca, o cursor volta para o campo, no fim do texto
+  (function () {
+    let id = '';
+    try { id = sessionStorage.getItem('historicoFoco') || ''; sessionStorage.removeItem('historicoFoco'); } catch (e) {}
+    const el = id && document.getElementById(id);
+    if (el) { el.focus(); if (el.setSelectionRange && el.type === 'search') el.setSelectionRange(el.value.length, el.value.length); }
+  })();
+  // Os selects mostram o filtro atual
+  {% for campo, sel in (('tipo','tipoSelect'), ('impacto','impactoSelect'), ('status','statusSelect')) %}
+  document.getElementById('{{ sel }}').value = {{ (filtros[campo] if filtros else '') | tojson }};
+  {% endfor %}
 
   // ── Abre modal ────────────────────────────────────────────────────────────
   document.querySelectorAll('.btn-abrir-modal').forEach(btn => {
@@ -707,7 +686,6 @@
       document.getElementById('modalSolucao').textContent = botaoAtual?.dataset.solucao || '';
       document.getElementById('modalResolvidoPor').textContent =
         data.resolvido_por_nome ? `Resolvida por ${data.resolvido_por_nome}` : '';
-      filtrar();
     });
   }
 
@@ -744,7 +722,5 @@
     });
   });
 
-  // ── Init ──────────────────────────────────────────────────────────────────
-  filtrar();
 </script>
 {% endblock %}
