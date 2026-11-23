@@ -90,3 +90,42 @@ def test_historico_busca_sem_acento(admin, db):
 def test_mapa_da_fabrica_rejeita_formato_invalido(admin):
     assert admin.post("/api/fabrica/posicoes", json=[1, 2]).status_code == 400
     assert admin.post("/api/fabrica/posicoes", json={"posicoes": {"1": [10, 20]}}).get_json()["salvas"] == 1
+
+
+def _ocorrencia_pelo_app(app, token, maquina_cad, **extra):
+    mid, comp = maquina_cad
+    r = app.post("/api/mobile/ocorrencias", headers={"Authorization": "Bearer " + token},
+                 json={"maquina_id": mid, "componente_apontado": comp, "sintoma": "folga", **extra})
+    return r.get_json()["id"]
+
+
+def test_app_anexa_foto_do_problema(token_app, maquina_cad, foto_jpg, admin, db):
+    token, app = token_app
+    oc = _ocorrencia_pelo_app(app, token, maquina_cad)
+    r = app.post(f"/api/mobile/ocorrencias/{oc}/foto", headers={"Authorization": "Bearer " + token},
+                 data={"foto": (io.BytesIO(foto_jpg), "problema.jpg")}, content_type="multipart/form-data")
+    assert r.status_code == 200
+    url = r.get_json()["foto_url"]
+    assert db.execute("SELECT foto_url FROM ocorrencias WHERE id = ?", (oc,)).fetchone()[0] == url
+    assert url in admin.get(f"/ocorrencia/{oc}").get_data(as_text=True)      # aparece na página da web
+    assert admin.get(url).status_code == 200
+
+
+def test_foto_da_ocorrencia_valida_o_envio(token_app, maquina_cad, anonimo):
+    token, app = token_app
+    oc = _ocorrencia_pelo_app(app, token, maquina_cad)
+    h = {"Authorization": "Bearer " + token}
+    falsa = {"foto": (io.BytesIO(b"nao sou uma foto"), "x.jpg")}
+    assert app.post(f"/api/mobile/ocorrencias/{oc}/foto", headers=h, data=falsa, content_type="multipart/form-data").status_code == 400
+    assert app.post(f"/api/mobile/ocorrencias/{oc}/foto", headers=h, data={}, content_type="multipart/form-data").status_code == 400
+    assert app.post("/api/mobile/ocorrencias/999999/foto", headers=h, data={}, content_type="multipart/form-data").status_code == 404
+    assert anonimo.post(f"/api/mobile/ocorrencias/{oc}/foto").status_code == 401
+
+
+def test_ocorrencia_da_inspecao_herda_a_foto(token_app, maquina_cad, db):
+    token, app = token_app
+    pid = db.execute("INSERT INTO percepcoes (imagem_url, anomalias_json, score_saude) "
+                     "VALUES ('/static/uploads/sensor/teste.jpg', '[]', 90)").lastrowid
+    db.commit()
+    oc = _ocorrencia_pelo_app(app, token, maquina_cad, inspecao_id=pid)
+    assert db.execute("SELECT foto_url FROM ocorrencias WHERE id = ?", (oc,)).fetchone()[0] == "/static/uploads/sensor/teste.jpg"

@@ -226,6 +226,22 @@
 
     <!-- Coluna 2 — Modelo 3D + Diagrama -->
     <div style="display:flex; flex-direction:column; gap:16px;" class="{{ 'com-3d' if ctx3d.cfg3d else '' }}">
+      {% if dados.foto_url %}
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="fas fa-camera"></i> Foto do problema</span>
+          <a href="{{ dados.foto_url }}" target="_blank" class="btn btn-ghost btn-sm" title="Abrir em tamanho real">
+            <i class="fas fa-up-right-from-square"></i>
+          </a>
+        </div>
+        <div class="card-body" style="padding:12px;">
+          <a href="{{ dados.foto_url }}" target="_blank">
+            <img src="{{ dados.foto_url }}" alt="Foto do problema enviada pelo operador" loading="lazy"
+                 style="width:100%; max-height:360px; object-fit:contain; border-radius:var(--radius-sm); background:#0D1117;">
+          </a>
+        </div>
+      </div>
+      {% endif %}
       {% if ctx3d.cfg3d %}
       <div id="card3dOcorrencia" class="card3d-ocorrencia"></div>
       {% if solucoes_peca %}
