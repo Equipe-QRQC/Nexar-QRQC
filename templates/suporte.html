@@ -456,9 +456,10 @@ function renderChips() {
     const d = document.createElement('div');
     d.className = 'chip';
     d.innerHTML = `<i class="fas ${icon}" style="color:${color};font-size:15px;"></i>
-      <span>${f.name}</span>
+      <span></span>
       <small>${(f.size/1024).toFixed(1)} KB</small>
       <button type="button" onclick="removeFile(${i})"><i class="fas fa-times"></i></button>`;
+    d.querySelector('span').textContent = f.name;   // nome do arquivo como texto, nunca como HTML
     c.appendChild(d);
   });
 }

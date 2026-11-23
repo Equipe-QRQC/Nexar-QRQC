@@ -46,6 +46,9 @@ def slug_livre(base: str) -> str:
     return candidato
 
 
+# Limite do conteúdo descompactado de um .zip (um zip pequeno pode expandir para dezenas de GB)
+MAX_DESCOMPACTADO = 3 * 1024 ** 3
+
 IGNORAR_ARQUIVOS = re.compile(r"working.?space|workspace|envelope|alcance", re.I)
 
 
@@ -59,14 +62,22 @@ def extrair_steps(caminho: str, destino_dir: str) -> list[str]:
     if not zipfile.is_zipfile(caminho):
         raise ValueError("Envie um arquivo STEP (.step/.stp) ou um .zip com o STEP.")
     saida = []
+    total = 0
     with zipfile.ZipFile(caminho) as z:
         for info in z.infolist():
             nome = os.path.basename(info.filename)
             if info.is_dir() or not nome.lower().endswith(EXTENSOES) or IGNORAR_ARQUIVOS.search(nome):
                 continue
-            alvo = os.path.join(destino_dir, re.sub(r"[^\w.\- ()]", "_", nome))
+            base, ext = os.path.splitext(re.sub(r"[^\w.\- ()]", "_", nome))
+            alvo, n = os.path.join(destino_dir, base + ext), 2
+            while alvo in saida:                       # mesmo nome em pastas diferentes do zip
+                alvo, n = os.path.join(destino_dir, f"{base} ({n}){ext}"), n + 1
             with z.open(info) as src, open(alvo, "wb") as dst:
-                shutil.copyfileobj(src, dst)
+                while bloco := src.read(1024 * 1024):
+                    total += len(bloco)
+                    if total > MAX_DESCOMPACTADO:
+                        raise ValueError("O .zip descompactado passa de 3 GB. Envie só o STEP da máquina.")
+                    dst.write(bloco)
             saida.append(alvo)
     if not saida:
         raise ValueError("O .zip não tem nenhum arquivo STEP.")

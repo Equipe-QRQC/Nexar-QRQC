@@ -25,6 +25,9 @@ from email.mime.application import MIMEApplication
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
+# O .env precisa ser lido ANTES dos módulos abaixo: nexa_ia lê OPENAI_MODEL e DATABASE_PATH ao ser importado
+load_dotenv()
+
 import sensor_visual
 import nexa_ia
 import modelos_3d
@@ -32,8 +35,6 @@ import diagnostico_local
 import empresa
 import indicadores
 import cad_import
-
-load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 _LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s — %(message)s"
@@ -111,14 +112,23 @@ def proteger_uploads():
     if auth.startswith("Bearer "):
         conn = get_db()
         ok = conn.execute(
-            "SELECT 1 FROM mobile_tokens WHERE token = ? "
-            "AND (expires_at IS NULL OR expires_at > datetime('now'))",
+            "SELECT 1 FROM mobile_tokens mt JOIN usuarios u ON u.id = mt.user_id WHERE mt.token = ? "
+            "AND u.ativo = 1 AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))",
             (auth[7:],),
         ).fetchone()
         conn.close()
         if ok:
             return None
     return ("Acesso não autorizado.", 401)
+
+
+def _voltar(padrao: str = "dashboard"):
+    """Redireciona para a página anterior, só se ela for deste site (o Referer vem do navegador)."""
+    from urllib.parse import urlparse
+    ref = request.referrer or ""
+    if ref and urlparse(ref).netloc == request.host:
+        return redirect(ref)
+    return redirect(url_for(padrao))
 
 
 @app.errorhandler(CSRFError)
@@ -134,7 +144,7 @@ def csrf_handler(e):
     if request.path == "/login":
         return render_template("login.html", erro=msg), 400
     flash(msg, "warning")
-    return redirect(request.referrer or url_for("dashboard"))
+    return _voltar()
 
 
 @app.errorhandler(413)
@@ -143,7 +153,7 @@ def too_large_handler(e):
     if request.accept_mimetypes.best == "application/json" or request.path.startswith("/api/") or request.is_json:
         return jsonify({"ok": False, "erro": msg}), 413
     flash(msg, "danger")
-    return redirect(request.referrer or url_for("dashboard"))
+    return _voltar()
 
 
 @app.errorhandler(429)
@@ -261,13 +271,20 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SUPORTE_EMAIL_DESTINO = os.getenv("SUPORTE_EMAIL_DESTINO", "")
 SUPORTE_EMAIL_FROM    = os.getenv("SUPORTE_EMAIL_FROM", SMTP_USER)
 SUPORTE_FOLDER = os.path.join("static", "uploads", "suporte")
-os.makedirs(SUPORTE_FOLDER, exist_ok=True)
+
+
+def _abs(caminho_relativo: str) -> str:
+    """Caminho no disco de um arquivo do projeto (uploads ficam em static/ ao lado do app.py)."""
+    return os.path.join(BASE_DIR, caminho_relativo)
+
+
+os.makedirs(_abs(SUPORTE_FOLDER), exist_ok=True)
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 
 UPLOAD_FOLDER = os.path.join("static", "uploads", "maquinas")
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(_abs(UPLOAD_FOLDER), exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "pdf"}
 
@@ -423,6 +440,14 @@ TRANSLATIONS = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def nome_arquivo_seguro(filename: str, ext: str) -> str:
+    """secure_filename pode zerar ou cortar a extensão ("ção.png" → "png"): garante nome e extensão."""
+    base = os.path.splitext(secure_filename(filename or ""))[0]
+    if not base or base.lower() == ext.lower():
+        base = secrets.token_hex(4)
+    return f"{base}.{ext.lower()}"
+
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -842,7 +867,7 @@ class User(UserMixin):
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
-    u = conn.execute("SELECT * FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+    u = conn.execute("SELECT * FROM usuarios WHERE id = ? AND ativo = 1", (user_id,)).fetchone()
     conn.close()
     if u:
         return User(u["id"], u["nome"], u["email"], u["perfil"])
@@ -984,7 +1009,7 @@ def logout():
 def set_lang(lang):
     if lang in ["pt", "en", "es"]:
         session["lang"] = lang
-    return redirect(request.referrer or url_for("dashboard"))
+    return _voltar()
 
 
 # ── AI Chat ───────────────────────────────────────────────────────────────────
@@ -1521,6 +1546,13 @@ def historico():
         return render_template("historico.html", ocorrencias=[])
 
 
+def _texto_excel(valor):
+    """Texto que começa com = + - @ vira fórmula no Excel (pode abrir link ou executar comando): prefixa '."""
+    if isinstance(valor, str) and valor[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + valor
+    return valor
+
+
 @app.route("/historico/export")
 @login_required
 def historico_export():
@@ -1674,10 +1706,7 @@ def historico_export():
         zebra   = fill(C_ZEBRA) if i % 2 else None
         st      = r["status"] or "Aberta"
 
-        data_fmt = ""
-        if r["data_ocorrencia"]:
-            d = r["data_ocorrencia"][:10].split("-")
-            data_fmt = f"{d[2]}/{d[1]}/{d[0]}"
+        data_fmt = data_br(r["data_ocorrencia"])[:10] if r["data_ocorrencia"] else ""
 
         valores = [r["id"], r["maquina_nome"], r["nome_operador"],
                    r["tipo_ocorrencia"] or "—", r["nivel_impacto"] or "—",
@@ -1685,7 +1714,7 @@ def historico_export():
 
         for col, valor in zip("ABCDEFGH", valores):
             cell           = ws[f"{col}{rn}"]
-            cell.value     = valor
+            cell.value     = _texto_excel(valor)
             cell.font      = font_()
             cell.border    = borda
             cell.alignment = c_mid if col == "A" else (c_left if col == "F" else c_leftn)
@@ -2567,6 +2596,8 @@ def api_cad_salvar(job_id: int):
     dados = request.get_json(silent=True) or {}
     comps = []
     for c in dados.get("componentes") or []:
+        if not isinstance(c, dict):
+            continue
         nome = str(c.get("nome") or "").strip()[:80]
         nos = [str(n)[:160] for n in (c.get("nos") or []) if str(n).strip()][:400]
         cid = re.sub(r"[^a-z0-9_]", "", str(c.get("id") or "").lower())[:40]
@@ -2576,9 +2607,13 @@ def api_cad_salvar(job_id: int):
                           "explode": c.get("explode") if isinstance(c.get("explode"), list) else [0, 0, 0]})
     if len(comps) < 2:
         return jsonify({"ok": False, "erro": "Selecione pelo menos 2 componentes."}), 400
-    nome_modelo = (dados.get("nome") or job["nome"]).strip()[:80]
-    rot = dados.get("rotacao") if isinstance(dados.get("rotacao"), list) else None
-    rot = [float(v) for v in rot[:3]] if rot else None
+    nome_modelo = str(dados.get("nome") or job["nome"]).strip()[:80]
+    try:
+        rot = [float(v) for v in dados["rotacao"][:3]] if isinstance(dados.get("rotacao"), list) else None
+        for comp in comps:
+            comp["explode"] = [float(v) for v in comp["explode"][:3]]
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Rotação ou deslocamento inválido."}), 400
     cad_import.salvar_modelo(job["slug"], nome_modelo, f"Importado pelo sistema a partir de {job['arquivo']}", comps, rot)
     modelos_3d._ler_modelo_cad.cache_clear()
     _atualizar_importacao(job_id, "pronto", f"Modelo “{nome_modelo}” disponível no cadastro de máquinas ({len(comps)} componentes).")
@@ -2833,6 +2868,9 @@ def config_usuario_salvar():
                     flash("A senha precisa ter pelo menos 8 caracteres.", "danger")
                     return redirect(url_for("configuracoes", aba="usuarios"))
                 conn.execute("UPDATE usuarios SET senha_hash=? WHERE id=?", (generate_password_hash(senha), uid))
+            if senha or not ativo:
+                # Senha nova ou usuário desativado: o app do celular precisa entrar de novo
+                conn.execute("DELETE FROM mobile_tokens WHERE user_id = ?", (uid,))
             acao = "usuario_alterado"
         else:
             if len(senha) < 8:
@@ -3108,7 +3146,7 @@ def pessoas_modelo_csv():
 # ── Sensor Visual (percepção industrial aumentada) ────────────────────────────
 
 SENSOR_FOLDER = os.path.join("static", "uploads", "sensor")
-os.makedirs(SENSOR_FOLDER, exist_ok=True)
+os.makedirs(_abs(SENSOR_FOLDER), exist_ok=True)
 _SENSOR_EXT = {"png", "jpg", "jpeg"}
 
 
@@ -3178,19 +3216,25 @@ def sensor():
 @limiter.limit("20 per minute")
 def sensor_analisar():
     """Recebe uma foto, roda a detecção de anomalias e registra a percepção."""
+    dados, status = _analisar_foto_sensor(current_user.id)
+    return jsonify(dados), status
+
+
+def _analisar_foto_sensor(user_id: int) -> tuple[dict, int]:
+    """Sensor Visual (web e app): valida a foto, roda a IA e grava a percepção. Retorna (json, status)."""
     _sensor_client = nexa_ia._get_client()
     if not _sensor_client:
-        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
+        return {"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}, 503
 
     arquivo = request.files.get("foto")
     if not arquivo or not arquivo.filename:
-        return jsonify({"erro": "Nenhuma foto enviada."}), 400
+        return {"erro": "Nenhuma foto enviada."}, 400
 
     ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
     if ext not in _SENSOR_EXT:
-        return jsonify({"erro": "Formato inválido. Envie PNG ou JPG."}), 400
+        return {"erro": "Formato inválido. Envie PNG ou JPG."}, 400
     if not content_is_valid(arquivo.stream, ext):
-        return jsonify({"erro": "Conteúdo do arquivo não corresponde à extensão."}), 400
+        return {"erro": "Conteúdo do arquivo não corresponde à extensão."}, 400
 
     contexto = (request.form.get("contexto") or "").strip()[:300]
     maquina_id = request.form.get("maquina_id") or None
@@ -3200,18 +3244,18 @@ def sensor_analisar():
         maquina_id = None
 
     # Salva a foto (nome único para não colidir)
-    nome_seguro = secure_filename(arquivo.filename) or f"foto.{ext}"
-    nome_arquivo = f"{secrets.token_hex(8)}_{nome_seguro}"
+    nome_arquivo = f"{secrets.token_hex(8)}_{nome_arquivo_seguro(arquivo.filename, ext)}"
     caminho = os.path.join(SENSOR_FOLDER, nome_arquivo)
-    arquivo.save(caminho)
+    arquivo.save(_abs(caminho))
     imagem_url = f"/{caminho.replace(os.sep, '/')}"
 
     # Abre a imagem para a IA
     try:
-        img_obj = _abrir_foto_sensor(caminho)
+        img_obj = _abrir_foto_sensor(_abs(caminho))
     except Exception as e:
         logger.warning(f"[sensor] falha ao abrir imagem {caminho}: {e}")
-        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
+        os.remove(_abs(caminho))
+        return {"erro": "Não foi possível processar a imagem."}, 400
 
     resultado = sensor_visual.detectar_anomalias(
         client=_sensor_client,
@@ -3222,7 +3266,7 @@ def sensor_analisar():
     )
 
     if resultado["status"] == "erro":
-        return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
+        return {"erro": resultado["resumo"], "imagem_url": imagem_url}, 502
 
     anomalias = resultado["anomalias"]
     componente_3d = sensor_componente_3d(maquina_id, anomalias)
@@ -3236,17 +3280,17 @@ def sensor_analisar():
             (
                 maquina_id, imagem_url, contexto, resultado["modelo"],
                 json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], componente_3d, current_user.id,
+                resultado["severidade_max"], resultado["score"], componente_3d, user_id,
             ),
         )
         percepcao_id = cursor.lastrowid
         conn.commit()
         conn.close()
-    except Exception as e:
+    except Exception:
         logger.exception("[sensor] erro ao salvar percepção")
-        return jsonify({"erro": "Não foi possível salvar a inspeção. Tente novamente."}), 500
+        return {"erro": "Não foi possível salvar a inspeção. Tente novamente."}, 500
 
-    return jsonify({
+    return {
         "id": percepcao_id,
         "imagem_url": imagem_url,
         "maquina_id": maquina_id,
@@ -3257,7 +3301,7 @@ def sensor_analisar():
         "resumo": resultado["resumo"],
         "modelo": resultado["modelo"],
         "status": resultado["status"],
-    })
+    }, 200
 
 
 @app.route("/api/sensor/<int:percepcao_id>/confirmar", methods=["POST"])
@@ -3465,7 +3509,7 @@ def _laudo_sensor_pdf(percepcao_id: int):
 
     # ── Foto anotada ─────────────────────────────────────────────────────────
     img_path = (row["imagem_url"] or "").lstrip("/")
-    abs_path = os.path.join(app.root_path, img_path)
+    abs_path = _abs(img_path)
     if os.path.exists(abs_path):
         try:
             anotada = sensor_visual.desenhar_anomalias(Image.open(abs_path), anomalias)
@@ -3657,7 +3701,7 @@ def maquinas():
     rows = conn.execute("""
         SELECT maquina_id,
                COUNT(*) AS total,
-               SUM(CASE WHEN status = 'Aberta' THEN 1 ELSE 0 END) AS abertas,
+               SUM(CASE WHEN status IN ('Aberta', 'Em andamento') THEN 1 ELSE 0 END) AS abertas,
                MAX(data_registro) AS ultima
         FROM ocorrencias WHERE maquina_id IS NOT NULL
         GROUP BY maquina_id
@@ -3711,7 +3755,7 @@ def cadastro_maquina():
 
             arquivos = request.files.getlist("diagramas")
             pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
-            os.makedirs(pasta, exist_ok=True)
+            os.makedirs(_abs(pasta), exist_ok=True)
             for arquivo in arquivos:
                 if not arquivo or not allowed_file(arquivo.filename):
                     continue
@@ -3720,9 +3764,9 @@ def cadastro_maquina():
                     logger.warning(f"[upload] conteúdo inválido para extensão .{ext}: {arquivo.filename}")
                     flash(f"Arquivo '{arquivo.filename}' rejeitado: conteúdo não corresponde à extensão.", "danger")
                     continue
-                nome_arquivo = secure_filename(arquivo.filename)
+                nome_arquivo = nome_arquivo_seguro(arquivo.filename, ext)
                 caminho = os.path.join(pasta, nome_arquivo)
-                arquivo.save(caminho)
+                arquivo.save(_abs(caminho))
                 tipo = ext.upper()
                 conn.execute(
                     "INSERT INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
@@ -3773,7 +3817,7 @@ def editar_maquina(maquina_id: int):
             modelos_3d.sincronizar_componentes(conn, maquina_id, cfg3d)
             arquivos = request.files.getlist("diagramas")
             pasta = os.path.join(app.config["UPLOAD_FOLDER"], str(maquina_id))
-            os.makedirs(pasta, exist_ok=True)
+            os.makedirs(_abs(pasta), exist_ok=True)
             for arquivo in arquivos:
                 if not arquivo or not allowed_file(arquivo.filename):
                     continue
@@ -3781,9 +3825,9 @@ def editar_maquina(maquina_id: int):
                 if not content_is_valid(arquivo.stream, ext):
                     flash(f"Arquivo '{arquivo.filename}' rejeitado: conteúdo inválido.", "danger")
                     continue
-                nome_arquivo = secure_filename(arquivo.filename)
+                nome_arquivo = nome_arquivo_seguro(arquivo.filename, ext)
                 caminho = os.path.join(pasta, nome_arquivo)
-                arquivo.save(caminho)
+                arquivo.save(_abs(caminho))
                 conn.execute(
                     "INSERT OR IGNORE INTO diagramas (maquina_id, nome, caminho, tipo) VALUES (?,?,?,?)",
                     (maquina_id, nome_arquivo, caminho, ext.upper()),
@@ -3832,7 +3876,7 @@ def enviar():
     arquivos = request.files.getlist("anexos")
     if arquivos:
         ticket_dir = os.path.join(SUPORTE_FOLDER, protocolo)
-        os.makedirs(ticket_dir, exist_ok=True)
+        os.makedirs(_abs(ticket_dir), exist_ok=True)
         for f in arquivos:
             if not f or not f.filename:
                 continue
@@ -3843,15 +3887,13 @@ def enviar():
             if not content_is_valid(f.stream, ext):
                 logger.warning(f"[suporte] conteúdo inválido para extensão .{ext}: {f.filename}")
                 continue
-            fname = secure_filename(f.filename)
-            if not fname:
-                continue
+            fname = nome_arquivo_seguro(f.filename, ext)
             path = os.path.join(ticket_dir, fname)
-            f.save(path)
-            anexos_paths.append(path)
+            f.save(_abs(path))
+            anexos_paths.append(_abs(path))
             anexos_meta.append({
                 "nome": fname,
-                "tamanho": os.path.getsize(path),
+                "tamanho": os.path.getsize(_abs(path)),
                 "url": "/" + path.replace("\\", "/"),
             })
 
@@ -4177,7 +4219,7 @@ def api_machine_components_get(mid: int):
 
 
 @app.route("/api/machines/<int:mid>/components", methods=["POST"])
-@login_required
+@perfil_requerido("manutencao")
 def api_machine_components_post(mid: int):
     data = request.get_json(silent=True) or {}
     cid = (data.get("component_id") or "").strip()
@@ -4194,15 +4236,16 @@ def api_machine_components_post(mid: int):
             (mid, cid, name, data.get("type", ""), data.get("description", "")),
         )
         conn.commit()
-    except Exception as exc:
+    except Exception:
         conn.close()
-        return jsonify({"error": str(exc)}), 500
+        logger.exception("[componentes] falha ao salvar")
+        return jsonify({"error": "Não foi possível salvar o componente."}), 500
     conn.close()
     return jsonify({"ok": True})
 
 
 @app.route("/api/machines/<int:mid>/components/<cid>", methods=["DELETE"])
-@login_required
+@perfil_requerido("manutencao")
 def api_machine_components_delete(mid: int, cid: str):
     conn = get_db()
     conn.execute(
@@ -4231,7 +4274,8 @@ def _mobile_auth(f):
             """SELECT mt.user_id, u.email, u.nome, u.perfil
                FROM mobile_tokens mt
                JOIN usuarios u ON u.id = mt.user_id
-               WHERE mt.token = ? AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))""",
+               WHERE mt.token = ? AND u.ativo = 1
+                 AND (mt.expires_at IS NULL OR mt.expires_at > datetime('now'))""",
             (token,),
         ).fetchone()
         conn.close()
@@ -4354,7 +4398,7 @@ def mobile_sensor_laudo_pdf(percepcao_id: int):
 @csrf.exempt
 @_mobile_auth
 def mobile_ocorrencias_get():
-    limit = min(int(request.args.get("limit", 30)), 100)
+    limit = max(1, min(request.args.get("limit", 30, type=int) or 30, 100))
     conn = get_db()
     rows = conn.execute(
         """SELECT o.id, m.nome AS maquina_nome, o.descricao,
@@ -4467,7 +4511,7 @@ _DOC_SCHEMA = (
 )
 
 DOC_FOLDER = os.path.join("static", "uploads", "documentos")
-os.makedirs(DOC_FOLDER, exist_ok=True)
+os.makedirs(_abs(DOC_FOLDER), exist_ok=True)
 
 
 def _tipo_documento(conn, ref) -> dict | None:
@@ -4507,7 +4551,7 @@ def _ler_documento_com_ia(img, tipo: dict | None) -> tuple[dict | None, str | No
     )
     try:
         resp = openai_client.chat.completions.create(
-            model="gpt-4o",
+            model=nexa_ia.OPENAI_MODEL,
             messages=[
                 {"role": "system", "content": _DOC_SYSTEM},
                 {"role": "user", "content": [
@@ -4519,7 +4563,11 @@ def _ler_documento_com_ia(img, tipo: dict | None) -> tuple[dict | None, str | No
             temperature=0.1,
             max_tokens=1800,
         )
-        return json.loads((resp.choices[0].message.content or "").strip()), None
+        lido = json.loads((resp.choices[0].message.content or "").strip())
+        if not isinstance(lido, dict):
+            logger.warning(f"[documento] resposta da IA não é um objeto JSON: {str(lido)[:120]}")
+            return None, "Não foi possível ler o documento com a IA agora."
+        return lido, None
     except Exception as e:
         err = str(e)
         if "credit_balance_exhausted" in err or "insufficient_quota" in err:
@@ -4561,7 +4609,7 @@ def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: 
 
     nome_arquivo = f"{secrets.token_hex(8)}.jpg"
     caminho = os.path.join(DOC_FOLDER, nome_arquivo)
-    img.save(caminho, format="JPEG", quality=88)
+    img.save(_abs(caminho), format="JPEG", quality=88)
     imagem_url = f"/{caminho.replace(os.sep, '/')}"
 
     lido = lido or {}
@@ -4570,14 +4618,21 @@ def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: 
     ja = {re.sub(r"\D", "", str(p.get("matricula") or "")) for p in pessoas_lidas}
     pessoas_lidas += [{"matricula": m, "papel": "informado"} for m in matriculas if m not in ja]
     extraido["pessoas"] = pessoas_lidas
-    problemas = [p for p in (lido.get("problemas") or []) if isinstance(p, dict)]
+    # A IA às vezes devolve número ou null nos campos: o app espera texto
+    problemas = [{k: ("" if p.get(k) is None else str(p.get(k)))[:400]
+                  for k in ("tipo", "campo", "descricao", "sugestao", "severidade")}
+                 for p in (lido.get("problemas") or []) if isinstance(p, dict)]
+    for p in problemas:
+        if p["severidade"] not in ("alto", "medio", "baixo"):
+            p["severidade"] = "medio"
 
     conn = get_db()
     conf = empresa.conferir(conn, tipo, extraido, maquina_id_informada=maquina_id)
     status = empresa.status_final(conf, problemas)
     score = lido.get("score")
-    if not isinstance(score, (int, float)):
+    if not isinstance(score, (int, float)) or isinstance(score, bool):
         score = 100 if not problemas else max(0, 100 - len(problemas) * 15)
+    score = max(0, min(100, score))
     if status == "bloqueado":
         score = min(score, 40)
     resultado = {
@@ -4588,11 +4643,11 @@ def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: 
         "problemas": problemas,
         "conferencia": conf,
         "score": int(score),
-        "resumo": lido.get("resumo") or ("Conferência feita com os dados informados (sem leitura por IA)."
+        "resumo": str(lido.get("resumo") or "") or ("Conferência feita com os dados informados (sem leitura por IA)."
                                          if erro_ia else "Análise concluída."),
         "leitura_ia": erro_ia is None,
         "aviso_ia": erro_ia,
-        "modelo": "gpt-4o" if erro_ia is None else "manual",
+        "modelo": nexa_ia.OPENAI_MODEL if erro_ia is None else "manual",
     }
     try:
         cur = conn.execute(
@@ -4623,6 +4678,10 @@ def analisar_documento(arquivo, tipo_ref, user_id, maquina_id=None, matriculas: 
 def mobile_inspecao_documento():
     tipo_doc = (request.form.get("tipo_documento") or "").strip()[:120]
     dados, status = analisar_documento(request.files.get("foto"), tipo_doc, request.mobile_user["user_id"])
+    if dados.get("sem_ia"):
+        # "Conferir sem IA" só existe na web
+        dados["erro"] = ("A leitura por IA está indisponível no momento. Tente de novo em alguns minutos "
+                         "ou faça a conferência pela web (Inspeção de Documento → Conferir sem IA).")
     return jsonify(dados), status
 
 
@@ -4691,82 +4750,8 @@ def api_documento_get(doc_id: int):
 @_mobile_auth
 @limiter.limit("20 per minute")
 def mobile_sensor_analisar():
-    _sensor_client = nexa_ia._get_client()
-    if not _sensor_client:
-        return jsonify({"erro": "A análise por IA está indisponível no momento. Tente novamente em alguns minutos."}), 503
-
-    arquivo = request.files.get("foto")
-    if not arquivo or not arquivo.filename:
-        return jsonify({"erro": "Nenhuma foto enviada."}), 400
-
-    ext = arquivo.filename.rsplit(".", 1)[-1].lower() if "." in arquivo.filename else ""
-    if ext not in _SENSOR_EXT:
-        return jsonify({"erro": "Formato inválido. Envie PNG ou JPG."}), 400
-
-    contexto = (request.form.get("contexto") or "").strip()[:300]
-    maquina_id = request.form.get("maquina_id") or None
-    try:
-        maquina_id = int(maquina_id) if maquina_id else None
-    except (TypeError, ValueError):
-        maquina_id = None
-
-    nome_seguro = secure_filename(arquivo.filename) or f"foto.{ext}"
-    nome_arquivo = f"{secrets.token_hex(8)}_{nome_seguro}"
-    caminho = os.path.join(SENSOR_FOLDER, nome_arquivo)
-    arquivo.save(caminho)
-    imagem_url = f"/{caminho.replace(os.sep, '/')}"
-
-    try:
-        img_obj = _abrir_foto_sensor(caminho)
-    except Exception:
-        return jsonify({"erro": "Não foi possível processar a imagem."}), 400
-
-    resultado = sensor_visual.detectar_anomalias(
-        client=_sensor_client,
-        img_obj=img_obj,
-        modelos=sensor_visual.MODELOS_PADRAO,
-        should_try_next=_should_try_next_model,
-        contexto=contexto,
-    )
-
-    if resultado["status"] == "erro":
-        return jsonify({"erro": resultado["resumo"], "imagem_url": imagem_url}), 502
-
-    anomalias = resultado["anomalias"]
-    componente_3d = sensor_componente_3d(maquina_id, anomalias)
-    user_id = request.mobile_user["user_id"]
-    try:
-        conn = get_db()
-        cursor = conn.execute(
-            """INSERT INTO percepcoes
-               (maquina_id, imagem_url, contexto, modelo_ia, anomalias_json,
-                num_anomalias, severidade_max, score_saude, componente_3d, criado_por_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (
-                maquina_id, imagem_url, contexto, resultado["modelo"],
-                json.dumps(anomalias, ensure_ascii=False), len(anomalias),
-                resultado["severidade_max"], resultado["score"], componente_3d, user_id,
-            ),
-        )
-        percepcao_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.exception("[mobile/sensor] erro ao salvar percepção")
-        return jsonify({"erro": "Não foi possível salvar. Tente novamente."}), 500
-
-    return jsonify({
-        "id": percepcao_id,
-        "imagem_url": imagem_url,
-        "maquina_id": maquina_id,
-        "componente_3d": _componente_json(maquina_id, componente_3d),
-        "anomalias": anomalias,
-        "score": resultado["score"],
-        "severidade_max": resultado["severidade_max"],
-        "resumo": resultado["resumo"],
-        "modelo": resultado["modelo"],
-        "status": resultado["status"],
-    })
+    dados, status = _analisar_foto_sensor(request.mobile_user["user_id"])
+    return jsonify(dados), status
 
 
 if __name__ == "__main__":

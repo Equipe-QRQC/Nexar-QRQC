@@ -347,7 +347,8 @@
   $('btnSalvar')?.addEventListener('click', async () => {
     const posicoes = Object.fromEntries(maquinas.map(m => [m.id, [m.x, m.y]]));
     const r = await fetch('/api/fabrica/posicoes', { method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ posicoes }) });
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf }, body: JSON.stringify({ posicoes }) })
+      .catch(() => ({ ok: false }));
     if (r.ok) { modoEdicao(false); desenhar(); f3d?.atualizar(maquinas, selecionada); }
     else alert('Não foi possível salvar as posições.');
   });

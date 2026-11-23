@@ -146,9 +146,10 @@
       const color = f.type.includes('pdf') ? 'var(--danger)' : 'var(--primary)';
       item.innerHTML = `
         <i class="fas ${icon}" style="color:${color}; font-size:16px;"></i>
-        <span style="flex:1;">${f.name}</span>
+        <span style="flex:1;"></span>
         <span style="color:var(--text-muted); font-size:11px;">${(f.size/1024).toFixed(1)} KB</span>
       `;
+      item.querySelector('span').textContent = f.name;   // nome do arquivo como texto, nunca como HTML
       list.appendChild(item);
     });
   }

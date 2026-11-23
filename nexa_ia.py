@@ -271,6 +271,29 @@ def _extract_json(text: str) -> dict:
     raise ValueError("Nenhum JSON válido encontrado na resposta")
 
 
+def _componentes_validos(componentes, machine_id: int) -> list[dict]:
+    """
+    Regra 2 do agente ("nunca invente IDs") garantida no servidor: só ficam os componentes
+    que existem no modelo 3D da máquina, com os campos no formato esperado.
+    """
+    existentes = {c["component_id"]: c["name"] for c in _get_machine_components(machine_id)}
+    saida = []
+    for c in componentes if isinstance(componentes, list) else []:
+        if not isinstance(c, dict) or c.get("component_id") not in existentes:
+            if isinstance(c, dict):
+                logger.warning(f"[nexa_ia] componente fora do modelo descartado: {c.get('component_id')!r}")
+            continue
+        try:
+            prob = max(0.0, min(1.0, float(c.get("probability") or 0)))
+        except (TypeError, ValueError):
+            prob = 0.0
+        sev = c.get("severity") if c.get("severity") in ("high", "medium", "low") else "medium"
+        saida.append({"component_id": c["component_id"],
+                      "component_name": str(c.get("component_name") or existentes[c["component_id"]]),
+                      "probability": prob, "severity": sev, "reason": str(c.get("reason") or "")})
+    return saida
+
+
 def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
     """
     Executa o agente Nexa IA para diagnosticar uma ocorrência.
@@ -284,7 +307,6 @@ def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
     user_msg = (
         f"Analise esta ocorrência industrial:\n\n"
         f"Máquina ID: {machine_id}\n"
-        f"Operador: {ocorrencia.get('nome_operador', 'N/A')}\n"
         f"Data: {ocorrencia.get('data_ocorrencia', 'N/A')}\n"
         f"Tipo: {ocorrencia.get('tipo_ocorrencia', 'N/A')}\n"
         f"Impacto: {ocorrencia.get('nivel_impacto', 'N/A')}\n"
@@ -349,9 +371,13 @@ def analisar_ocorrencia(ocorrencia: dict, machine_id: int) -> dict:
             content = (msg.content or "").strip()
             try:
                 diagnosis = _extract_json(content)
+                if not isinstance(diagnosis, dict):
+                    raise ValueError("a resposta não é um objeto JSON")
             except Exception as exc:
                 logger.error(f"[nexa_ia] falha ao parsear JSON: {exc}\n{content[:500]}")
                 diagnosis = {"error": "A IA retornou uma resposta inválida. Tente analisar novamente."}
+            else:
+                diagnosis["components"] = _componentes_validos(diagnosis.get("components"), machine_id)
 
             diagnosis["_steps"] = steps_log
             diagnosis["_model"] = OPENAI_MODEL
